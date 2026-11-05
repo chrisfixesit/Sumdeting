@@ -35,7 +35,9 @@ reviews:
         mathematical statement with Bajan dialect only for warmth and never as
         caricature, and CXC methods for CSEC students. Users are school children:
         flag anything that invites personal details or drifts off maths. For any
-        prompt change, ask for eval/tutor_eval.py results in the PR. Flag loosened
+        prompt change, ask for eval/tutor_eval.py results in the PR, run against a
+        deployment that serves the changed prompt (the script defaults to
+        production), with the BASE_URL and deployed commit noted. Flag loosened
         limits in validateMessages (turns, message length, image count and size)
         since they cap Bedrock cost per request.
     - path: "backend/handler.mjs"
