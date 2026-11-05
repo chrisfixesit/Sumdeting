@@ -1,0 +1,101 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+tone_instructions: "Be concise. Prioritise the tutor's pedagogy, student safety and cost controls over style nits."
+
+reviews:
+  profile: chill
+  # Request changes when there are actionable findings; approve once resolved
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_title_keywords:
+      - "[WIP]"
+      - "[skip review]"
+
+  path_filters:
+    - "!**/node_modules/**"
+    - "!**/.terraform/**"
+    - "!**/.terraform.lock.hcl"
+    - "!**/*.tfstate*"
+    - "!**/package-lock.json"
+    - "!web/**/*.png"
+
+  path_instructions:
+    - path: "backend/tutor.mjs"
+      instructions: >
+        SYSTEM_PROMPT is the core of the product. Flag any change that weakens the
+        Socratic rules: never reveal the final answer, one hint per turn, verify a
+        student's step before confirming it (no premature ✅), work a parallel
+        example with different numbers when stuck, standard English for every
+        mathematical statement with Bajan dialect only for warmth and never as
+        caricature, and CXC methods for CSEC students. Users are school children:
+        flag anything that invites personal details or drifts off maths. For any
+        prompt change, ask for eval/tutor_eval.py results in the PR, run against a
+        deployment that serves the changed prompt (the script defaults to
+        production), with the BASE_URL and deployed commit noted. Flag loosened
+        limits in validateMessages (turns, message length, image count and size)
+        since they cap Bedrock cost per request.
+    - path: "backend/handler.mjs"
+      instructions: >
+        Every request must go through validateMessages before reaching Bedrock.
+        Don't log message content or images (students' homework), and keep error
+        responses generic. Check both the streaming and buffered handlers stay in
+        step.
+    - path: "infra/**/*.tf"
+      instructions: >
+        The Function URL must keep authorization_type = "AWS_IAM" and only accept
+        CloudFront via Origin Access Control; flag anything that makes the API
+        publicly invokable. Keep reserved concurrency and the monthly budget alert.
+        Bedrock IAM must stay scoped to the configured model and inference profile,
+        not bedrock:* on "*". S3 keeps its public access block. When model_id
+        changes, ask whether the model is enabled in the account (a Sonnet switch
+        was reverted for this).
+    - path: "web/**/*.html"
+      instructions: >
+        Model output is rendered with marked and must pass through DOMPurify before
+        innerHTML. CDN scripts and styles must keep exact versions and SRI
+        integrity hashes. Only the conversation and preferences go in
+        localStorage, with the 24h expiry. Check accessibility of the chat input,
+        buttons and image upload.
+    - path: "{Dockerfile,compose.yaml,server.mjs}"
+      instructions: >
+        Keep the hardening: multi-stage build, non-root user, read-only filesystem,
+        all capabilities dropped, no-new-privileges, and the /healthz healthcheck.
+        server.mjs must apply the same validation as the Lambda.
+    - path: "eval/**"
+      instructions: >
+        Cases should cover a known failure mode each (like C1, the confirmed wrong
+        intermediate step). Never put credentials in the script; BASE_URL comes
+        from the environment.
+    - path: ".github/workflows/**"
+      instructions: >
+        Flag unpinned third-party actions, overly broad `permissions`, and secrets
+        echoed to logs.
+
+  tools:
+    gitleaks:
+      enabled: true
+    checkov:
+      enabled: true
+    tflint:
+      enabled: true
+    hadolint:
+      enabled: true
+    ruff:
+      enabled: true
+    actionlint:
+      enabled: true
+    markdownlint:
+      enabled: false
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  learnings:
+    scope: global
