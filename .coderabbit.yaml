@@ -4,8 +4,26 @@ tone_instructions: "Be concise. Prioritise the tutor's pedagogy, student safety 
 
 reviews:
   profile: chill
-  # Request changes when there are actionable findings; approve once resolved
-  request_changes_workflow: true
+  # Request changes for blocking findings; approve once they're resolved
+  auto_approvals:
+    enabled: true
+    # Authors can't wave findings through with @coderabbitai approve/resolve
+    allow_author_approval: false
+    # Above this risk (see merge_risk_instructions) CodeRabbit withholds its
+    # approval. That is advisory, not a merge gate: whoever merges decides.
+    max_merge_risk: moderate
+    # Lockfiles are excluded from review below, so a dependency-only change
+    # must never be auto-approved; it needs a human look.
+    overrides:
+      - paths:
+          - "**/package-lock.json"
+          - "**/.terraform.lock.hcl"
+        enabled: false
+  merge_risk_instructions: >
+    High: the tutor SYSTEM_PROMPT or model settings in backend/tutor.mjs,
+    validateMessages limits, the Function URL auth or CloudFront OAC, IAM, and
+    the CSP, DOMPurify or SRI setup. Moderate: other backend logic and infra that
+    doesn't touch IAM. Low: web copy, styling, docs and tests.
   high_level_summary: true
   poem: false
   review_status: true
