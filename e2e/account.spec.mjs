@@ -98,6 +98,7 @@ test("signed-out app unchanged: no account calls block practice and the \"this d
   await page.locator("#nav-string").click();
   await expect(page.getByText("this device only")).toBeVisible();
   // Level tabs still work.
+  await page.locator("#nav-home").click();
   await page.locator("#level-tabs .seg").first().click();
   await expect(page.locator("#level-tabs .seg").first()).toHaveClass(/on/);
 });
@@ -266,7 +267,7 @@ test("under-13 sign-up shows waiting banner; parent approves from consent email;
   await parentCtx.close();
 
   await page.reload();
-  await expect(banner).toHaveCount(0);
+  await expect(banner).toBeHidden();
   await expect(accountBtn(page)).toHaveText("ZS");
 });
 
@@ -316,4 +317,52 @@ test("no emoji in account UI", async ({ page, request }) => {
   for (const [label, text] of seen) {
     expect(text.match(EMOJI), `emoji on screen: ${label}`).toBeNull();
   }
+});
+
+test("existing parent approves a consent after the parent code unlock", async ({ browser, page, request }) => {
+  const parentEmail = uniqueEmail("existing-parent");
+  // The parent sets up first (setup unlocks only that session).
+  const parentCtx = await browser.newContext();
+  const pp = await parentCtx.newPage();
+  await signIn(pp, request, parentEmail);
+  await dialog(pp).getByRole("button", { name: /I'm a parent or guardian/ }).click();
+  await fillProfile(dialog(pp), { first: "Omar", last: "Gill" });
+  await dialog(pp).getByLabel("I'm this child's parent or guardian, and I agree to SumDeTing saving their practice progress.").check();
+  await dialog(pp).getByRole("button", { name: "Done, start practising" }).click();
+  await expect(dialog(pp).getByRole("heading", { name: "Who's practising?" })).toBeVisible();
+  await parentCtx.close();
+
+  // A child signs up under 13 with that parent's email.
+  await signIn(page, request, uniqueEmail("sibling"));
+  await dialog(page).getByRole("button", { name: /I'm a student/ }).click();
+  await fillProfile(dialog(page), { first: "Lia", last: "Gill", level: "Common Entrance" });
+  await dialog(page).getByRole("radio", { name: "No" }).check();
+  await dialog(page).getByLabel(/parent's or guardian's email/i).fill(parentEmail);
+  await dialog(page).getByRole("button", { name: "Start practising" }).click();
+  await expect(page.getByText("Waiting for your parent to approve. Your progress is saved on this device for now.")).toBeVisible();
+
+  // The parent opens the consent link in a fresh session: approving needs the parent code.
+  const consentMail = await lastMail(request, parentEmail, "consent_request");
+  const freshCtx = await browser.newContext();
+  const fp = await freshCtx.newPage();
+  await fp.goto(`/#signin=${tokenOf(consentMail)}`);
+  await expect(dialog(fp).getByText(/Lia Gill wants to use SumDeTing/)).toBeVisible();
+  await dialog(fp).getByLabel("I'm this child's parent or guardian, and I agree to SumDeTing saving their practice progress.").check();
+  await dialog(fp).getByRole("button", { name: "Approve" }).click();
+  const unlock = dialog(fp);
+  await expect(unlock.getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
+  const codeMail = await lastMail(request, parentEmail, "parent_code");
+  await unlock.getByLabel("6-digit code").fill(codeOf(codeMail));
+  await unlock.getByRole("button", { name: "Unlock" }).click();
+  const picker = dialog(fp);
+  await expect(picker.getByRole("heading", { name: "Who's practising?" })).toBeVisible();
+  await expect(fp.getByText("You approved Lia. Their practice progress will be saved.")).toBeVisible();
+  // Still unlocked: the parent section link opens without another code.
+  await picker.getByRole("button", { name: "See how everyone is doing" }).click();
+  await expect(dialog(fp).getByRole("heading", { name: "See how everyone is doing" })).toBeVisible();
+  await freshCtx.close();
+
+  await page.reload();
+  await expect(page.getByText("Waiting for your parent to approve.", { exact: false })).toBeHidden();
+  await expect(accountBtn(page)).toHaveText("LG");
 });

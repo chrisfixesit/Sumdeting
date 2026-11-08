@@ -17,7 +17,7 @@ COPY --chown=node:node backend/tutor.mjs backend/
 COPY --chown=node:node backend/account/ backend/account/
 RUN rm -f backend/account/*.test.mjs backend/account/testkit.mjs
 COPY --chown=node:node web/index.html web/
-COPY --chown=node:node web/account-core.mjs web/
+COPY --chown=node:node web/account-core.mjs web/account-ui.mjs web/account-dom.mjs web/account-screens.mjs web/account.css web/
 COPY --chown=node:node web/vendor/ web/vendor/
 COPY --chown=node:node server.mjs .
 

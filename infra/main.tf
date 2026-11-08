@@ -395,6 +395,45 @@ resource "aws_s3_object" "manifest" {
   etag         = md5(file("${path.module}/../web/manifest.webmanifest"))
 }
 
+# Account UI modules and stylesheet loaded by index.html. Short cache so a
+# deploy reaches browsers quickly (the file names are not content-hashed).
+resource "aws_s3_object" "account_core" {
+  bucket        = aws_s3_bucket.web.id
+  key           = "account-core.mjs"
+  content_type  = "text/javascript"
+  source        = "${path.module}/../web/account-core.mjs"
+  etag          = filemd5("${path.module}/../web/account-core.mjs")
+  cache_control = "public, max-age=300"
+}
+
+resource "aws_s3_object" "account_ui" {
+  bucket        = aws_s3_bucket.web.id
+  key           = "account-ui.mjs"
+  content_type  = "text/javascript"
+  source        = "${path.module}/../web/account-ui.mjs"
+  etag          = filemd5("${path.module}/../web/account-ui.mjs")
+  cache_control = "public, max-age=300"
+}
+
+resource "aws_s3_object" "account_ui_modules" {
+  for_each      = toset(["account-dom.mjs", "account-screens.mjs"])
+  bucket        = aws_s3_bucket.web.id
+  key           = each.value
+  content_type  = "text/javascript"
+  source        = "${path.module}/../web/${each.value}"
+  etag          = filemd5("${path.module}/../web/${each.value}")
+  cache_control = "public, max-age=300"
+}
+
+resource "aws_s3_object" "account_css" {
+  bucket        = aws_s3_bucket.web.id
+  key           = "account.css"
+  content_type  = "text/css"
+  source        = "${path.module}/../web/account.css"
+  etag          = filemd5("${path.module}/../web/account.css")
+  cache_control = "public, max-age=300"
+}
+
 # Social-share image (Open Graph / Twitter) and apple-touch icon, referenced from index.html <head>.
 resource "aws_s3_object" "og_image" {
   bucket       = aws_s3_bucket.web.id
