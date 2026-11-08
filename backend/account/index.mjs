@@ -21,7 +21,8 @@ export function createAppRouter(deps) {
   return router;
 }
 
-const SIGNIN_IP_LIMIT = 30;
+// Per hour per client IP. Schools and families share one address behind NAT (ruling R20).
+const SIGNIN_IP_LIMIT = 300;
 
 export function depsFromEnv(env = process.env) {
   const now = () => Date.now();
@@ -35,7 +36,7 @@ export function depsFromEnv(env = process.env) {
     from: env.EMAIL_FROM,
     siteUrl,
   });
-  // The e2e dev server signs in more than 30 times an hour from one address.
+  // The e2e dev server can raise it further; production ignores SIGNIN_IP_LIMIT.
   const raised = Number.parseInt(env.SIGNIN_IP_LIMIT ?? "", 10);
   const signinIpLimit = dev && raised > 0 ? raised : SIGNIN_IP_LIMIT;
   return { repo: createRepo(table, { now }), mailer, now, siteUrl, secureCookies: !dev, dev, signinIpLimit };

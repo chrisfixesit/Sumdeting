@@ -143,9 +143,9 @@ test("signin/start rate-limits at 6th request per email per hour", async () => {
   assert.equal(app.outbox.length, 5);
 });
 
-test("signin/start rate-limits per IP at 30 per hour", async () => {
+test("signin/start rate-limits per IP at 300 per hour", async () => {
   const app = makeApp();
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 300; i++) {
     assert.equal((await app.call("POST", "/signin/start", { email: `u${i}@x.com` }, { ip: "9.9.9.9" })).status, 200);
   }
   const res = await app.call("POST", "/signin/start", { email: "u99@x.com" }, { ip: "9.9.9.9" });
@@ -293,18 +293,18 @@ test("lambda deps throw when required env is missing", () => {
   }
 });
 
-test("sign-in IP limit is 30 unless a dev server raises it (e2e only)", () => {
-  assert.equal(depsFromEnv({}).signinIpLimit, 30);
-  assert.equal(depsFromEnv({ SIGNIN_IP_LIMIT: "1000" }).signinIpLimit, 30); // ignored outside dev
+test("sign-in IP limit is 300 unless a dev server raises it (e2e only)", () => {
+  assert.equal(depsFromEnv({}).signinIpLimit, 300);
+  assert.equal(depsFromEnv({ SIGNIN_IP_LIMIT: "1000" }).signinIpLimit, 300); // ignored outside dev
   assert.equal(depsFromEnv({ ACCOUNT_DEV: "1", SIGNIN_IP_LIMIT: "1000" }).signinIpLimit, 1000);
-  assert.equal(depsFromEnv({ ACCOUNT_DEV: "1", SIGNIN_IP_LIMIT: "nope" }).signinIpLimit, 30);
+  assert.equal(depsFromEnv({ ACCOUNT_DEV: "1", SIGNIN_IP_LIMIT: "nope" }).signinIpLimit, 300);
   const full = { TABLE_NAME: "t", SITE_URL: "https://x.test", EMAIL_FROM: "a@x.test", EMAIL_MODE: "ses" };
-  assert.equal(lambdaDepsFromEnv({ ...full, ACCOUNT_DEV: "1", SIGNIN_IP_LIMIT: "1000" }).signinIpLimit, 30);
+  assert.equal(lambdaDepsFromEnv({ ...full, ACCOUNT_DEV: "1", SIGNIN_IP_LIMIT: "1000" }).signinIpLimit, 300);
 });
 
 test("signin/start honours a raised dev IP limit", async () => {
-  const app = makeApp({ signinIpLimit: 40 });
-  for (let i = 0; i < 35; i++) {
+  const app = makeApp({ signinIpLimit: 320 });
+  for (let i = 0; i < 310; i++) {
     const res = await app.call("POST", "/signin/start", { email: `u${i}@x.com` });
     assert.equal(res.status, 200, `start ${i}`);
   }
@@ -320,7 +320,7 @@ test("a throwing onSignIn hook does not fail verify", async () => {
 
 test("IP limit is checked before spending the email budget", async () => {
   const app = makeApp();
-  for (let i = 0; i < 30; i++) await app.call("POST", "/signin/start", { email: `u${i}@x.com` }, { ip: "8.8.8.8" });
+  for (let i = 0; i < 300; i++) await app.call("POST", "/signin/start", { email: `u${i}@x.com` }, { ip: "8.8.8.8" });
   const blocked = await app.call("POST", "/signin/start", { email: "victim@x.com" }, { ip: "8.8.8.8" });
   assert.equal(blocked.status, 429);
   for (let i = 0; i < 5; i++) assert.equal((await app.call("POST", "/signin/start", { email: "victim@x.com" }, { ip: "7.7.7.7" })).status, 200);
