@@ -194,7 +194,7 @@ test("guardian invite: guardian sees child as guardian and can sync progress", a
   assert.deepEqual(dad.me.profiles.map((p) => [p.id, p.access]), [[pid, "guardian"]]);
   const sync = await dad.call("/progress/sync", {
     profileId: pid,
-    events: [{ type: "answer", topic: "t", correct: true, at: app.clock.t }],
+    events: [{ id: "e1", type: "outcome", topic: "Fractions", ok: true, hints: 0, turns: 2, d: "2026-01-01" }],
   });
   assert.equal(sync.status, 200);
   assert.equal((await dad.call("/progress/get", { profileId: pid })).status, 200);
