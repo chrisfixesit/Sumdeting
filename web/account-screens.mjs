@@ -154,6 +154,7 @@ export function createScreens(ctx) {
           const r = await api("/setup", { type: "parent" });
           if (!r.ok && errorCode(r) !== "bad_request") return err.show(messageFor(r));
           state.me.account.type = "parent";
+          state.me.account.setupComplete = true; // the server completes a parent's setup at once
           ctx.markUnlocked(); // setup opens the parent section for a short while
         }
         d.close();
@@ -232,6 +233,14 @@ export function createScreens(ctx) {
     const buttons = parent
       ? [primary("Save and add another", { value: "another" }), primary("Done, start practising", { value: "done", class: "acct-secondary" })]
       : [primary(self ? "Start practising" : "Add student", { value: "done" })];
+    // A parent whose child already uses SumDeTing with their own email asks to see
+    // that account instead. Offered until the first child is saved here.
+    const ownAccount = parent
+      ? link("My child already has their own account", () => {
+        d.close();
+        ctx.openParentSection({ view: "request" });
+      }, { class: "acct-link acct-wide" })
+      : null;
     const form = h("form", { class: "acct-form", novalidate: true },
       first.wrap, last.wrap, level.fs, colour.fs, ageBlock, consent.wrap, err, status,
       h("div", { class: "acct-actions" }, ...buttons));
@@ -285,6 +294,7 @@ export function createScreens(ctx) {
       me.profiles = [...me.profiles.filter((p) => p.id !== profile.id), profile];
       me.account.setupComplete = true;
       saved += 1;
+      if (ownAccount) ownAccount.hidden = true;
       if (parent && intent === "another") {
         reset();
         status.show(`Saved ${profile.firstName}. Add another child, or choose Done.`);
@@ -311,6 +321,7 @@ export function createScreens(ctx) {
       h("p", { class: "acct-kicker" }, parent ? "Parent" : self ? "Student" : "New student"),
       h("h2", {}, parent ? "Add your child" : self ? "Tell us about you" : "Add a student"),
       form,
+      parent && saved === 0 && !(me.profiles ?? []).some((p) => p.access === "owner") ? ownAccount : null,
     );
   }
 
@@ -540,7 +551,9 @@ export function createScreens(ctx) {
       items.push(item(`Remove ${p.firstName}'s profile`, () => { d.close(); ctx.openRemoveProfile(p); }));
     }
     items.push(item("Delete account", () => { d.close(); ctx.openDeleteAccount(); }));
-    const out = item("Sign out", () => busy(out, async () => { await ctx.signOut(); }));
+    const out = item("Sign out", () => busy(out, async () => {
+      if (!(await ctx.signOut())) d.close(); // stayed signed in
+    }));
     items.push(out);
     d.render(
       h("h2", {}, p ? `${p.firstName} ${p.lastName}` : "Your account"),

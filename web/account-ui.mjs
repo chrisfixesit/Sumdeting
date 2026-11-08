@@ -3,7 +3,7 @@
 // script, so window.SumDeTing (the bridge) already exists. Signing in is
 // optional: nothing here may block or slow down signed-out practice.
 import {
-  createApi, createQueue, hasAnonymousProgress, readAnonymous, clearAnonymous,
+  createApi, sendKeepalive, createQueue, hasAnonymousProgress, readAnonymous, clearAnonymous,
   clearProfileCaches, initials, parseSigninFragment, newMergeId,
 } from "./account-core.mjs";
 import { h, personIcon, openDialog, closeAllDialogs, closeFrom, showNotice, busy, errorLine, statusLine, confirmDanger } from "./account-dom.mjs";
@@ -94,6 +94,31 @@ function adoptUnlock(me) {
   if (!me?.parentUnlocked) { state.unlockedUntil = 0; return; }
   if (state.unlockedUntil <= Date.now()) state.unlockedUntil = Date.now() + UNLOCK_MS;
 }
+
+/**
+ * End the parent unlock on the server and here: the section closed, a child was
+ * chosen (the device may have been handed over), or the app is closing.
+ * Fire-and-forget; the server answer doesn't matter.
+ */
+function lockParent() {
+  if (!isParent()) return;
+  markLocked();
+  api("/parent/lock");
+}
+
+const isUnlockedHere = () => state.unlockedUntil > Date.now() || Boolean(state.me?.parentUnlocked);
+
+// Hashing is async, too late during unload, so hash the lock body up front.
+const LOCK_BODY = "{}";
+let lockSha = null;
+Promise.resolve().then(() => SD.sha256Hex(LOCK_BODY)).then((v) => { lockSha = v; }, () => {});
+
+// "Re-locks when the app is closed": leaving or closing the page ends the unlock.
+window.addEventListener("pagehide", () => {
+  if (!isParent() || !isUnlockedHere()) return;
+  if (lockSha) sendKeepalive({ fetchImpl: (u, o) => fetch(u, o), path: "/parent/lock", payload: LOCK_BODY, sha: lockSha });
+  markLocked(); // in case the page comes back from the back-forward cache
+});
 
 const usable = (p) => p.access === "owner" || p.access === "guardian";
 const selectable = () => (state.me?.profiles ?? []).filter(usable);
@@ -233,6 +258,8 @@ async function rememberAccount(me) {
  * never on the silent restore at page load.
  */
 async function chooseProfile(p, { explicit = true } = {}) {
+  // Practising as a child on a parent's account: the parent section locks again.
+  if (isParent()) lockParent();
   if (state.syncPid && state.syncPid !== p.id) await flushNow();
   if (!state.me) return; // the flush found we were signed out (and already said so)
   if (store.getItem(ACTIVE) !== p.id) SD.clearChat();
@@ -491,14 +518,34 @@ async function route({ showPicker }) {
   }
   render();
   if (!showPicker && remembered) return chooseProfile(remembered, { explicit: false });
-  if (showPicker || list.length) return screens.openPicker();
+  // A parent with no profile to practise as still gets the picker: it offers
+  // "Add a student" and the parent section (children with their own accounts).
+  if (showPicker || list.length || isParent()) return screens.openPicker();
 }
 
+/**
+ * Sign in with a "#signin=" link. Returns true when signed in with it, "cancelled"
+ * when someone was already signed in here and chose to stay, else false.
+ */
 async function signInWithFragment() {
   const token = parseSigninFragment(location.hash);
   if (!token) return false;
   // Strip the token from the address bar before anything else can see or reuse it.
   window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  // Someone may already be signed in on this device: ask before replacing them.
+  if (!state.me && store.getItem(SIGNED_IN_HINT) === "1") await refreshMe();
+  if (state.me?.signedIn) {
+    const go = await confirmDanger({
+      title: "A sign-in link was opened",
+      lines: [
+        "Sign out of the current account and use the link?",
+        `You're signed in as ${maskEmail(state.me.account.email)} on this device.`,
+      ],
+      action: "Continue",
+      danger: false,
+    });
+    if (!go) return "cancelled"; // the token is discarded unused
+  }
   const r = await api("/signin/verify", { token });
   if (r.ok && r.data?.signedIn) {
     closeAllDialogs();
@@ -511,10 +558,23 @@ async function signInWithFragment() {
   return false;
 }
 
+/** Explicit sign-out. Returns false when the person chose to stay signed in. */
 async function signOut() {
-  if (state.syncPid) await Promise.race([flushNow(), new Promise((r) => setTimeout(r, 3000))]);
+  const pid = state.syncPid;
+  if (pid) await Promise.race([flushNow(), new Promise((r) => setTimeout(r, 3000))]);
+  if (pid && state.me && createQueue(store, pid).size()) {
+    const sure = await confirmDanger({
+      title: "Some practice hasn't been saved to your account yet. Sign out anyway?",
+      lines: ["It couldn't be sent just now (check your connection). If you sign out, that practice is lost from your account."],
+      action: "Sign out",
+      cancelLabel: "Stay",
+    });
+    if (!sure) return false;
+  }
+  if (!state.me) return true; // the flush found we were already signed out
   await api("/signout");
   endSessionLocally();
+  return true;
 }
 
 /** The local half of an explicit sign-out: drop every cache this account left and close the UI. */
@@ -546,14 +606,15 @@ export async function withParentUnlock(action) {
   return action();
 }
 
-async function openParentSection() {
+/** Open the parent section (asks for the parent code if locked). `view: "request"` opens "Add a child who has their own account". */
+async function openParentSection({ view } = {}) {
   const r = await withParentUnlock(() => api("/parent/overview"));
   if (!r.ok) {
     if (errorCode(r) !== "parent_locked" && !handleAuthFailure(r, null)) showNotice(messageFor(r));
     return undefined;
   }
   if (state.unlockedUntil <= Date.now()) state.unlockedUntil = Date.now() + UNLOCK_MS;
-  return parent.showOverview(r.data);
+  return parent.showOverview(r.data, { view });
 }
 
 /** A profile's name, level or colour changed (parent section edit). */
@@ -590,7 +651,7 @@ const screens = createScreens({
 
 const parent = createParentSection({
   api, state, SD, h, openDialog, closeFrom, showNotice, busy, errorLine, statusLine, confirmDanger,
-  markLocked, unlockedUntil: () => state.unlockedUntil,
+  markLocked, lockParent, unlockedUntil: () => state.unlockedUntil,
   messageFor, errorCode, maskEmail, withParentUnlock, handleAuthFailure,
   forms: () => screens.forms, profileChanged, profileRemoved, accountDeleted,
 });
@@ -600,8 +661,15 @@ const parent = createParentSection({
 async function init() {
   render();
   window.addEventListener("hashchange", () => { signInWithFragment(); });
-  if (await signInWithFragment()) return;
+  if ((await signInWithFragment()) === true) return;
   if (store.getItem(SIGNED_IN_HINT) !== "1") return; // signed out: no account request at all
+  if (state.me) {
+    // Already fetched while asking about a sign-in link that was then cancelled.
+    adoptUnlock(state.me);
+    await rememberAccount(state.me);
+    await route({ showPicker: false });
+    return;
+  }
   const r = await api("/me");
   if (r.ok && r.data?.signedIn) {
     state.me = r.data;

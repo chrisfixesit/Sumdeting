@@ -28,6 +28,27 @@ export function createApi({ fetchImpl, sha256Hex, base = "/api/account" }) {
   };
 }
 
+/**
+ * Fire-and-forget POST that can outlive the page (pagehide). Synchronous: the
+ * keepalive fetch has started when this returns. `sha` is the precomputed hex
+ * SHA-256 of `payload` (hashing is async, too late during unload).
+ */
+export function sendKeepalive({ fetchImpl, path, payload, sha, base = "/api/account" }) {
+  try {
+    const p = fetchImpl(base + path, {
+      method: "POST",
+      credentials: "same-origin",
+      keepalive: true,
+      headers: { "Content-Type": "application/json", "x-amz-content-sha256": sha },
+      body: payload,
+    });
+    p?.catch?.(() => { /* best effort */ });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Persistent per-profile event queue stored at sumdeting.queue.<pid>. */
 export function createQueue(storage, pid) {
   const key = QUEUE_PREFIX + pid;

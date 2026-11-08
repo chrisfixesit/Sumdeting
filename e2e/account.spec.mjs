@@ -550,8 +550,11 @@ test("overview shows Needs practice / Going well with correct labels", async ({ 
     { type: "outcome", topic: "Quadratics", ok: true, hints: 0, turns: 2 },
     { type: "outcome", topic: "Quadratics", ok: true, hints: 0, turns: 3 },
   ]);
+  const before = await mailCount(request, email, "parent_code");
   await accountBtn(page).click();
   await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  // Choosing Jaden locked the parent section again (the device may have been handed over).
+  await unlock(page, request, email, before);
   await expect(overviewHeading(page)).toBeVisible();
   await childRow(page, "Jaden Best").click();
   const d = dialog(page);
@@ -616,8 +619,10 @@ test("guardian invite: second email signs in, practises as the child, progress v
   // The first parent sees the same progress and the second guardian in the list.
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  const firstBefore = await mailCount(request, first, "parent_code");
   await accountBtn(page).click();
   await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await unlock(page, request, first, firstBefore); // closing the section locked it
   await expect(childRow(page, "Omar Gill")).toContainText("Owner");
   await childRow(page, "Omar Gill").click();
   await expect(dialog(page).locator(".acct-stat", { hasText: "problems solved" })).toContainText("1");
@@ -677,8 +682,10 @@ test("parent requests access to a student account; student allows; child appears
   await expect(overviewHeading(page)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  const before = await mailCount(request, parentEmail, "parent_code");
   await accountBtn(page).click();
   await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await unlock(page, request, parentEmail, before); // closing the section locked it
   await expect(overviewHeading(page)).toBeVisible();
   await expect(childRow(page, "Jaden Clarke")).toContainText("View only");
   await childRow(page, "Jaden Clarke").click();
@@ -832,4 +839,150 @@ test("anonymous load makes no account requests; signed-in reload restores the pr
   await dialog(page).getByRole("button", { name: /sign out/i }).click();
   await expect(accountBtn(page)).toHaveAttribute("aria-label", /sign in/i);
   expect(await page.evaluate(() => localStorage.getItem("sumdeting.signedIn"))).toBeNull();
+});
+
+// ---- Final review fixes ----
+
+const serverUnlocked = (page) => page.evaluate(async () => (await window.SumDeTingAccount.api("/me")).data?.parentUnlocked);
+
+test("handing the device to a child after setup locks the parent section (R19)", async ({ page, request }) => {
+  const email = uniqueEmail("handover");
+  await setUpParent(page, request, email, [{ first: "Noah", last: "Reid" }]);
+  expect(await serverUnlocked(page)).toBe(true);
+  await dialog(page).getByRole("button", { name: /Noah Reid/ }).click();
+  await expect(accountBtn(page)).toHaveText("NR");
+  await expect.poll(() => serverUnlocked(page)).toBe(false);
+  const direct = await page.evaluate(async () => (await window.SumDeTingAccount.api("/parent/overview")).data?.error);
+  expect(direct).toBe("parent_locked");
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await expect(dialog(page).getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
+  await dialog(page).getByRole("button", { name: "Cancel" }).click();
+  await expect(overviewHeading(page)).toHaveCount(0);
+  // Delete account is behind the same lock.
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: "Delete account" }).click();
+  await dialog(page).getByRole("button", { name: "Delete account" }).click();
+  await expect(dialog(page).getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
+  await dialog(page).getByRole("button", { name: "Cancel" }).click();
+  await expect(accountBtn(page)).toHaveText("NR");
+});
+
+test("closing the parent section locks it; reopening asks for a code", async ({ browser, page, request }) => {
+  const email = uniqueEmail("close-lock");
+  await setUpParent(page, request, email, [{ first: "Ada", last: "Moss" }]);
+  const { ctx, page: p } = await freshSession(browser, request, email);
+  const before = await mailCount(request, email, "parent_code");
+  await dialog(p).getByRole("button", { name: "See how everyone is doing" }).click();
+  await unlock(p, request, email, before);
+  await expect(overviewHeading(p)).toBeVisible();
+  await dialog(p).getByRole("button", { name: "Close" }).click();
+  await expect(p.getByRole("dialog")).toHaveCount(0);
+  await expect.poll(() => serverUnlocked(p)).toBe(false);
+  await accountBtn(p).click();
+  await dialog(p).getByRole("button", { name: "See how everyone is doing" }).click();
+  await expect(dialog(p).getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
+  await ctx.close();
+});
+
+test("leaving the page locks the parent section", async ({ page, request }) => {
+  const email = uniqueEmail("pagehide");
+  await setUpParent(page, request, email, [{ first: "Eli", last: "Ward" }]);
+  expect(await serverUnlocked(page)).toBe(true);
+  const locked = page.waitForRequest((r) => r.url().endsWith("/api/account/parent/lock"));
+  await page.goto("about:blank");
+  await locked;
+  await page.goto("/");
+  await expect(dialog(page).getByRole("heading", { name: "Who's practising?" })).toBeVisible();
+  await expect.poll(() => serverUnlocked(page)).toBe(false);
+});
+
+test("a parent whose only child has their own account can finish setup and ask to see it", async ({ browser, page, request }) => {
+  const parentEmail = uniqueEmail("no-own-child");
+  const studentEmail = uniqueEmail("own-kid");
+  const sc = await browser.newContext();
+  const sp = await sc.newPage();
+  await signUpStudent(sp, request, studentEmail, { first: "Jaden", last: "Clarke" });
+  await expect(accountBtn(sp)).toHaveText("JC");
+
+  await signIn(page, request, parentEmail);
+  await dialog(page).getByRole("button", { name: /I'm a parent or guardian/ }).click();
+  await expect(dialog(page).getByRole("heading", { name: "Add your child" })).toBeVisible();
+  await dialog(page).getByRole("button", { name: "My child already has their own account" }).click();
+  const d = dialog(page);
+  await expect(d.getByRole("heading", { name: "Add a child who has their own account" })).toBeVisible();
+  await d.getByLabel("Child's email").fill(studentEmail);
+  await d.getByRole("button", { name: "Send request" }).click();
+  await expect(d.getByRole("status")).toContainText(studentEmail);
+
+  await sp.reload();
+  await dialog(sp).getByRole("button", { name: "Allow" }).click();
+  await expect(sp.getByText(`${parentEmail} can now see your progress.`)).toBeVisible();
+  await sc.close();
+
+  // Setup counts as finished: a reload lands on the picker, not the "Add your child" form.
+  await page.reload();
+  const picker = dialog(page);
+  await expect(picker.getByRole("heading", { name: "Who's practising?" })).toBeVisible();
+  await expect(picker.getByRole("button", { name: "Add a student" })).toBeVisible();
+  const before = await mailCount(request, parentEmail, "parent_code");
+  await picker.getByRole("button", { name: "See how everyone is doing" }).click();
+  await unlock(page, request, parentEmail, before);
+  await expect(childRow(page, "Jaden Clarke")).toContainText("View only");
+});
+
+test("a sign-in link opened while signed in asks first; Cancel keeps the current account", async ({ page, request }) => {
+  await signUpStudent(page, request, uniqueEmail("current"), { first: "Kira", last: "Bell" });
+  await expect(accountBtn(page)).toHaveText("KB");
+  const other = uniqueEmail("other");
+  const start = await request.post("/api/account/signin/start", { data: { email: other } });
+  expect(start.ok()).toBeTruthy();
+  const mail = await lastMail(request, other, "signin");
+  const verifies = [];
+  page.on("request", (r) => { if (r.url().endsWith("/signin/verify")) verifies.push(r.url()); });
+  // A fresh page load (the link opened in a new tab), so /me hasn't been asked yet.
+  await page.goto("about:blank");
+  await page.goto(`/#signin=${tokenOf(mail)}`);
+  const ask = dialog(page);
+  await expect(ask.getByRole("heading", { name: "A sign-in link was opened" })).toBeVisible();
+  await expect(ask).toContainText("Sign out of the current account and use the link?");
+  expect(new URL(page.url()).hash).toBe("");
+  await ask.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(accountBtn(page)).toHaveText("KB");
+  expect(verifies).toEqual([]);
+  expect(await page.evaluate(async () => (await window.SumDeTingAccount.api("/me")).data?.account?.email)).not.toBe(other);
+});
+
+test("a sign-in link opened while signed in switches accounts on Continue", async ({ page, request }) => {
+  await signUpStudent(page, request, uniqueEmail("switch-from"), { first: "Kira", last: "Bell" });
+  await expect(accountBtn(page)).toHaveText("KB");
+  const other = uniqueEmail("switch-to");
+  await request.post("/api/account/signin/start", { data: { email: other } });
+  const mail = await lastMail(request, other, "signin");
+  // Same tab, fragment change only: the hashchange path.
+  await page.goto(`/#signin=${tokenOf(mail)}`);
+  await dialog(page).getByRole("button", { name: "Continue" }).click();
+  await expect(dialog(page).getByRole("heading", { name: "Who's setting this up?" })).toBeVisible();
+});
+
+test("signing out with unsaved practice asks first", async ({ page, request }) => {
+  await signUpStudent(page, request, uniqueEmail("unsaved"), { first: "Lou", last: "Gray" });
+  await expect(accountBtn(page)).toHaveText("LG");
+  const pid = await activePid(page);
+  await page.route("**/api/account/progress/sync", (route) => route.abort());
+  await page.evaluate((d) => window.dispatchEvent(new CustomEvent("sumdeting:progress", {
+    detail: { id: crypto.randomUUID(), type: "activity", topic: "Algebra", solved: true, d },
+  })), today());
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: "Sign out" }).click();
+  const ask = dialog(page);
+  await expect(ask.getByText("Some practice hasn't been saved to your account yet. Sign out anyway?")).toBeVisible();
+  await ask.getByRole("button", { name: "Stay" }).click();
+  await expect(accountBtn(page)).toHaveText("LG");
+  expect(await page.evaluate((pid) => JSON.parse(localStorage.getItem(`sumdeting.queue.${pid}`) ?? "[]").length, pid)).toBe(1);
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: "Sign out" }).click();
+  await dialog(page).getByRole("button", { name: "Sign out" }).click();
+  await expect(accountBtn(page)).toHaveAttribute("aria-label", /sign in/i);
 });

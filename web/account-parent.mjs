@@ -33,10 +33,11 @@ export function createParentSection(ctx) {
 
   // ---- The section: one sheet, re-rendered for each view ----
 
-  function showOverview(initial) {
+  function showOverview(initial, { view } = {}) {
     let children = initial?.children ?? [];
     let timer = null;
-    const d = openDialog({ onClose: () => clearTimeout(timer) });
+    // Closing the section, however it happens, locks it again.
+    const d = openDialog({ onClose: () => { clearTimeout(timer); ctx.lockParent(); } });
     const find = (pid) => children.find((c) => c.profileId === pid);
     const drop = (pid) => { children = children.filter((c) => c.profileId !== pid); };
 
@@ -401,7 +402,8 @@ export function createParentSection(ctx) {
       );
     }
 
-    list();
+    if (view === "request") request();
+    else list();
     schedule();
     return d;
   }

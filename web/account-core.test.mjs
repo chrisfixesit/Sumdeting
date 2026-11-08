@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  createApi, createQueue, hasAnonymousProgress, readAnonymous, clearAnonymous,
+  createApi, sendKeepalive, createQueue, hasAnonymousProgress, readAnonymous, clearAnonymous,
   clearProfileCaches, statusLabel, initials, parseSigninFragment, newMergeId, clampCount,
   isoDay, lastPractisedText,
 } from "./account-core.mjs";
@@ -223,4 +223,23 @@ test("lastPractisedText: today, yesterday, a date, and invalid values", () => {
   for (const bad of [null, undefined, "", "yesterday", "2026-1-3", 20261108, {}]) {
     assert.equal(lastPractisedText(bad, now), "not practised yet");
   }
+});
+
+test("sendKeepalive starts a keepalive JSON POST synchronously and never throws", () => {
+  const calls = [];
+  const ok = sendKeepalive({
+    fetchImpl: (url, opts) => { calls.push([url, opts]); return Promise.reject(new Error("offline")); },
+    path: "/parent/lock", payload: "{}", sha: "abc",
+  });
+  assert.equal(ok, true);
+  assert.equal(calls.length, 1);
+  const [url, opts] = calls[0];
+  assert.equal(url, "/api/account/parent/lock");
+  assert.equal(opts.method, "POST");
+  assert.equal(opts.keepalive, true);
+  assert.equal(opts.credentials, "same-origin");
+  assert.equal(opts.headers["Content-Type"], "application/json");
+  assert.equal(opts.headers["x-amz-content-sha256"], "abc");
+  assert.equal(opts.body, "{}");
+  assert.equal(sendKeepalive({ fetchImpl: () => { throw new Error("x"); }, path: "/p", payload: "{}", sha: "h" }), false);
 });

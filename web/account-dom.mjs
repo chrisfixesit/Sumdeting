@@ -188,12 +188,13 @@ export function showNotice(text, { timeout = 0 } = {}) {
 /**
  * Ask before something destructive. `lines` are paragraphs; `items` (optional)
  * is a list of exactly what will be deleted; `after` are paragraphs below it. Resolves true only on the
- * destructive button. Cancel gets focus first. `irreversible` adds "This can't be undone."
+ * destructive button. Cancel (or `cancelLabel`) gets focus first. `irreversible` adds "This can't be undone."
+ * `danger: false` styles the action as a plain primary button.
  */
-export function confirmDanger({ title, lines = [], items = [], after = [], action, kicker, irreversible = false }) {
+export function confirmDanger({ title, lines = [], items = [], after = [], action, kicker, irreversible = false, cancelLabel = "Cancel", danger = true }) {
   const d = openDialog();
-  const go = h("button", { type: "button", class: "acct-primary acct-danger", on: { click: () => d.close(true) } }, action);
-  const cancel = h("button", { type: "button", class: "acct-secondary", "data-autofocus": true, on: { click: () => d.close(false) } }, "Cancel");
+  const go = h("button", { type: "button", class: danger ? "acct-primary acct-danger" : "acct-primary", on: { click: () => d.close(true) } }, action);
+  const cancel = h("button", { type: "button", class: "acct-secondary", "data-autofocus": true, on: { click: () => d.close(false) } }, cancelLabel);
   d.render(
     kicker ? h("p", { class: "acct-kicker" }, kicker) : null,
     h("h2", {}, title),
