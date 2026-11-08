@@ -797,3 +797,18 @@ test("student deletes their account with an emailed code", async ({ page, reques
   await expect(page.getByText("Your account has been deleted.")).toBeVisible();
   await expect(accountBtn(page)).toHaveAttribute("aria-label", /sign in/i);
 });
+
+test("privacy notice page is served and linked from the sign-in sheet", async ({ page }) => {
+  await page.goto("/privacy.html");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const text = await page.locator("body").innerText();
+  expect(text).toContain("Data Protection Act");
+  expect(text).not.toContain("DRAFT");
+  expect(text).not.toMatch(EMOJI);
+  await expect(page.getByRole("link", { name: "Back to SumDeTing" })).toHaveAttribute("href", "/");
+
+  await page.goto("/");
+  await accountBtn(page).click();
+  await expect(dialog(page).getByRole("link", { name: /How SumDeTing uses your information/ }))
+    .toHaveAttribute("href", "/privacy.html");
+});

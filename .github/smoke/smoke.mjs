@@ -10,6 +10,7 @@
  *
  * Requires: npm i playwright && npx playwright install --with-deps chromium
  */
+import { createHash } from "node:crypto";
 import { chromium } from "playwright";
 
 const BASE_URL = (process.env.BASE_URL ?? "https://sumdeting.246labs.cloud").replace(/\/$/, "");
@@ -98,11 +99,32 @@ try {
   check("/api streams a reply", api.status === 200 && api.len > 0 && !api.snag,
     `status ${api.status}, ${api.len} chars${api.snag ? ", model error in stream" : ""}`);
 
+  // 6b. Accounts: privacy page, account endpoint, account UI module
+  const priv = await page.request.get(BASE_URL + "/privacy.html");
+  check("privacy page loads (200)", priv.status() === 200, `status ${priv.status()}`);
+
+  const acctBody = "{}";
+  const acctRes = await page.request.post(BASE_URL + "/api/account/me", {
+    headers: {
+      "content-type": "application/json",
+      "x-amz-content-sha256": createHash("sha256").update(acctBody).digest("hex"),
+    },
+    data: acctBody,
+  });
+  const acctJson = await acctRes.json().catch(() => null);
+  check("account endpoint reachable", acctRes.status() === 401 && acctJson?.error === "not_signed_in",
+    `status ${acctRes.status()} ${JSON.stringify(acctJson)}`);
+
+  const slotHasButton = await page.waitForSelector("#account-slot button", { timeout: 10000 }).then(() => true, () => false);
+  check("account-ui.mjs loaded", slotHasButton);
+
   // 7. No asset failures during load
-  const relevantBad = badResponses.filter((u) => !u.includes("favicon"));
+  // An anonymous visit probes /api/account/me and gets an expected 401; ignore it here.
+  const relevantBad = badResponses.filter((u) => !u.includes("favicon") && !/^401 .*\/api\/account\/me$/.test(u));
   check("no failed asset requests", failedRequests.length === 0 && relevantBad.length === 0,
     [...failedRequests, ...relevantBad].slice(0, 3).join(" | "));
-  check("no console errors", consoleErrors.length === 0, consoleErrors.slice(0, 2).join(" | "));
+  const realErrors = consoleErrors.filter((m) => !/status of 401/.test(m));
+  check("no console errors", realErrors.length === 0, realErrors.slice(0, 2).join(" | "));
 } finally {
   await browser.close();
 }

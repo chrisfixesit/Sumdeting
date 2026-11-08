@@ -19,9 +19,16 @@ flowchart LR
     CF -->|POST /api · SigV4 via OAC| FU[Lambda Function URL · IAM auth]
     FU --> L[Lambda: tutor handler]
     L -->|Converse API| B[Claude on Amazon Bedrock]
+    CF -->|POST /api/account/* · SigV4 via OAC| AU[Lambda Function URL · account]
+    AU --> AL[Lambda: account handler]
+    AL --> D[(DynamoDB: accounts and progress)]
+    AL -->|sign-in and consent emails| SES[Amazon SES]
+    EB[EventBridge Scheduler] -->|daily| J[Lambda: janitor]
+    J --> D
+    J --> SES
 ```
 
-The frontend is a single HTML page. KaTeX, marked, DOMPurify and the brand fonts are self-hosted under `web/vendor/`, so the CSP allows only the site's own origin. The backend is one Node.js Lambda that validates the conversation, applies the Socratic tutoring prompt, and calls the Bedrock Converse API. Nothing is stored server-side; the conversation lives in the student's browser (localStorage, 24h) so a refresh doesn't lose their session.
+The frontend is a single HTML page. KaTeX, marked, DOMPurify and the brand fonts are self-hosted under `web/vendor/`, so the CSP allows only the site's own origin. The backend is one Node.js Lambda that validates the conversation, applies the Socratic tutoring prompt, and calls the Bedrock Converse API. Chats are never stored server-side: the conversation lives in the student's browser (localStorage, 24h) so a refresh doesn't lose their session. Accounts are optional. A signed-in student's practice progress (topics, problems solved, streak, preferences) and profile details are stored in DynamoDB so it follows them across devices; an account Lambda handles sign-in (emailed links and codes via SES), parent and guardian access and under-13 parental consent, and an EventBridge Scheduler janitor deletes expired and inactive data. See the [privacy notice draft](web/privacy.html) and the [launch runbook](docs/launch-runbook.md).
 
 ## Why Socratic?
 
@@ -41,6 +48,23 @@ docker compose up --build
 ```
 
 The image follows container-hardening practice: multi-stage build, non-root `node` user, read-only filesystem, all capabilities dropped, `no-new-privileges`, and a healthcheck on `/healthz`.
+
+### Accounts in local development
+
+```bash
+ACCOUNT_DEV=1 node server.mjs
+```
+
+`ACCOUNT_DEV=1` swaps DynamoDB and SES for an in-memory store and a dev outbox. Emails the app would send (sign-in links, codes, consent requests) are readable at `http://localhost:8080/api/account/_dev/outbox`. Data is lost on restart.
+
+## Tests
+
+```bash
+cd backend && npm test                      # account backend unit tests
+cd e2e && npm ci && npx playwright install chromium && npx playwright test   # browser tests
+```
+
+The end-to-end suite starts its own server with `ACCOUNT_DEV=1` on port 8099. Before a public launch, work through [docs/launch-runbook.md](docs/launch-runbook.md).
 
 ## Deploy to AWS
 
@@ -81,8 +105,7 @@ Found a vulnerability? Please open a private [security advisory](https://github.
 ## Roadmap
 
 - Voice input for younger students
-- Optional session history with DynamoDB + TTL
-- Teacher/parent view with progress summaries
+- Teacher view with class-level progress summaries
 
 ## License
 

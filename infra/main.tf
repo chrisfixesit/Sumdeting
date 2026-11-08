@@ -387,6 +387,15 @@ resource "aws_s3_object" "index" {
   etag         = md5(local.index_html)
 }
 
+resource "aws_s3_object" "privacy" {
+  bucket        = aws_s3_bucket.web.id
+  key           = "privacy.html"
+  content_type  = "text/html"
+  source        = "${path.module}/../web/privacy.html"
+  etag          = filemd5("${path.module}/../web/privacy.html")
+  cache_control = "public, max-age=300"
+}
+
 resource "aws_s3_object" "manifest" {
   bucket       = aws_s3_bucket.web.id
   key          = "manifest.webmanifest"
