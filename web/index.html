@@ -31,20 +31,15 @@
         t || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     } catch { document.documentElement.dataset.theme = "light"; }
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Space+Grotesk:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet" />
-  <!-- KaTeX pinned to 0.16.21 — the newest version cdnjs actually hosts (0.16.22 returns 503 there). -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.21/katex.min.css"
-        integrity="sha512-mMGlbQRufB3HPAPs+jt4wJQDblOCcuqLSuCdXYq6QWD9WC2R9zj2/uXkH9Q8KL3T1EwOg2ay6thwHZbhmG55PA==" crossorigin="anonymous" />
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.21/katex.min.js"
-          integrity="sha512-hlwhRcPu4ocjcxisn2/m+6F6K2OdhSG1FJ0wcDzsiCRGVwDRjwnqfhoXEz0f8u0ho0i0GjYkTQg4gnD0ERYW4Q==" crossorigin="anonymous"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.21/contrib/auto-render.min.js"
-          integrity="sha512-GUMBfhw5UQwsoB4eNVpHuHEwxA4IiVcLmfI75GCVI+VWtqKqS2S1mySPUrz8eaeZSYDXkjYsh6rwmF7NE0tODA==" crossorigin="anonymous"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js"
-          integrity="sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+" crossorigin="anonymous"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.6/purify.min.js"
-          integrity="sha384-JEyTNhjM6R1ElGoJns4U2Ln4ofPcqzSsynQkmEc/KGy6336qAZl70tDLufbkla+3" crossorigin="anonymous"></script>
+  <!-- All third-party assets are self-hosted under /vendor (fonts, KaTeX, marked,
+       DOMPurify) so the site has zero runtime dependence on external CDNs and the
+       CSP stays locked to 'self'. Upgrade = refresh web/vendor from the npm dists. -->
+  <link rel="stylesheet" href="/vendor/fonts/fonts.css" />
+  <link rel="stylesheet" href="/vendor/katex-0.16.21/katex.min.css" />
+  <script defer src="/vendor/katex-0.16.21/katex.min.js"></script>
+  <script defer src="/vendor/katex-0.16.21/contrib/auto-render.min.js"></script>
+  <script defer src="/vendor/marked-15.0.12.min.js"></script>
+  <script defer src="/vendor/purify-3.2.6.min.js"></script>
   <style>
     :root {
       /* Chalk & Cream (design sheet 2a) */
@@ -386,6 +381,18 @@
     .trow .s-new { color: var(--faint); }
     .mastery { display: block; font: 400 0.75rem 'Space Grotesk'; color: var(--muted); margin: 0.75rem 0 0; }
     .mastery b { color: var(--ink); }
+    .mastery .retry-chip {
+      margin-left: 0.4rem;
+      font: inherit;
+      font-size: 0.72rem;
+      padding: 0.08rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid var(--input-border);
+      background: none;
+      color: var(--primary);
+      cursor: pointer;
+    }
+    .mastery .retry-chip:hover { border-color: var(--primary); }
 
     /* ===== CHAT (Tutor) ===== */
     .chat-top {
@@ -727,7 +734,7 @@
       </div>
 
       <div class="home-foot">
-        Made in Barbados · Built with Claude on Amazon Bedrock · <a href="https://github.com/christophercorbin/math-mentor" rel="noopener">Source on GitHub</a>
+        Made in Barbados · Built with Claude on Amazon Bedrock · <a href="https://github.com/chrisfixesit/Sumdeting" rel="noopener">Source on GitHub</a>
       </div>
     </section>
 
@@ -963,6 +970,9 @@
     // Render a completed tutor reply as sanitized markdown + KaTeX.
     // LaTeX segments are masked before the markdown pass so marked doesn't
     // mangle backslashes/underscores, then restored HTML-escaped for KaTeX.
+    // DOMPurify must run LAST: a restored segment can land inside an
+    // attribute (e.g. image alt text), and anything spliced into HTML after
+    // sanitizing could break out of it and add event handlers.
     function renderRich(el, text) {
       if (!(window.marked && window.DOMPurify)) {
         el.textContent = text;
@@ -972,9 +982,9 @@
       const holes = [];
       const masked = text.replace(/\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)/g,
         (m) => `\uE000${holes.push(m) - 1}\uE001`);
-      let html = DOMPurify.sanitize(marked.parse(masked, { breaks: true }));
-      html = html.replace(/\uE000(\d+)\uE001/g, (_, i) => escapeHtml(holes[+i] ?? ""));
-      el.innerHTML = html;
+      const html = marked.parse(masked, { breaks: true })
+        .replace(/\uE000(\d+)\uE001/g, (_, i) => escapeHtml(holes[+i] ?? ""));
+      el.innerHTML = DOMPurify.sanitize(html);
       el.classList.add("rich");
       renderMath(el);
     }
@@ -1265,6 +1275,9 @@
       b.appendChild(document.createTextNode(" " + label));
       b.addEventListener("click", () => {
         chipsEl.hidden = true;
+        // Hint-style chips count toward "needed help" on the active practice problem.
+        if (activeProblem && (icon === "i-bulb" || icon === "i-file")) activeProblem.hints += 1;
+        if (activeProblem) activeProblem.userTurns += 1;
         converse(msg, { displayText: label });
       });
       chipsEl.appendChild(b);
@@ -1279,6 +1292,46 @@
     const MASTERY_KEY = "mathmentor.mastery.v1";
     const masteryEl = document.getElementById("mastery");
     let currentTopic = null;
+    // The practice problem currently being worked: set when "Give me a problem"
+    // succeeds, closed by the tutor's ✅, replaced if a new one is requested.
+    let activeProblem = null; // { topic, level, userTurns, hints }
+
+    // Append a per-problem outcome to the topic's rolling history (capped).
+    function recordOutcome(topic, ok, hints, turns) {
+      const m = loadMastery();
+      const t = (m.topics[topic] ??= { attempted: 0, solved: 0 });
+      t.hist ??= [];
+      t.hist.push({ d: new Date().toISOString().slice(0, 10), ok: ok ? 1 : 0, hints, turns });
+      if (t.hist.length > 15) t.hist = t.hist.slice(-15);
+      saveMastery(m);
+    }
+
+    const struggledEntry = (h) => !h.ok || h.hints > 0 || h.turns >= 5;
+
+    // Adapt the next practice problem to recent performance on this topic.
+    function difficultyGuidance(topic) {
+      const t = loadMastery().topics[topic];
+      const recent = t?.hist?.slice(-3) ?? [];
+      if (recent.length < 2) return "";
+      if (recent.every((h) => h.ok && h.hints === 0 && h.turns <= 3)) {
+        return " Recent performance: the student has been solving problems on this topic quickly and without hints, so make this one a notch more challenging than standard (still on-syllabus for the level).";
+      }
+      if (recent.filter(struggledEntry).length >= 2) {
+        return " Recent performance: the student has found this topic difficult lately, so make this one a confidence-builder — slightly easier than standard, broken into an inviting first step.";
+      }
+      return "";
+    }
+
+    // Topics worth resurfacing: struggled on 2+ of the last few problems,
+    // within the last 14 days.
+    function trickyTopics() {
+      const m = loadMastery();
+      const cutoff = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
+      return Object.entries(m.topics)
+        .filter(([, t]) => (t.hist ?? []).filter((h) => h.d >= cutoff && struggledEntry(h)).length >= 2)
+        .map(([name]) => name)
+        .slice(0, 2);
+    }
 
     function loadMastery() {
       try {
@@ -1321,14 +1374,36 @@
       const t = currentTopic && m.topics[currentTopic];
       if (t && t.attempted) bits.push(`${currentTopic}: ${t.solved} solved of ${t.attempted} tried`);
       masteryEl.textContent = bits.join(" · ");
-      masteryEl.hidden = bits.length === 0;
+      // Mistakes notebook (lite): offer one-tap re-practice of recently tricky topics.
+      for (const topic of trickyTopics()) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "retry-chip";
+        b.textContent = `Practice ${topic} again`;
+        b.title = "You found this topic tricky recently — a quick round helps it stick";
+        b.addEventListener("click", () => {
+          const sel = document.getElementById("topic");
+          if ([...sel.options].some((o) => o.value === topic)) sel.value = topic;
+          practiceBtn.click();
+        });
+        masteryEl.appendChild(b);
+      }
+      masteryEl.hidden = bits.length === 0 && masteryEl.childElementCount === 0;
     }
 
     // Runs after every completed tutor reply.
     function afterReply(replyText) {
       // The prompt asks the tutor to lead with ✅ only when a final answer is correct.
-      if (replyText.includes("✅")) recordActivity(currentTopic || "General", true);
-      else recordActivity(null, false); // streak only
+      if (replyText.includes("✅")) {
+        recordActivity(currentTopic || "General", true);
+        if (activeProblem) {
+          recordOutcome(activeProblem.topic, true, activeProblem.hints, activeProblem.userTurns);
+          activeProblem = null;
+          renderMastery();
+        }
+      } else {
+        recordActivity(null, false); // streak only
+      }
       showChips();
     }
 
@@ -1337,6 +1412,7 @@
       const text = input.value.trim();
       if (!text && !pendingImage) return;
 
+      if (activeProblem) activeProblem.userTurns += 1;
       const image = pendingImage;
       pendingImage = null;
       attachment.classList.remove("active");
@@ -1408,6 +1484,7 @@
       speechSynthesis.cancel?.();
       if (examTimer) { clearInterval(examTimer); examTimer = null; examBar.classList.remove("active"); examBtn.disabled = false; }
       chat.querySelectorAll(".msg").forEach((el, i) => { if (i > 0) el.remove(); }); // keep the greeting
+      activeProblem = null;
       pendingImage = null;
       attachment.classList.remove("active");
       chipsEl.hidden = true;
@@ -1681,12 +1758,19 @@
     practiceBtn.addEventListener("click", async () => {
       const level = document.getElementById("level").value;
       const topic = document.getElementById("topic").value;
+      // Asking for a fresh problem abandons the current one — log it as
+      // unsolved so the tricky-topics logic can resurface the topic later.
+      if (activeProblem) {
+        recordOutcome(activeProblem.topic, false, activeProblem.hints, activeProblem.userTurns);
+        activeProblem = null;
+      }
       const ok = await converse(
-        `Practice mode: please give me ONE ${level} practice problem on ${topic}. Wait for my attempt before guiding me, and remember not to give me the answer.`,
+        `Practice mode: please give me ONE ${level} practice problem on ${topic}. Wait for my attempt before guiding me, and remember not to give me the answer.${difficultyGuidance(topic)}`,
         { displayText: `Practice please: ${level}, ${topic}` }
       );
       if (ok) {
         currentTopic = topic;
+        activeProblem = { topic, level, userTurns: 0, hints: 0 };
         recordActivity(topic, false); // counts as attempted
       }
     });
@@ -1720,9 +1804,9 @@
         "\n\n— SumDeTing · " + location.origin;
       const waHref = "https://wa.me/?text=" + encodeURIComponent(shareText);
       win.document.write(`<!doctype html><html><head><title>SumDeTing Session Recap</title>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.21/katex.min.css">
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.21/katex.min.js"><\/script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.21/contrib/auto-render.min.js"><\/script>
+        <link rel="stylesheet" href="${location.origin}/vendor/katex-0.16.21/katex.min.css">
+        <script src="${location.origin}/vendor/katex-0.16.21/katex.min.js"><\/script>
+        <script src="${location.origin}/vendor/katex-0.16.21/contrib/auto-render.min.js"><\/script>
         <style>body{font-family:Georgia,serif;max-width:680px;margin:2rem auto;padding:0 1rem;line-height:1.6;color:#1b2340}
         h1{font-size:1.3rem;border-bottom:3px solid #ffb627;padding-bottom:.5rem}
         pre{white-space:pre-wrap;font-family:inherit}

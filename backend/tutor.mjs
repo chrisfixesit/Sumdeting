@@ -78,11 +78,13 @@ export function validateMessages(messages) {
   let imageCount = 0;
   let imageChars = 0;
   for (const m of messages) {
+    if (m === null || typeof m !== "object" || Array.isArray(m)) return "Malformed messages";
     if (m.role !== "user" && m.role !== "assistant") return "Malformed messages";
     if (typeof m.content !== "string" || m.content.length > MAX_MESSAGE_CHARS) {
       return "Malformed messages";
     }
     if (m.image != null) {
+      if (typeof m.image !== "object" || Array.isArray(m.image)) return "Malformed messages";
       if (m.role !== "user") return "Only user messages may include images";
       imageCount += 1;
       imageChars += typeof m.image.data === "string" ? m.image.data.length : 0;

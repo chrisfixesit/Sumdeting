@@ -3,7 +3,7 @@
  * at POST /api/chat, reusing the exact same logic as the Lambda handler.
  */
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { askTutorStream, validateMessages } from "./backend/tutor.mjs";
@@ -56,6 +56,37 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Static assets (self-hosted vendor libs/fonts, brand images, manifest),
+  // mirroring what S3/CloudFront serves in production.
+  if (req.method === "GET") {
+    const MIME = {
+      ".css": "text/css", ".js": "text/javascript", ".mjs": "text/javascript",
+      ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf",
+      ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon",
+      ".webmanifest": "application/manifest+json", ".json": "application/json",
+    };
+    const webRoot = path.join(root, "web");
+    let urlPath;
+    try {
+      urlPath = decodeURIComponent(new URL(req.url, "http://x").pathname);
+    } catch {
+      // Malformed percent-encoding: reject this request, don't crash the process
+      json(res, 400, { error: "Bad request" });
+      return;
+    }
+    const filePath = path.normalize(path.join(webRoot, urlPath));
+    const ext = path.extname(filePath);
+    if (
+      filePath.startsWith(webRoot + path.sep) && // no traversal out of web/
+      MIME[ext] &&
+      existsSync(filePath) && statSync(filePath).isFile()
+    ) {
+      res.writeHead(200, { "Content-Type": MIME[ext], "Cache-Control": "public, max-age=3600" });
+      res.end(readFileSync(filePath));
+      return;
+    }
+  }
+
   if (req.method === "POST" && req.url === "/api/chat") {
     let raw = "";
     req.on("data", (chunk) => {
@@ -63,31 +94,39 @@ const server = createServer(async (req, res) => {
       if (raw.length > 4_000_000) req.destroy(); // allow base64 photos
     });
     req.on("end", async () => {
-      let payload;
+      // An exception escaping this async listener would be an unhandled
+      // rejection, which terminates the whole server process.
       try {
-        payload = JSON.parse(raw);
-      } catch {
-        json(res, 400, { error: "Invalid JSON body" });
-        return;
-      }
+        let payload;
+        try {
+          payload = JSON.parse(raw);
+        } catch {
+          json(res, 400, { error: "Invalid JSON body" });
+          return;
+        }
 
-      const validationError = validateMessages(payload?.messages);
-      if (validationError) {
-        json(res, 400, { error: validationError });
-        return;
-      }
+        const validationError = validateMessages(payload?.messages);
+        if (validationError) {
+          json(res, 400, { error: validationError });
+          return;
+        }
 
-      res.writeHead(200, {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache",
-      });
-      try {
-        await askTutorStream(payload.messages, MODEL_ID, (text) => res.write(text));
+        res.writeHead(200, {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-cache",
+        });
+        try {
+          await askTutorStream(payload.messages, MODEL_ID, (text) => res.write(text));
+        } catch (err) {
+          console.error("Bedrock invocation failed", err);
+          res.write("\n\n[SumDeTing hit a snag; please send that again.]");
+        }
+        res.end();
       } catch (err) {
-        console.error("Bedrock invocation failed", err);
-        res.write("\n\n[SumDeTing hit a snag; please send that again.]");
+        console.error("Chat request failed", err);
+        if (!res.headersSent) json(res, 500, { error: "Internal error" });
+        else res.end();
       }
-      res.end();
     });
     return;
   }

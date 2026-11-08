@@ -2,7 +2,9 @@ services:
   mathmentor:
     build: .
     ports:
-      - "8080:8080"
+      # Localhost only: the container uses your own AWS credentials, so don't
+      # expose it to the rest of the network
+      - "127.0.0.1:8080:8080"
     environment:
       # Bedrock model/inference profile (must be enabled in your account)
       MODEL_ID: ${MODEL_ID:-us.anthropic.claude-haiku-4-5-20251001-v1:0}

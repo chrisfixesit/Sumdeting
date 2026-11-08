@@ -19,7 +19,6 @@ variable "model_id" {
 variable "alert_email" {
   description = "Email address for the monthly cost budget alerts"
   type        = string
-  default     = "christophercorbin24@gmail.com"
 }
 
 variable "monthly_budget_usd" {
@@ -37,19 +36,16 @@ variable "domain_name" {
 variable "dns_role_arn" {
   description = "ARN of the Route53RecordWriter role in the DNS management account."
   type        = string
-  default     = "arn:aws:iam::438465156498:role/Route53RecordWriter"
 }
 
 variable "dns_zone_id" {
   description = "Hosted zone id for 246labs.cloud (authoritative, mgmt account)."
   type        = string
-  default     = "Z02305342HXRSXC7R8OX5"
 }
 
 variable "dns_external_id" {
   description = "External id required to assume the Route53RecordWriter role."
   type        = string
-  default     = "corbin-dns-delegation"
 }
 
 variable "reserved_concurrency" {
