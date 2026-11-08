@@ -119,3 +119,55 @@ test("transact applies puts and deletes together", async () => {
   assert.notEqual(await table.get("A", "new"), null);
   assert.equal(await table.get("A", "old"), null);
 });
+
+test("ifNotExists and ifVersion 0 succeed over an expired item", async () => {
+  const { table, clock } = setup();
+  const expire = () => ({ pk: "A", sk: "1", ttl: clock.t / 1000 + 5, version: 1 });
+  await table.put(expire());
+  clock.t += 6_000;
+  await table.put({ pk: "A", sk: "1", version: 1 }, { ifNotExists: true });
+  await table.put(expire());
+  clock.t += 6_000;
+  await table.put({ pk: "A", sk: "1", version: 1 }, { ifVersion: 0 });
+});
+
+test("ifVersion fails over an expired item and over a missing item", async () => {
+  const { table, clock } = setup();
+  await assert.rejects(
+    table.put({ pk: "A", sk: "none", version: 2 }, { ifVersion: 1 }),
+    ConditionFailed
+  );
+  await table.put({ pk: "A", sk: "1", version: 1, ttl: clock.t / 1000 + 5 });
+  clock.t += 6_000;
+  await assert.rejects(
+    table.put({ pk: "A", sk: "1", version: 2 }, { ifVersion: 1 }),
+    ConditionFailed
+  );
+});
+
+test("add after expiry restarts at n with the new ttl", async () => {
+  const { table, clock } = setup();
+  const ttl1 = clock.t / 1000 + 10;
+  assert.equal(await table.add("C", "k", "count", 5, ttl1), 5);
+  clock.t += 11_000;
+  const ttl2 = clock.t / 1000 + 10;
+  assert.equal(await table.add("C", "k", "count", 2, ttl2), 2);
+  const item = await table.get("C", "k");
+  assert.equal(item.count, 2);
+  assert.equal(item.ttl, ttl2);
+});
+
+test("add requires a numeric ttl", async () => {
+  const { table } = setup();
+  await assert.rejects(table.add("C", "k", "count", 1), TypeError);
+  assert.equal(await table.get("C", "k"), null);
+});
+
+test("query and scan skip expired items", async () => {
+  const { table, clock } = setup();
+  await table.put({ pk: "u#1", sk: "a", ttl: clock.t / 1000 + 5 });
+  await table.put({ pk: "u#1", sk: "b" });
+  clock.t += 6_000;
+  assert.deepEqual((await table.query("u#1")).map((r) => r.sk), ["b"]);
+  assert.deepEqual((await table.scan("u#")).map((r) => r.sk), ["b"]);
+});

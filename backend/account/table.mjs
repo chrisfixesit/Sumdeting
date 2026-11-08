@@ -10,6 +10,10 @@ export class ConditionFailed extends Error {
 
 const keyOf = (pk, sk) => `${pk}\u0000${sk}`;
 
+const requireTtl = (ttl) => {
+  if (typeof ttl !== "number") throw new TypeError("add() requires a numeric ttl");
+};
+
 /** True when the item's ttl (epoch seconds) has passed at `nowMs`. */
 const isExpired = (item, nowMs) =>
   typeof item.ttl === "number" && item.ttl * 1000 <= nowMs;
@@ -54,6 +58,7 @@ export function createMemoryTable({ now = () => Date.now() } = {}) {
       return collect((i) => i.pk === pk && i.sk.startsWith(skPrefix));
     },
     async add(pk, sk, field, n, ttl) {
+      requireTtl(ttl);
       const existing = live(pk, sk);
       const item = existing ?? { pk, sk, ttl };
       item[field] = (item[field] ?? 0) + n;
@@ -77,7 +82,11 @@ export function createMemoryTable({ now = () => Date.now() } = {}) {
  * DynamoDB Table. Needs the item key attributes to be named `pk` and `sk`.
  * The AWS SDK is imported lazily so tests never need it.
  */
-export function createDynamoTable({ tableName, client } = {}) {
+export function createDynamoTable({
+  tableName,
+  client,
+  now = () => Date.now(),
+} = {}) {
   let sdkPromise;
   const sdk = () => {
     sdkPromise ??= (async () => {
@@ -94,15 +103,22 @@ export function createDynamoTable({ tableName, client } = {}) {
     return sdkPromise;
   };
 
+  // Expired-but-unswept items (DynamoDB TTL lag) count as absent, matching
+  // the memory table.
   const conditionOf = ({ ifNotExists, ifVersion } = {}) => {
     if (ifNotExists || ifVersion === 0) {
-      return { ConditionExpression: "attribute_not_exists(pk)" };
+      return {
+        ConditionExpression: "attribute_not_exists(pk) OR #t <= :now",
+        ExpressionAttributeNames: { "#t": "ttl" },
+        ExpressionAttributeValues: { ":now": now() / 1000 },
+      };
     }
     if (ifVersion > 0) {
       return {
-        ConditionExpression: "#v = :v",
-        ExpressionAttributeNames: { "#v": "version" },
-        ExpressionAttributeValues: { ":v": ifVersion },
+        ConditionExpression:
+          "#v = :v AND (attribute_not_exists(#t) OR #t > :now)",
+        ExpressionAttributeNames: { "#v": "version", "#t": "ttl" },
+        ExpressionAttributeValues: { ":v": ifVersion, ":now": now() / 1000 },
       };
     }
     return {};
@@ -116,7 +132,7 @@ export function createDynamoTable({ tableName, client } = {}) {
       ));
 
   const fresh = (items) => {
-    const nowSec = Date.now() / 1000;
+    const nowSec = now() / 1000;
     return items.filter((i) => typeof i.ttl !== "number" || i.ttl > nowSec);
   };
 
@@ -139,7 +155,11 @@ export function createDynamoTable({ tableName, client } = {}) {
     async get(pk, sk) {
       const { lib, doc } = await sdk();
       const res = await doc.send(
-        new lib.GetCommand({ TableName: tableName, Key: { pk, sk } })
+        new lib.GetCommand({
+          TableName: tableName,
+          Key: { pk, sk },
+          ConsistentRead: true,
+        })
       );
       return res.Item && fresh([res.Item]).length ? res.Item : null;
     },
@@ -166,6 +186,7 @@ export function createDynamoTable({ tableName, client } = {}) {
     },
     async query(pk, skPrefix = "") {
       const items = await paginate("QueryCommand", {
+        ConsistentRead: true,
         KeyConditionExpression: skPrefix
           ? "pk = :pk AND begins_with(sk, :p)"
           : "pk = :pk",
@@ -176,18 +197,46 @@ export function createDynamoTable({ tableName, client } = {}) {
       return fresh(items);
     },
     async add(pk, sk, field, n, ttl) {
+      requireTtl(ttl);
       const { lib, doc } = await sdk();
-      const res = await doc.send(
-        new lib.UpdateCommand({
-          TableName: tableName,
-          Key: { pk, sk },
-          UpdateExpression: "ADD #f :n SET #t = if_not_exists(#t, :ttl)",
-          ExpressionAttributeNames: { "#f": field, "#t": "ttl" },
-          ExpressionAttributeValues: { ":n": n, ":ttl": ttl },
-          ReturnValues: "ALL_NEW",
-        })
-      );
-      return res.Attributes[field];
+      const increment = async () => {
+        const res = await doc.send(
+          new lib.UpdateCommand({
+            TableName: tableName,
+            Key: { pk, sk },
+            UpdateExpression: "ADD #f :n SET #t = if_not_exists(#t, :ttl)",
+            ConditionExpression: "attribute_not_exists(#t) OR #t > :now",
+            ExpressionAttributeNames: { "#f": field, "#t": "ttl" },
+            ExpressionAttributeValues: { ":n": n, ":ttl": ttl, ":now": now() / 1000 },
+            ReturnValues: "ALL_NEW",
+          })
+        );
+        return res.Attributes[field];
+      };
+      // The stored item has expired but isn't swept yet: restart the counter.
+      const reset = () =>
+        doc.send(
+          new lib.PutCommand({
+            TableName: tableName,
+            Item: { pk, sk, [field]: n, ttl },
+            ConditionExpression: "#t <= :now",
+            ExpressionAttributeNames: { "#t": "ttl" },
+            ExpressionAttributeValues: { ":now": now() / 1000 },
+          })
+        );
+      try {
+        return await increment();
+      } catch (err) {
+        if (!isConditionError(err)) throw err;
+      }
+      try {
+        await reset();
+        return n;
+      } catch (err) {
+        if (!isConditionError(err)) throw err;
+      }
+      // Lost a race to another reset; the item is live now, so increment it.
+      return increment();
     },
     async scan(pkPrefix) {
       const items = await paginate("ScanCommand", {
