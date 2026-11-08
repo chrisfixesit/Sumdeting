@@ -11,6 +11,13 @@ services:
       # Bedrock model/inference profile (must be enabled in your account)
       MODEL_ID: ${MODEL_ID:-us.anthropic.claude-haiku-4-5-20251001-v1:0}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      # Accounts in local development. ACCOUNT_DEV=1 keeps accounts in memory
+      # (lost on restart), exposes sign-in emails at GET /api/account/_dev/outbox
+      # instead of sending them, and drops the Secure flag from the session
+      # cookie so it works over http://localhost. NEVER set it in production:
+      # the outbox hands out sign-in links to anyone who can reach the port.
+      # Set ACCOUNT_DEV=0 to run without the dev outbox.
+      ACCOUNT_DEV: ${ACCOUNT_DEV:-1}
       # Credentials come from the ~/.aws mount below by default.
       # To use static/session creds or a named profile instead, export them
       # in your shell before `docker compose up`; compose passes them through:
