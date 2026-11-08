@@ -659,6 +659,7 @@
       </span>
       <span class="wordmark"><b>Sum</b>DeTing</span>
     </div>
+    <div id="account-slot"></div>
     <div class="menu-wrap">
       <button id="menu-btn" type="button" aria-label="Menu" aria-haspopup="true">☰</button>
       <div id="menu" hidden>
@@ -1215,19 +1216,35 @@
     const levelSel = document.getElementById("level");
     const topicSel = document.getElementById("topic");
     const durationSel = document.getElementById("exam-duration");
-    try {
-      const p = JSON.parse(localStorage.getItem(PREFS_KEY));
-      if (p?.level) levelSel.value = p.level;
-      if (p?.topic) topicSel.value = p.topic;
-      if (p?.duration) durationSel.value = p.duration;
-    } catch { /* ignore */ }
+    // Signed-out keys are the bare base; a signed-in profile gets "<base>.<pid>".
+    let activeProfileId = null;
+    function storageKey(base, pid = activeProfileId) {
+      return pid ? `${base}.${pid}` : base;
+    }
+    // Progress events for the account module; a no-op when nothing listens.
+    function emitProgress(event) {
+      try {
+        window.dispatchEvent(new CustomEvent("sumdeting:progress", {
+          detail: { id: crypto.randomUUID(), ...event },
+        }));
+      } catch { /* never let sync plumbing break practice */ }
+    }
+    function loadPrefs() {
+      try {
+        const p = JSON.parse(localStorage.getItem(storageKey(PREFS_KEY)));
+        if (p?.level) levelSel.value = p.level;
+        if (p?.topic) topicSel.value = p.topic;
+        if (p?.duration) durationSel.value = p.duration;
+      } catch { /* ignore */ }
+    }
+    loadPrefs();
     for (const sel of [levelSel, topicSel, durationSel]) {
       sel.addEventListener("change", () => {
+        const prefs = { level: levelSel.value, topic: topicSel.value, duration: durationSel.value };
         try {
-          localStorage.setItem(PREFS_KEY, JSON.stringify({
-            level: levelSel.value, topic: topicSel.value, duration: durationSel.value,
-          }));
+          localStorage.setItem(storageKey(PREFS_KEY), JSON.stringify(prefs));
         } catch { /* ignore */ }
+        emitProgress({ type: "prefs", ...prefs });
       });
     }
 
@@ -1301,9 +1318,11 @@
       const m = loadMastery();
       const t = (m.topics[topic] ??= { attempted: 0, solved: 0 });
       t.hist ??= [];
-      t.hist.push({ d: new Date().toISOString().slice(0, 10), ok: ok ? 1 : 0, hints, turns });
+      const d = new Date().toISOString().slice(0, 10);
+      t.hist.push({ d, ok: ok ? 1 : 0, hints, turns });
       if (t.hist.length > 15) t.hist = t.hist.slice(-15);
       saveMastery(m);
+      emitProgress({ type: "outcome", topic, ok: !!ok, hints, turns, d });
     }
 
     const struggledEntry = (h) => !h.ok || h.hints > 0 || h.turns >= 5;
@@ -1335,13 +1354,13 @@
 
     function loadMastery() {
       try {
-        return JSON.parse(localStorage.getItem(MASTERY_KEY)) || { topics: {}, streak: { count: 0, last: "" } };
+        return JSON.parse(localStorage.getItem(storageKey(MASTERY_KEY))) || { topics: {}, streak: { count: 0, last: "" } };
       } catch {
         return { topics: {}, streak: { count: 0, last: "" } };
       }
     }
     function saveMastery(m) {
-      try { localStorage.setItem(MASTERY_KEY, JSON.stringify(m)); } catch { /* ignore */ }
+      try { localStorage.setItem(storageKey(MASTERY_KEY), JSON.stringify(m)); } catch { /* ignore */ }
     }
     function bumpStreak(m) {
       const today = new Date().toISOString().slice(0, 10);
@@ -1365,6 +1384,7 @@
       }
       saveMastery(m);
       renderMastery();
+      emitProgress({ type: "activity", topic: topic || null, solved: !!solved, d: new Date().toISOString().slice(0, 10) });
     }
     function renderMastery() {
       const m = loadMastery();
@@ -1478,8 +1498,7 @@
       if (history[history.length - 1]?.role === "assistant") showChips();
     }
 
-    document.getElementById("new-session").addEventListener("click", () => {
-      if (history.length && !confirm("Start a fresh session? This clears the current conversation.")) return;
+    function clearChat() {
       clearSession();
       history.length = 0;
       speechSynthesis.cancel?.();
@@ -1493,6 +1512,10 @@
       autogrow();
       setBusy(false);
       goView("home");
+    }
+    document.getElementById("new-session").addEventListener("click", () => {
+      if (history.length && !confirm("Start a fresh session? This clears the current conversation.")) return;
+      clearChat();
     });
 
     // ---- Voice input (Web Speech API; hidden where unsupported) ----
@@ -2007,7 +2030,20 @@
 
     renderString();
 
-
+    // Bridge for the account module (account-core / account-ui).
+    function reloadLocalState() {
+      loadPrefs();
+      levelTabs.querySelectorAll(".seg").forEach((x, i) => x.classList.toggle("on", LEVELS[i] === levelSel.value));
+      renderMastery();
+    }
+    window.SumDeTing = {
+      storageKey,
+      setActiveProfile(pid) { activeProfileId = pid || null; },
+      clearChat,
+      reloadLocalState,
+      sha256Hex,
+      levels: LEVELS,
+    };
 
     // Restore any saved session once the deferred libraries (marked, DOMPurify,
     // KaTeX) have executed, so restored replies render with full formatting.
