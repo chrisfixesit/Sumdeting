@@ -119,12 +119,10 @@ try {
   check("account-ui.mjs loaded", slotHasButton);
 
   // 7. No asset failures during load
-  // An anonymous visit probes /api/account/me and gets an expected 401; ignore it here.
-  const relevantBad = badResponses.filter((u) => !u.includes("favicon") && !/^401 .*\/api\/account\/me$/.test(u));
+  const relevantBad = badResponses.filter((u) => !u.includes("favicon"));
   check("no failed asset requests", failedRequests.length === 0 && relevantBad.length === 0,
     [...failedRequests, ...relevantBad].slice(0, 3).join(" | "));
-  const realErrors = consoleErrors.filter((m) => !/status of 401/.test(m));
-  check("no console errors", realErrors.length === 0, realErrors.slice(0, 2).join(" | "));
+  check("no console errors", consoleErrors.length === 0, consoleErrors.slice(0, 2).join(" | "));
 } finally {
   await browser.close();
 }

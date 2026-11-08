@@ -812,3 +812,24 @@ test("privacy notice page is served and linked from the sign-in sheet", async ({
   await expect(dialog(page).getByRole("link", { name: /How SumDeTing uses your information/ }))
     .toHaveAttribute("href", "/privacy.html");
 });
+
+test("anonymous load makes no account requests; signed-in reload restores the profile", async ({ page, request }) => {
+  const hits = [];
+  page.on("request", (r) => { if (new URL(r.url()).pathname.startsWith("/api/account")) hits.push(r.url()); });
+  await page.goto("/");
+  await expect(accountBtn(page)).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  expect(hits).toEqual([]);
+
+  const email = uniqueEmail("hint");
+  await signUpStudent(page, request, email, { first: "Ria", last: "Best" });
+  await expect(accountBtn(page)).toHaveText("RB");
+  expect(await page.evaluate(() => localStorage.getItem("sumdeting.signedIn"))).toBe("1");
+  await page.reload();
+  await expect(accountBtn(page)).toHaveText("RB");
+
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: /sign out/i }).click();
+  await expect(accountBtn(page)).toHaveAttribute("aria-label", /sign in/i);
+  expect(await page.evaluate(() => localStorage.getItem("sumdeting.signedIn"))).toBeNull();
+});

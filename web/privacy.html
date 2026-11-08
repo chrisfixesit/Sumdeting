@@ -1,6 +1,7 @@
 <!doctype html>
 <!--
   DRAFT — for owner review against the Barbados Data Protection Act 2019 before launch.
+  The sentence about the tutor sending chats to Claude via Amazon Bedrock needs the owner's confirmation.
   The contact address below is a placeholder and must be filled in.
   Keep the retention list in sync with docs/launch-runbook.md section 4.
 -->
@@ -61,13 +62,17 @@
       <ul>
         <li>the email address used to sign in;</li>
         <li>the account type (parent or student);</li>
-        <li>dates: when the account was created, when consent was given, and when it was last used.</li>
+        <li>dates: when the account was created, when consent was given, and when it was last used;</li>
+        <li>for a student who makes their own account, whether they said they are 13 or older;</li>
+        <li>the email addresses in any invites you send (for example to add a guardian), kept until the invite is used or expires, and for no more than 30 days;</li>
+        <li>a sign-in cookie on your device that keeps you signed in for up to 90 days of use.</li>
       </ul>
       <p>For each student profile:</p>
       <ul>
         <li>first name and last name;</li>
         <li>level (for example Common Entrance or CSEC) and a chosen colour;</li>
         <li>whether the student is under 13;</li>
+        <li>for an under-13 profile, the parent's email address, which we use to ask for approval;</li>
         <li>consent details: who approved and when;</li>
         <li>practice progress: topics practised, problems solved and attempted, the number of hints and turns on recent problems, the daily streak, and practice preferences.</li>
       </ul>
@@ -82,7 +87,7 @@
       <p>Chats stay on the device you used, in the browser, for 24 hours and then they are cleared.</p>
 
       <h2>Why we store it</h2>
-      <p>We use this information only to run the account: to sign you in, to show a student their own progress on any device, and to let parents and guardians see how a child is getting on. We do not sell it, and we do not use it for advertising.</p>
+      <p>We use this information only to run the account: to sign you in, to show a student their own progress on any device, and to let parents and guardians see how a child is getting on. We do not sell it, and we do not use it for advertising. When a student types a question or sends a photo to the tutor, that is sent to Claude, an AI model, through Amazon Bedrock (Amazon Web Services) to write the reply. SumDeTing does not store those chats on its servers.</p>
 
       <h2>Who can see a child's progress</h2>
       <ul>
@@ -106,7 +111,7 @@
       </ul>
 
       <h2>Deleting information</h2>
-      <p>A parent can remove a child, or delete the whole account, from the parent section after confirming with a code we email. A student can delete their own account from the profile menu, also with an emailed code. Deleting removes the profiles, the progress and any access links.</p>
+      <p>A parent can remove a child, or delete the whole account, from the parent section after confirming with a code we email. A student can delete their own account from the profile menu, also with an emailed code. Deleting removes the profiles, the progress and any access links. Copies held in backups are overwritten within about 35 days.</p>
 
       <h2>Where it is held</h2>
       <p>Account information is held with Amazon Web Services in the United States. It is encrypted at rest. Sign-in and approval emails are sent through Amazon SES.</p>

@@ -19,6 +19,8 @@ const QUEUE_PREFIX = "sumdeting.queue.";
 const DECLINED_PREFIX = "sumdeting.mergeDeclined.";
 const LAST_ACCOUNT = "sumdeting.lastAccount";
 const AWAITING = "sumdeting.awaitingProfile";
+// Set while signed in. Without it (and without a #signin= link) a visit makes no /api/account request.
+const SIGNED_IN_HINT = "sumdeting.signedIn";
 const FLUSH_GAP_MS = 5000;
 const UNLOCK_MS = 15 * 60 * 1000; // the server's parent unlock window
 const RETRY_MS = 15000;
@@ -416,6 +418,7 @@ function dropToSignedOut(message) {
     store.removeItem(SD.storageKey(PREFS, pid));
   }
   state.me = null;
+  store.removeItem(SIGNED_IN_HINT);
   deactivate();
   closeAllDialogs();
   render();
@@ -436,8 +439,8 @@ function profileGone(pid) {
 
 async function refreshMe() {
   const r = await api("/me");
-  if (r.ok) { state.me = r.data; adoptUnlock(r.data); }
-  else if (r.status === 401) state.me = null;
+  if (r.ok) { state.me = r.data; store.setItem(SIGNED_IN_HINT, "1"); adoptUnlock(r.data); }
+  else if (r.status === 401) { state.me = null; store.removeItem(SIGNED_IN_HINT); }
   return r;
 }
 
@@ -460,6 +463,7 @@ async function afterSignIn(me) {
     SD.reloadLocalState();
   }
   state.me = me;
+  store.setItem(SIGNED_IN_HINT, "1");
   state.unlockedUntil = 0;
   adoptUnlock(me);
   await rememberAccount(me);
@@ -516,6 +520,7 @@ async function signOut() {
 /** The local half of an explicit sign-out: drop every cache this account left and close the UI. */
 function endSessionLocally() {
   wipeAccountData();
+  store.removeItem(SIGNED_IN_HINT);
   state.unlockedUntil = 0;
   state.me = null;
   state.profile = null;
@@ -596,14 +601,17 @@ async function init() {
   render();
   window.addEventListener("hashchange", () => { signInWithFragment(); });
   if (await signInWithFragment()) return;
+  if (store.getItem(SIGNED_IN_HINT) !== "1") return; // signed out: no account request at all
   const r = await api("/me");
   if (r.ok && r.data?.signedIn) {
     state.me = r.data;
+    store.setItem(SIGNED_IN_HINT, "1");
     adoptUnlock(r.data);
     await rememberAccount(r.data);
     await route({ showPicker: false });
-  } else if (r.status === 401 && store.getItem(ACTIVE)) {
-    dropToSignedOut(SIGNED_OUT_MSG);
+  } else if (r.status === 401) {
+    store.removeItem(SIGNED_IN_HINT);
+    if (store.getItem(ACTIVE)) dropToSignedOut(SIGNED_OUT_MSG);
   }
 }
 
