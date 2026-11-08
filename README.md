@@ -53,7 +53,9 @@ tofu init
 tofu apply
 ```
 
-Outputs include `site_url` (the CloudFront URL) and `api_url` (the same-origin `/api` path). The Function URL itself requires IAM auth and only accepts SigV4-signed requests from this CloudFront distribution (Origin Access Control), so it can't be called directly. The `/api` path through CloudFront is still public and anonymous by design, so anyone can trigger Bedrock calls billed to your account; add a WAF rate limit in front of it before you share the site widely. A monthly cost budget emails `alert_email` (set in `infra/terraform.tfvars`) when spend runs hot, but it only alerts: it doesn't cap spend. The limit is `monthly_budget_usd` in `infra/variables.tf`.
+For a fresh deployment without a custom domain, set `domain_name = ""` and leave `dns_role_arn` empty; the AWS provider then skips the cross-account DNS role. If DNS records were created earlier, removing them still needs working DNS-role credentials.
+
+Outputs include `site_url` (the CloudFront URL) and `api_url` (the same-origin `/api` path). The Function URL itself requires IAM auth. Its resource policy grants invoke access only to this CloudFront distribution, which signs requests with Origin Access Control, so anonymous callers can't reach it directly. IAM principals in your own account with Lambda invoke permissions still can, and those calls bypass CloudFront. The `/api` path through CloudFront is still public and anonymous by design, so anyone can trigger Bedrock calls billed to your account; add a WAF rate limit in front of it before you share the site widely. A monthly cost budget emails `alert_email` (set in `infra/terraform.tfvars`) when spend runs hot, but it only alerts: it doesn't cap spend. The limit is `monthly_budget_usd` in `infra/variables.tf`.
 
 Cost: serverless throughout; a few cents per study session with Claude Haiku.
 
