@@ -101,9 +101,9 @@ function adoptUnlock(me) {
  * Fire-and-forget; the server answer doesn't matter.
  */
 function lockParent() {
-  if (!isParent()) return;
+  if (!isParent()) return Promise.resolve();
   markLocked();
-  api("/parent/lock");
+  return api("/parent/lock");
 }
 
 const isUnlockedHere = () => state.unlockedUntil > Date.now() || Boolean(state.me?.parentUnlocked);
@@ -658,7 +658,7 @@ const screens = createScreens({
   messageFor, errorCode, maskEmail, selectable, isParent,
   h, openDialog, showNotice, busy, errorLine, statusLine,
   afterSignIn, refreshMe, route, chooseProfile, mergeInto, signOut,
-  withParentUnlock, openParentSection, handleAuthFailure, confirmDanger, markUnlocked,
+  withParentUnlock, openParentSection, handleAuthFailure, confirmDanger, markUnlocked, lockParent,
   openDeleteAccount: () => parent.openDeleteAccount(),
   openRemoveProfile: (p) => parent.openRemoveProfile(p),
 });

@@ -470,6 +470,14 @@ async function unlock(page, request, email, before) {
   await d.getByRole("button", { name: "Unlock" }).click();
 }
 
+/** From the picker after setup (Done locks the section): open the parent section with the emailed code. */
+async function openSectionWithCode(page, request, email) {
+  const before = await mailCount(request, email, "parent_code");
+  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await unlock(page, request, email, before);
+  await expect(overviewHeading(page)).toBeVisible();
+}
+
 const overviewHeading = (page) => dialog(page).getByRole("heading", { name: "See how everyone is doing" });
 const childRow = (page, name) => dialog(page).getByRole("button", { name: new RegExp(name) });
 
@@ -588,7 +596,7 @@ test("guardian invite: second email signs in, practises as the child, progress v
   const first = uniqueEmail("mum");
   const second = uniqueEmail("dad");
   await setUpParent(page, request, first, [{ first: "Omar", last: "Gill" }]);
-  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await openSectionWithCode(page, request, first);
   await childRow(page, "Omar Gill").click();
   await dialog(page).getByRole("button", { name: "Add another parent or guardian" }).click();
   await dialog(page).getByLabel("Email").fill(second);
@@ -661,7 +669,7 @@ test("parent requests access to a student account; student allows; child appears
   await expect(accountBtn(sp)).toHaveText("JC");
 
   await setUpParent(page, request, parentEmail, [{ first: "Ella", last: "Ross" }]);
-  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await openSectionWithCode(page, request, parentEmail);
   await dialog(page).getByRole("button", { name: "Add a child who has their own account" }).click();
   const d = dialog(page);
   await d.getByLabel("Child's email").fill(otherParent);
@@ -702,8 +710,9 @@ test("parent requests access to a student account; student allows; child appears
 
 test("open parent section re-locks when the unlock window ends", async ({ page, request }) => {
   await page.clock.install();
-  await setUpParent(page, request, uniqueEmail("relock"), [{ first: "Ivy", last: "Lane" }]);
-  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  const email = uniqueEmail("relock");
+  await setUpParent(page, request, email, [{ first: "Ivy", last: "Lane" }]);
+  await openSectionWithCode(page, request, email);
   await childRow(page, "Ivy Lane").click();
   await dialog(page).getByRole("button", { name: "Remove child" }).click();
   await expect(dialog(page).getByRole("heading", { name: "Remove Ivy Lane?" })).toBeVisible();
@@ -714,8 +723,9 @@ test("open parent section re-locks when the unlock window ends", async ({ page, 
 });
 
 test("parent section closes when a call comes back locked and the unlock is cancelled", async ({ page, request }) => {
-  await setUpParent(page, request, uniqueEmail("locked-call"), [{ first: "Remy", last: "Vale" }]);
-  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  const email = uniqueEmail("locked-call");
+  await setUpParent(page, request, email, [{ first: "Remy", last: "Vale" }]);
+  await openSectionWithCode(page, request, email);
   await childRow(page, "Remy Vale").click();
   // The server's window ended early (another device, clock skew): it answers parent_locked.
   await page.route("**/api/account/links/list", (route) => route.fulfill({
@@ -848,6 +858,11 @@ const serverUnlocked = (page) => page.evaluate(async () => (await window.SumDeTi
 test("handing the device to a child after setup locks the parent section (R19)", async ({ page, request }) => {
   const email = uniqueEmail("handover");
   await setUpParent(page, request, email, [{ first: "Noah", last: "Reid" }]);
+  // Done already locked it; unlock the session again behind the UI's back, then choose a child.
+  const before = await mailCount(request, email, "parent_code");
+  await page.evaluate(() => window.SumDeTingAccount.api("/parent/unlock/start"));
+  const code = codeOf(await nextMail(request, email, "parent_code", before));
+  await page.evaluate((code) => window.SumDeTingAccount.api("/parent/unlock/verify", { code }), code);
   expect(await serverUnlocked(page)).toBe(true);
   await dialog(page).getByRole("button", { name: /Noah Reid/ }).click();
   await expect(accountBtn(page)).toHaveText("NR");
@@ -866,6 +881,41 @@ test("handing the device to a child after setup locks the parent section (R19)",
   await expect(dialog(page).getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
   await dialog(page).getByRole("button", { name: "Cancel" }).click();
   await expect(accountBtn(page)).toHaveText("NR");
+});
+
+test("Done on the parent setup form locks the section before the picker shows", async ({ page, request }) => {
+  const email = uniqueEmail("done-lock");
+  await signIn(page, request, email);
+  await dialog(page).getByRole("button", { name: /I'm a parent or guardian/ }).click();
+  const d = dialog(page);
+  await fillProfile(d, { first: "Mae", last: "Hart" });
+  await d.getByLabel(PARENT_CONSENT).check();
+  await d.getByRole("button", { name: "Done, start practising" }).click();
+  const picker = dialog(page);
+  await expect(picker.getByRole("heading", { name: "Who's practising?" })).toBeVisible();
+  expect(await serverUnlocked(page)).toBe(false);
+  // Without choosing a child, the parent section already needs a code.
+  await picker.getByRole("button", { name: "See how everyone is doing" }).click();
+  await expect(dialog(page).getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
+  await dialog(page).getByRole("button", { name: "Cancel" }).click();
+  await expect(overviewHeading(page)).toHaveCount(0);
+  // "Add a student" is behind the same lock.
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: "Add a student" }).click();
+  await expect(dialog(page).getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
+});
+
+test("closing the parent setup form without Done also locks the section", async ({ page, request }) => {
+  await signIn(page, request, uniqueEmail("close-form"));
+  await dialog(page).getByRole("button", { name: /I'm a parent or guardian/ }).click();
+  await expect(dialog(page).getByRole("heading", { name: "Add your child" })).toBeVisible();
+  expect(await serverUnlocked(page)).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect.poll(() => serverUnlocked(page)).toBe(false);
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await expect(dialog(page).getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
 });
 
 test("closing the parent section locks it; reopening asks for a code", async ({ browser, page, request }) => {
@@ -888,6 +938,7 @@ test("closing the parent section locks it; reopening asks for a code", async ({ 
 test("leaving the page locks the parent section", async ({ page, request }) => {
   const email = uniqueEmail("pagehide");
   await setUpParent(page, request, email, [{ first: "Eli", last: "Ward" }]);
+  await openSectionWithCode(page, request, email); // leave with the section open
   expect(await serverUnlocked(page)).toBe(true);
   const locked = page.waitForRequest((r) => r.url().endsWith("/api/account/parent/lock"));
   await page.goto("about:blank");

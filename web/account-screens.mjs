@@ -178,9 +178,20 @@ export function createScreens(ctx) {
   // ---- Profile form (parent child, student self, student sibling) ----
 
   function openProfileForm(mode) {
-    const d = openDialog();
-    const me = state.me;
     const parent = mode === "parent";
+    // A parent leaving the "Add your child" form (Done, or closing it) may be
+    // handing the device over: the parent section locks first. Only the
+    // "My child already has their own account" path keeps the unlock, because it
+    // goes straight into the parent section (which locks again when it closes).
+    let locked = false;
+    let toParentSection = false;
+    const lockOnce = () => {
+      if (!parent || locked) return Promise.resolve();
+      locked = true;
+      return ctx.lockParent();
+    };
+    const d = openDialog({ onClose: () => { if (!toParentSection) lockOnce(); } });
+    const me = state.me;
     const self = mode === "student-self";
     const knownAge = self && typeof me.account.holderOver13 === "boolean" ? me.account.holderOver13 : null;
     let saved = 0;
@@ -237,6 +248,7 @@ export function createScreens(ctx) {
     // that account instead. Offered until the first child is saved here.
     const ownAccount = parent
       ? link("My child already has their own account", () => {
+        toParentSection = true;
         d.close();
         ctx.openParentSection({ view: "request" });
       }, { class: "acct-link acct-wide" })
@@ -306,6 +318,8 @@ export function createScreens(ctx) {
     }
 
     async function finishParent() {
+      // Lock before the picker appears, and before /me, so the picker is already locked.
+      await lockOnce();
       d.close();
       await ctx.refreshMe();
       openPicker();
