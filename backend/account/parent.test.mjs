@@ -136,3 +136,33 @@ test("verify with missing code -> bad_request", async () => {
   const res = await app.call("POST", "/parent/unlock/verify", {});
   assert.equal(res.status, 400);
 });
+
+test("parent/lock ends the unlock window for this session", async () => {
+  const { app } = await setup();
+  assert.equal((await unlock(app)).status, 200);
+  assert.equal((await app.call("POST", "/parent/overview")).status, 200);
+  const res = await app.call("POST", "/parent/lock");
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { parentUnlocked: false });
+  const ov = await app.call("POST", "/parent/overview");
+  assert.deepEqual([ov.status, ov.body.error], [403, "parent_locked"]);
+  assert.equal((await app.call("POST", "/me")).body.parentUnlocked, false);
+});
+
+test("parent/lock right after setup locks the setup window", async () => {
+  const app = makeApp();
+  await signIn(app, "q@x.com");
+  await app.call("POST", "/setup", { type: "parent" });
+  assert.equal((await app.call("POST", "/me")).body.parentUnlocked, true);
+  assert.equal((await app.call("POST", "/parent/lock")).status, 200);
+  assert.equal((await app.call("POST", "/me")).body.parentUnlocked, false);
+});
+
+test("parent/lock needs a session and a parent account", async () => {
+  const app = makeApp();
+  assert.equal((await app.call("POST", "/parent/lock")).status, 401);
+  await signIn(app, "s@x.com");
+  await app.call("POST", "/setup", { type: "student", holderOver13: true });
+  const res = await app.call("POST", "/parent/lock");
+  assert.deepEqual([res.status, res.body.error], [403, "forbidden"]);
+});

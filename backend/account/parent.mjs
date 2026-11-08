@@ -32,6 +32,13 @@ export function register(router) {
     return { parentUnlocked: true };
   });
 
+  // Closing the parent section, handing the device to a child, or closing the app re-locks it.
+  router.route("POST", "/parent/lock", async (ctx) => {
+    requireParent(ctx);
+    await ctx.deps.repo.setParentUnlocked(ctx.session.id, 0);
+    return { parentUnlocked: false };
+  });
+
   router.route(
     "POST",
     "/parent/overview",
