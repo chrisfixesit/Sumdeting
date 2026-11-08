@@ -98,7 +98,3 @@ jobs:
     name: Smoke test
     needs: deploy
     uses: ./.github/workflows/smoke.yml
-    with:
-      # The CSP still allows cdnjs until the 'self'-only policy lands in tofu-or-not-tofu (Plan 3b
-      # Task 8c). Flip this to true in that change.
-      strict_csp: "false"
