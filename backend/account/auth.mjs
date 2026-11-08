@@ -1,4 +1,5 @@
 import { newToken, newCode, normaliseEmail } from "./tokens.mjs";
+import { applyInvitesForAccount } from "./links.mjs";
 import { httpError, buildMe, sessionCookie, clearCookie, COOKIE_NAME } from "./http.mjs";
 
 const SIGNIN_TTL_SEC = 900;
@@ -47,6 +48,7 @@ export function register(router) {
         console.error("onSignIn hook failed", err);
       }
     }
+    inner.account = (await repo.getAccount(account.id)) ?? inner.account;
     return buildMe(inner);
   }, { auth: "none" });
 
@@ -62,7 +64,10 @@ export function register(router) {
     { auth: "none" }
   );
 
-  router.route("POST", "/me", (ctx) => buildMe(ctx), { auth: "session" });
+  router.route("POST", "/me", async (ctx) => {
+    const account = await applyInvitesForAccount(ctx, ctx.account);
+    return buildMe({ ...ctx, account });
+  }, { auth: "session" });
 
   if (router.deps.dev) {
     router.route("GET", "/_dev/outbox", (ctx) => ctx.deps.mailer.outbox ?? [], { auth: "none" });

@@ -12,6 +12,9 @@ const STATUS = {
   not_found: 404,
   too_many_attempts: 429,
   rate_limited: 429,
+  email_is_student: 400,
+  email_is_parent: 400,
+  already_linked: 400,
 };
 
 export class HttpError extends Error {
@@ -81,6 +84,14 @@ export async function buildMe(ctx) {
       }
     }
   }
+  const pendingRequests = [];
+  if (account.type === "student") {
+    for (const invite of await repo.listInvitesForEmail(account.email)) {
+      if (invite.kind !== "request") continue;
+      const requester = await repo.getAccount(invite.fromAccountId);
+      if (requester) pendingRequests.push({ inviteId: invite.id, parentEmail: requester.email });
+    }
+  }
   return {
     signedIn: true,
     account: {
@@ -91,7 +102,7 @@ export async function buildMe(ctx) {
     },
     parentUnlocked: (session?.parentUnlockedUntil ?? 0) > now(),
     profiles,
-    pendingRequests: [],
+    pendingRequests,
     pendingConsents,
   };
 }
