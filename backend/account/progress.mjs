@@ -15,6 +15,11 @@ export function emptyProgress() {
   };
 }
 
+// Own-property helpers: names like "toString" or "__proto__" are plain keys, never prototype access.
+function setOwn(obj, key, value) {
+  Object.defineProperty(obj, key, { value, writable: true, enumerable: true, configurable: true });
+}
+
 function nextDay(d) {
   const t = new Date(`${d}T00:00:00Z`);
   t.setUTCDate(t.getUTCDate() + 1);
@@ -25,23 +30,26 @@ function cloneProgress(p) {
   const src = p ?? emptyProgress();
   const topics = {};
   for (const [name, t] of Object.entries(src.topics ?? {})) {
-    topics[name] = {
+    setOwn(topics, name, {
       attempted: t.attempted ?? 0,
       solved: t.solved ?? 0,
       hist: (t.hist ?? []).map((e) => ({ ...e })),
-    };
+    });
   }
+  const days = {};
+  for (const [d, n] of Object.entries(src.days ?? {})) setOwn(days, d, n);
   return {
     topics,
     streak: { count: src.streak?.count ?? 0, last: src.streak?.last ?? "" },
-    days: { ...(src.days ?? {}) },
+    days,
     prefs: src.prefs ? { ...src.prefs } : null,
     appliedEventIds: [...(src.appliedEventIds ?? [])],
   };
 }
 
 function topicEntry(p, name) {
-  return (p.topics[name] ??= { attempted: 0, solved: 0, hist: [] });
+  if (!Object.hasOwn(p.topics, name)) setOwn(p.topics, name, { attempted: 0, solved: 0, hist: [] });
+  return p.topics[name];
 }
 
 function bumpStreak(streak, d) {
@@ -63,7 +71,7 @@ export function applyEvents(progress, events) {
         else t.attempted += 1;
       }
       bumpStreak(p.streak, ev.d);
-      if (ev.topic && ev.solved) p.days[ev.d] = (p.days[ev.d] || 0) + 1;
+      if (ev.topic && ev.solved) setOwn(p.days, ev.d, (Object.hasOwn(p.days, ev.d) ? p.days[ev.d] : 0) + 1);
     } else if (ev.type === "outcome") {
       const t = topicEntry(p, ev.topic);
       t.hist.push({ d: ev.d, ok: ev.ok ? 1 : 0, hints: ev.hints, turns: ev.turns });
@@ -99,7 +107,7 @@ export function mergeProgress(server, local) {
     p.streak = { count: m.streak.count, last: m.streak.last ?? "" };
   }
   for (const [d, n] of Object.entries(m.days ?? {})) {
-    p.days[d] = (p.days[d] || 0) + n;
+    setOwn(p.days, d, (Object.hasOwn(p.days, d) ? p.days[d] : 0) + n);
   }
   if (!p.prefs && local?.prefs) p.prefs = { ...local.prefs };
   return p;

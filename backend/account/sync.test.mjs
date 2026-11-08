@@ -74,6 +74,7 @@ test("merge adds device progress", async () => {
   const { app, pid } = await setup();
   const res = await app.call("POST", "/progress/merge", {
     profileId: pid,
+    mergeId: "m1",
     local: {
       mastery: {
         topics: { Fractions: { attempted: 3, solved: 2, hist: [{ d: "2026-01-01", ok: 1, hints: 0, turns: 2 }] } },
@@ -93,14 +94,14 @@ test("merge adds device progress", async () => {
 
 test("merge accepts null mastery and prefs", async () => {
   const { app, pid } = await setup();
-  const res = await app.call("POST", "/progress/merge", { profileId: pid, local: { mastery: null, prefs: null } });
+  const res = await app.call("POST", "/progress/merge", { profileId: pid, mergeId: "m0", local: { mastery: null, prefs: null } });
   assert.equal(res.status, 200);
 });
 
 test("merge rejects bad mastery shape and oversize", async () => {
   const { app, pid } = await setup();
   const bad = async (mastery) => {
-    const res = await app.call("POST", "/progress/merge", { profileId: pid, local: { mastery, prefs: null } });
+    const res = await app.call("POST", "/progress/merge", { profileId: pid, mergeId: "mb", local: { mastery, prefs: null } });
     assert.deepEqual([res.status, res.body], [400, { error: "bad_request" }]);
   };
   await bad({ topics: { F: { attempted: -1, solved: 0 } }, streak: { count: 0, last: "" }, days: {} });
@@ -218,4 +219,50 @@ test("progress endpoints require a session and a profileId", async () => {
   assert.equal(res.status, 400);
   const anon = await app.call("POST", "/progress/get", { profileId: "x" }, { cookie: {} });
   assert.equal(anon.status, 401);
+});
+
+test("replayed merge with same mergeId is not double-counted; mergeId required", async () => {
+  const { app, pid } = await setup();
+  const local = {
+    mastery: { topics: { F: { attempted: 3, solved: 2 } }, streak: { count: 0, last: "" }, days: { "2026-01-01": 2 } },
+    prefs: null,
+  };
+  const first = await app.call("POST", "/progress/merge", { profileId: pid, mergeId: "same", local });
+  const second = await app.call("POST", "/progress/merge", { profileId: pid, mergeId: "same", local });
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(second.body.progress.topics.F.attempted, 3);
+  assert.equal(second.body.progress.days["2026-01-01"], 2);
+  const other = await app.call("POST", "/progress/merge", { profileId: pid, mergeId: "diff", local });
+  assert.equal(other.body.progress.topics.F.attempted, 6);
+  for (const mergeId of [undefined, "", "x".repeat(65), 5]) {
+    const res = await app.call("POST", "/progress/merge", { profileId: pid, mergeId, local });
+    assert.equal(res.status, 400);
+  }
+});
+
+test("reserved topic names -> 400 and Object.prototype untouched", async () => {
+  const { app, pid } = await setup();
+  for (const topic of ["__proto__", "constructor", "prototype"]) {
+    for (const ev of [activity("e", { topic }), outcome("e", { topic })]) {
+      const res = await app.call("POST", "/progress/sync", { profileId: pid, events: [ev] });
+      assert.deepEqual([res.status, res.body], [400, { error: "bad_request" }]);
+    }
+    const mastery = { topics: JSON.parse(`{"${topic}":{"attempted":1,"solved":1}}`), streak: { count: 0, last: "" }, days: {} };
+    const res = await app.call("POST", "/progress/merge", { profileId: pid, mergeId: "mr", local: { mastery, prefs: null } });
+    assert.deepEqual([res.status, res.body], [400, { error: "bad_request" }]);
+  }
+  assert.equal(Object.prototype.solved, undefined);
+  assert.equal({}.attempted, undefined);
+});
+
+test("topics named toString/hasOwnProperty work through the endpoints", async () => {
+  const { app, pid } = await setup();
+  const res = await app.call("POST", "/progress/sync", {
+    profileId: pid,
+    events: [activity("a", { topic: "toString" }), outcome("b", { topic: "hasOwnProperty" })],
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.progress.topics.toString.solved, 1);
+  assert.equal(res.body.progress.topics.hasOwnProperty.hist.length, 1);
 });

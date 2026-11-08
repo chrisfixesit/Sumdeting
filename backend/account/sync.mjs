@@ -13,7 +13,8 @@ const bad = () => httpError("bad_request");
 
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const isStr = (v, max) => typeof v === "string" && v.length <= max;
-const isNameStr = (v) => isStr(v, MAX_STR) && v.length >= 1;
+const RESERVED = new Set(["__proto__", "constructor", "prototype"]);
+const isNameStr = (v) => isStr(v, MAX_STR) && v.length >= 1 && !RESERVED.has(v);
 const isCount = (v) => Number.isInteger(v) && v >= 0;
 const isSmall = (v) => Number.isInteger(v) && v >= 0 && v <= 99;
 
@@ -68,18 +69,19 @@ function cleanMastery(m) {
     const t = m.topics[name];
     if (!isNameStr(name) || !isObject(t) || !isCount(t.attempted) || !isCount(t.solved)) throw bad();
     if (t.hist !== undefined && (!Array.isArray(t.hist) || t.hist.length > MAX_HIST)) throw bad();
-    topics[name] = {
-      attempted: t.attempted,
-      solved: t.solved,
-      hist: (t.hist ?? []).map(cleanHistEntry),
-    };
+    Object.defineProperty(topics, name, {
+      value: { attempted: t.attempted, solved: t.solved, hist: (t.hist ?? []).map(cleanHistEntry) },
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
   if (!isCount(m.streak.count)) throw bad();
   if (m.streak.last !== "" && !isDate(m.streak.last)) throw bad();
   const days = {};
   for (const [d, n] of Object.entries(m.days)) {
     if (!isDate(d) || !isCount(n)) throw bad();
-    days[d] = n;
+    Object.defineProperty(days, d, { value: n, enumerable: true, writable: true, configurable: true });
   }
   return { topics, streak: { count: m.streak.count, last: m.streak.last }, days };
 }
@@ -127,9 +129,16 @@ export function register(router) {
   router.route("POST", "/progress/merge", async (ctx) => {
     const { local } = ctx.req.body;
     if (!isObject(local)) throw bad();
+    const { mergeId } = ctx.req.body;
+    if (!isStr(mergeId, 64) || mergeId.length < 1) throw bad();
     const clean = { mastery: cleanMastery(local.mastery), prefs: cleanPrefs(local.prefs) };
     const pid = await authorise(ctx);
-    const next = await ctx.deps.repo.updateProgress(pid, (p) => mergeProgress(p, clean));
+    const next = await ctx.deps.repo.updateProgress(pid, (p) => {
+      if ((p.appliedEventIds ?? []).includes(mergeId)) return p;
+      const merged = mergeProgress(p, clean);
+      merged.appliedEventIds = [...merged.appliedEventIds, mergeId].slice(-200);
+      return merged;
+    });
     return { progress: publicProgress(next) };
   });
 }

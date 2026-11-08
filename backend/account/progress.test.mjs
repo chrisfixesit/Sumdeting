@@ -194,3 +194,21 @@ test("childSummary lastPractised is latest date across days and hist", () => {
   p.days["2026-04-01"] = 2;
   assert.equal(childSummary(p).lastPractised, "2026-04-01");
 });
+
+test("topic names like toString/hasOwnProperty/__proto__ are ordinary keys and do not pollute", () => {
+  for (const name of ["toString", "hasOwnProperty", "constructor", "__proto__"]) {
+    const p = applyEvents(null, [
+      { id: "1", type: "activity", topic: name, solved: true, d: "2026-01-01" },
+      { id: "2", type: "outcome", topic: name, ok: true, hints: 0, turns: 1, d: "2026-01-01" },
+    ]);
+    assert.ok(Object.hasOwn(p.topics, name));
+    assert.equal(p.topics[name].solved, 1);
+    assert.equal(p.topics[name].hist.length, 1);
+    const m = mergeProgress(p, { mastery: { topics: { [name]: { attempted: 2, solved: 0 } } }, prefs: null });
+    assert.equal(m.topics[name].attempted, 2);
+    assert.equal(childSummary(m).topicsTried, 1);
+  }
+  assert.equal(Object.prototype.solved, undefined);
+  assert.equal(Object.prototype.attempted, undefined);
+  assert.equal(Object.prototype.hist, undefined);
+});
