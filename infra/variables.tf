@@ -53,3 +53,9 @@ variable "reserved_concurrency" {
   type        = number
   default     = -1
 }
+
+variable "email_from" {
+  description = "From address for account sign-in emails, e.g. \"SumDeTing <no-reply@example.com>\". Empty = \"SumDeTing <no-reply@domain_name>\". Must be on the SES-verified domain."
+  type        = string
+  default     = ""
+}

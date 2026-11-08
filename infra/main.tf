@@ -30,9 +30,11 @@ provider "aws" {
 # ---------- Lambda ----------
 
 data "archive_file" "handler" {
-  type        = "zip"
-  source_dir  = "${path.module}/../backend"
-  excludes    = ["node_modules", "package.json"]
+  type       = "zip"
+  source_dir = "${path.module}/../backend"
+  # Tests and the in-memory test kit never ship to Lambda. The archive provider
+  # (>= 2.4) supports globs in excludes, relative to source_dir.
+  excludes    = ["node_modules", "package.json", "**/*.test.mjs", "account/testkit.mjs"]
   output_path = "${path.module}/.build/handler.zip"
 }
 
@@ -123,6 +125,220 @@ resource "aws_lambda_permission" "cloudfront_invoke_function" {
   function_name = aws_lambda_function.tutor.function_name
   principal     = "cloudfront.amazonaws.com"
   source_arn    = aws_cloudfront_distribution.web.arn
+}
+
+# ---------- Accounts (cross-device progress) ----------
+
+# Children's data: deletion protection and PITR are on. Encryption uses the
+# default AWS-owned key (always on for DynamoDB, no extra cost); switch to a
+# customer-managed KMS key via server_side_encryption { enabled = true,
+# kms_key_arn = ... } only if a compliance need appears.
+resource "aws_dynamodb_table" "accounts" {
+  name                        = "${var.project}-accounts"
+  billing_mode                = "PAY_PER_REQUEST"
+  hash_key                    = "pk"
+  range_key                   = "sk"
+  deletion_protection_enabled = true
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  # Expires sign-in tokens, sessions etc. (the janitor handles the rest).
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+}
+
+locals {
+  # Falls back to no-reply@<domain> when email_from is not set explicitly.
+  # With neither set there is no valid sender; the account Lambda has a
+  # precondition that fails the plan rather than shipping a bogus address.
+  email_from = var.email_from != "" ? var.email_from : "SumDeTing <no-reply@${var.domain_name}>"
+}
+
+resource "aws_iam_role" "account_lambda" {
+  name = "${var.project}-account-lambda"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "account_basic" {
+  role       = aws_iam_role.account_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "account" {
+  name = "${var.project}-account-access"
+  role = aws_iam_role.account_lambda.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [{
+        Effect = "Allow"
+        # TransactWriteItems / ConditionCheckItem are authorised through the
+        # underlying item actions (PutItem/UpdateItem/DeleteItem) plus
+        # ConditionCheckItem, all on this table only.
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:ConditionCheckItem",
+        ]
+        Resource = [aws_dynamodb_table.accounts.arn]
+      }],
+      # Only when a sender identity exists; the Lambda precondition
+      # guarantees domain_name or email_from is set.
+      local.use_custom_domain ? [{
+        Effect   = "Allow"
+        Action   = ["ses:SendEmail"]
+        Resource = [aws_sesv2_email_identity.domain[0].arn]
+      }] : []
+    )
+  })
+}
+
+resource "aws_lambda_function" "account" {
+  function_name    = "${var.project}-account"
+  role             = aws_iam_role.account_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "account/index.handler"
+  filename         = data.archive_file.handler.output_path
+  source_code_hash = data.archive_file.handler.output_base64sha256
+  timeout          = 10
+  memory_size      = 256
+
+  environment {
+    variables = {
+      TABLE_NAME = aws_dynamodb_table.accounts.name
+      SITE_URL   = local.site_origin
+      EMAIL_FROM = local.email_from
+      EMAIL_MODE = "ses"
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.email_from != "" || var.domain_name != ""
+      error_message = "Set email_from or domain_name: the account Lambda needs a sender address for sign-in emails."
+    }
+  }
+}
+
+# Same pattern as the tutor: IAM-protected URL, only CloudFront (via OAC) may
+# invoke it. BUFFERED because account responses are plain JSON, not streams.
+resource "aws_lambda_function_url" "account" {
+  function_name      = aws_lambda_function.account.function_name
+  authorization_type = "AWS_IAM"
+  invoke_mode        = "BUFFERED"
+}
+
+resource "aws_lambda_permission" "account_cloudfront_url" {
+  statement_id  = "AllowCloudFrontInvokeFunctionUrl"
+  action        = "lambda:InvokeFunctionUrl"
+  function_name = aws_lambda_function.account.function_name
+  principal     = "cloudfront.amazonaws.com"
+  source_arn    = aws_cloudfront_distribution.web.arn
+}
+
+# Lambda Function URLs behind OAC also need lambda:InvokeFunction on the
+# resource policy; scoped to this distribution.
+resource "aws_lambda_permission" "account_cloudfront_invoke_function" {
+  statement_id  = "AllowCloudFrontInvokeForStreaming"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.account.function_name
+  principal     = "cloudfront.amazonaws.com"
+  source_arn    = aws_cloudfront_distribution.web.arn
+}
+
+# ---------- SES sender identity (Easy DKIM) ----------
+
+resource "aws_sesv2_email_identity" "domain" {
+  count          = local.use_custom_domain ? 1 : 0
+  email_identity = var.domain_name
+
+  dkim_signing_attributes {
+    next_signing_key_length = "RSA_2048_BIT"
+  }
+}
+
+# Three DKIM CNAMEs, written cross-account into the authoritative zone.
+# Index is static (SES always issues 3 tokens) so count is known at plan time.
+resource "aws_route53_record" "ses_dkim" {
+  count    = local.use_custom_domain ? 3 : 0
+  provider = aws.dns
+
+  zone_id         = var.dns_zone_id
+  name            = "${aws_sesv2_email_identity.domain[0].dkim_signing_attributes[0].tokens[count.index]}._domainkey.${var.domain_name}"
+  type            = "CNAME"
+  ttl             = 300
+  records         = ["${aws_sesv2_email_identity.domain[0].dkim_signing_attributes[0].tokens[count.index]}.dkim.amazonses.com"]
+  allow_overwrite = true
+}
+
+# ---------- Janitor schedule ----------
+
+resource "aws_iam_role" "janitor_scheduler" {
+  name = "${var.project}-janitor-scheduler"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "janitor_scheduler" {
+  name = "${var.project}-janitor-invoke"
+  role = aws_iam_role.janitor_scheduler.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lambda:InvokeFunction"]
+      Resource = [aws_lambda_function.account.arn]
+    }]
+  })
+}
+
+resource "aws_scheduler_schedule" "janitor" {
+  name                = "${var.project}-janitor"
+  schedule_expression = "rate(1 day)"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.account.arn
+    role_arn = aws_iam_role.janitor_scheduler.arn
+    input    = jsonencode({ janitor = true })
+  }
 }
 
 # ---------- Static site (S3 + CloudFront with OAC) ----------
@@ -280,8 +496,9 @@ resource "aws_cloudfront_response_headers_policy" "security" {
 
 locals {
   # "https://abc123.lambda-url.us-east-1.on.aws/" -> "abc123.lambda-url.us-east-1.on.aws"
-  api_origin_domain = trimsuffix(trimprefix(aws_lambda_function_url.tutor.function_url, "https://"), "/")
-  use_custom_domain = var.domain_name != ""
+  api_origin_domain     = trimsuffix(trimprefix(aws_lambda_function_url.tutor.function_url, "https://"), "/")
+  account_origin_domain = trimsuffix(trimprefix(aws_lambda_function_url.account.function_url, "https://"), "/")
+  use_custom_domain     = var.domain_name != ""
   # Canonical origin baked into the page's <head> (canonical/OG/Twitter URLs).
   site_origin = local.use_custom_domain ? "https://${var.domain_name}" : "https://d297i0l0pfbu7x.cloudfront.net"
 }
@@ -422,6 +639,19 @@ resource "aws_cloudfront_distribution" "web" {
     }
   }
 
+  origin {
+    domain_name              = local.account_origin_domain
+    origin_id                = "lambda-account"
+    origin_access_control_id = aws_cloudfront_origin_access_control.api.id # reuse the tutor's Lambda OAC
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
   default_cache_behavior {
     allowed_methods            = ["GET", "HEAD"]
     cached_methods             = ["GET", "HEAD"]
@@ -440,6 +670,22 @@ resource "aws_cloudfront_distribution" "web" {
     viewer_protocol_policy   = "https-only"
     cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
     origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # Managed-AllViewerExceptHostHeader
+  }
+
+  # Account API (sign-in, profiles, progress sync). Never cached. The origin
+  # request policy forwards cookies, query strings and CloudFront-Viewer-Address
+  # (used for rate limiting) but not Host, which would break the Function URL.
+  ordered_cache_behavior {
+    path_pattern           = "/api/account/*"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "lambda-account"
+    viewer_protocol_policy = "https-only"
+    cache_policy_id        = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
+    # Managed-AllViewerAndCloudFrontHeaders-2022-06. Well-known id; verify with:
+    # aws cloudfront list-origin-request-policies --type managed \
+    #   --query "OriginRequestPolicyList.Items[?OriginRequestPolicy.OriginRequestPolicyConfig.Name=='Managed-AllViewerAndCloudFrontHeaders-2022-06'].OriginRequestPolicy.Id"
+    origin_request_policy_id = "33f36d7e-f396-46d9-90e0-52428a34d9dc"
   }
 
   restrictions {
