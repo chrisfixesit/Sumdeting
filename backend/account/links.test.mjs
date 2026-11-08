@@ -85,7 +85,7 @@ test("share validation: student target, own email, ownership, awaiting, non-stud
   });
   const aw = await u.call("/links/share", { profileId: up.body.profile.id, parentEmail: "m@x.com" });
   assert.deepEqual([aw.status, aw.body], [403, { error: "awaiting_parent" }]);
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 4; i++) {
     assert.equal((await c.call("/links/share", { profileId: pid, parentEmail: `m${i}@x.com` })).status, 200);
   }
   const lim = await c.call("/links/share", { profileId: pid, parentEmail: "m9@x.com" });
@@ -277,7 +277,7 @@ test("student cannot remove under-13 consent-giver parent → forbidden", async 
   });
   const pid = made.body.profile.id;
   const mum = await client(app, "mum@x.com", tokenFrom(app.outbox.at(-1)));
-  mum.unlock();
+  await mum.unlock();
   assert.equal((await mum.call("/consent/respond", { profileId: pid, approve: true })).status, 200);
   const mumId = (await app.repo.findAccountByEmail("mum@x.com")).id;
   const r = await u.call("/links/remove", { profileId: pid, accountId: mumId });
@@ -313,4 +313,59 @@ test("invite expires after 30 days", async () => {
   const fresh = await client(app, "mum@x.com");
   assert.deepEqual(fresh.me.profiles, []);
   assert.equal(fresh.me.account.type, null);
+});
+
+test("pending guardian invite from a removed guardian grants nothing", async () => {
+  const { app, mum, pid } = await guardianSetup();
+  await mum.call("/links/invite-guardian", { profileId: pid, email: "g@x.com" });
+  const g = await client(app, "g@x.com", tokenFrom(app.outbox.at(-1)));
+  await g.unlock();
+  const gId = (await app.repo.findAccountByEmail("g@x.com")).id;
+  assert.equal((await g.call("/links/invite-guardian", { profileId: pid, email: "x@x.com" })).status, 200);
+  const xMail = app.outbox.at(-1);
+  assert.equal((await mum.call("/links/remove", { profileId: pid, accountId: gId })).status, 200);
+  assert.deepEqual(await app.repo.listInvitesForEmail("x@x.com"), []);
+  const x = await client(app, "x@x.com", tokenFrom(xMail));
+  assert.deepEqual(x.me.profiles, []);
+});
+
+test("apply re-checks authority: stale invite after removal and deleted profile grant nothing", async () => {
+  const { app, mum, pid } = await guardianSetup();
+  await mum.call("/links/invite-guardian", { profileId: pid, email: "g@x.com" });
+  const g = await client(app, "g@x.com", tokenFrom(app.outbox.at(-1)));
+  const gId = (await app.repo.findAccountByEmail("g@x.com")).id;
+  // Forge a pending invite as if cleanup missed it, then drop G's access.
+  await app.repo.createInvite({ kind: "guardian", fromAccountId: gId, toEmail: "x@x.com", profileIds: [pid] });
+  await app.repo.revokeAccess(gId, pid);
+  void g;
+  const x = await client(app, "x@x.com");
+  assert.deepEqual(x.me.profiles, []);
+  assert.deepEqual(await app.repo.listInvitesForEmail("x@x.com"), []);
+
+  const { c, pid: spid } = await student(app, "kid@x.com");
+  await c.call("/links/share", { profileId: spid, parentEmail: "y@x.com" });
+  await app.repo.deleteProfile(spid);
+  const y = await client(app, "y@x.com");
+  assert.deepEqual(y.me.profiles, []);
+});
+
+test("invite for a target who set up as a student stays pending with no access", async () => {
+  const { app, mum, pid } = await guardianSetup();
+  await mum.call("/links/invite-guardian", { profileId: pid, email: "later@x.com" });
+  // The target creates an account and becomes a student before any sign-in applies the invite.
+  const acct = await app.repo.createAccount("later@x.com");
+  await app.repo.updateAccount(acct.id, { type: "student", holderOver13: true });
+  const t = await client(app, "later@x.com");
+  const me = await t.call("/me");
+  assert.deepEqual(me.body.profiles, []);
+  assert.equal((await app.repo.listInvitesForEmail("later@x.com")).length, 1);
+});
+
+test("rate limit applies before account-type probing", async () => {
+  const app = makeApp();
+  const mum = await parent(app, "mum@x.com");
+  await parent(app, "dad@x.com");
+  for (let i = 0; i < 5; i++) await mum.call("/links/request", { childEmail: "dad@x.com" });
+  const r = await mum.call("/links/request", { childEmail: "dad@x.com" });
+  assert.equal(r.status, 429);
 });

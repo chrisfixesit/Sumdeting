@@ -340,6 +340,13 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
       const nowSec = now() / 1000;
       return invites.filter((i) => i && !(typeof i.ttl === "number" && i.ttl <= nowSec));
     },
+    /** Invites created by one account (scan; used only on rare removals). */
+    async listInvitesFromAccount(accountId) {
+      const items = await table.scan("INVITE#");
+      return items
+        .filter((i) => i.sk === "I" && i.fromAccountId === accountId)
+        .map((i) => ({ id: i.pk.slice("INVITE#".length), ...strip(i), ttl: i.ttl }));
+    },
     async deleteInvite(id) {
       const invite = await table.get(`INVITE#${id}`, "I");
       const ops = [{ delete: { pk: `INVITE#${id}`, sk: "I" } }];

@@ -65,7 +65,12 @@ export function register(router) {
   );
 
   router.route("POST", "/me", async (ctx) => {
-    const account = await applyInvitesForAccount(ctx, ctx.account);
+    let account = ctx.account;
+    try {
+      account = await applyInvitesForAccount(ctx, account);
+    } catch (err) {
+      console.error("applyInvites failed", err);
+    }
     return buildMe({ ...ctx, account });
   }, { auth: "session" });
 

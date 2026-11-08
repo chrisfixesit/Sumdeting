@@ -89,7 +89,7 @@ export async function buildMe(ctx) {
     for (const invite of await repo.listInvitesForEmail(account.email)) {
       if (invite.kind !== "request") continue;
       const requester = await repo.getAccount(invite.fromAccountId);
-      if (requester) pendingRequests.push({ inviteId: invite.id, parentEmail: requester.email });
+      if (requester?.type === "parent") pendingRequests.push({ inviteId: invite.id, parentEmail: requester.email });
     }
   }
   return {

@@ -54,15 +54,18 @@ export async function applyInvitesForAccount(ctx, account) {
   for (const invite of invites) {
     if (invite.kind !== "share" && invite.kind !== "guardian") continue;
     if (current.type === "student") continue;
-    if (current.type === null) {
-      await repo.updateAccount(current.id, { type: "parent", setupComplete: true });
-      current = { ...current, type: "parent", setupComplete: true };
-    }
     const kind = invite.kind === "share" ? "view_only" : "guardian";
+    const allowedFrom = invite.kind === "share" ? ["owner"] : ["owner", "guardian"];
     for (const pid of invite.profileIds ?? []) {
-      if (!(await repo.getProfile(pid))) continue;
+      const profile = await repo.getProfile(pid);
+      if (!profile || profile.consentStatus !== "active") continue;
+      if (!allowedFrom.includes(await repo.getAccess(invite.fromAccountId, pid))) continue;
       const existing = await repo.getAccess(current.id, pid);
       if (existing && RANK[existing] >= RANK[kind]) continue;
+      if (current.type === null) {
+        await repo.updateAccount(current.id, { type: "parent", setupComplete: true });
+        current = { ...current, type: "parent", setupComplete: true };
+      }
       await repo.grantAccess(current.id, pid, kind);
     }
     await repo.deleteInvite(invite.id);
@@ -90,8 +93,8 @@ export function register(router) {
     const profile = await repo.getProfile(profileId);
     if (!profile) throw notFound();
     if (profile.consentStatus !== "active") throw httpError("awaiting_parent");
-    if ((await repo.findAccountByEmail(email))?.type === "student") throw httpError("email_is_student");
     await limitSends(ctx);
+    if ((await repo.findAccountByEmail(email))?.type === "student") throw httpError("email_is_student");
     await repo.createInvite({
       kind: "share",
       fromAccountId: ctx.account.id,
@@ -105,8 +108,8 @@ export function register(router) {
   router.route("POST", "/links/request", async (ctx) => {
     const { repo } = ctx.deps;
     const email = cleanTarget(ctx, ctx.req.body.childEmail);
-    if ((await repo.findAccountByEmail(email))?.type === "parent") throw httpError("email_is_parent");
     await limitSends(ctx);
+    if ((await repo.findAccountByEmail(email))?.type === "parent") throw httpError("email_is_parent");
     for (const i of await repo.listInvitesForEmail(email)) {
       if (i.kind === "request" && i.fromAccountId === ctx.account.id) await repo.deleteInvite(i.id);
     }
@@ -159,10 +162,10 @@ export function register(router) {
     if (kind !== "owner" && kind !== "guardian") throw forbidden();
     const profile = await repo.getProfile(profileId);
     if (!profile) throw notFound();
+    await limitSends(ctx);
     const target = await repo.findAccountByEmail(email);
     if (target?.type === "student") throw httpError("email_is_student");
     if (target && (await repo.getAccess(target.id, profileId))) throw httpError("already_linked");
-    await limitSends(ctx);
     for (const i of await repo.listInvitesForEmail(email)) {
       if (i.kind === "guardian" && i.fromAccountId === ctx.account.id && i.profileIds?.includes(profileId)) {
         await repo.deleteInvite(i.id);
@@ -223,6 +226,11 @@ export function register(router) {
       throw forbidden();
     }
     await repo.revokeAccess(accountId, profileId);
+    for (const i of await repo.listInvitesFromAccount(accountId)) {
+      if ((i.kind === "share" || i.kind === "guardian") && i.profileIds?.includes(profileId)) {
+        await repo.deleteInvite(i.id);
+      }
+    }
     return {};
   });
 }
