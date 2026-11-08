@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   createApi, createQueue, hasAnonymousProgress, readAnonymous, clearAnonymous,
-  clearProfileCaches, statusLabel, initials, parseSigninFragment, newMergeId,
+  clearProfileCaches, statusLabel, initials, parseSigninFragment, newMergeId, clampCount,
 } from "./account-core.mjs";
 
 function fakeStorage(seed = {}) {
@@ -194,4 +194,12 @@ test("parseSigninFragment reads token and ignores other hashes", () => {
 test("newMergeId returns distinct uuids", () => {
   assert.match(newMergeId(), /^[0-9a-f-]{36}$/);
   assert.notEqual(newMergeId(), newMergeId());
+});
+
+test("clampCount caps at 99 and floors at 0", () => {
+  assert.equal(clampCount(150), 99);
+  assert.equal(clampCount(3), 3);
+  assert.equal(clampCount(-2), 0);
+  assert.equal(clampCount(NaN), 0);
+  assert.equal(clampCount(2.9), 2);
 });

@@ -1229,13 +1229,16 @@
         }));
       } catch { /* never let sync plumbing break practice */ }
     }
+    // Markup defaults, used when a profile has no stored prefs.
+    const PREF_DEFAULTS = {
+      level: levelSel.value, topic: topicSel.value, duration: durationSel.value,
+    };
     function loadPrefs() {
-      try {
-        const p = JSON.parse(localStorage.getItem(storageKey(PREFS_KEY)));
-        if (p?.level) levelSel.value = p.level;
-        if (p?.topic) topicSel.value = p.topic;
-        if (p?.duration) durationSel.value = p.duration;
-      } catch { /* ignore */ }
+      let p = null;
+      try { p = JSON.parse(localStorage.getItem(storageKey(PREFS_KEY))); } catch { /* ignore */ }
+      levelSel.value = p?.level || PREF_DEFAULTS.level;
+      topicSel.value = p?.topic || PREF_DEFAULTS.topic;
+      durationSel.value = p?.duration || PREF_DEFAULTS.duration;
     }
     loadPrefs();
     for (const sel of [levelSel, topicSel, durationSel]) {
@@ -1319,6 +1322,9 @@
       const t = (m.topics[topic] ??= { attempted: 0, solved: 0 });
       t.hist ??= [];
       const d = new Date().toISOString().slice(0, 10);
+      // The server rejects counts over 99; struggledEntry only tests >= 5.
+      hints = Math.min(99, Math.max(0, hints | 0));
+      turns = Math.min(99, Math.max(0, turns | 0));
       t.hist.push({ d, ok: ok ? 1 : 0, hints, turns });
       if (t.hist.length > 15) t.hist = t.hist.slice(-15);
       saveMastery(m);
@@ -2034,6 +2040,7 @@
     function reloadLocalState() {
       loadPrefs();
       levelTabs.querySelectorAll(".seg").forEach((x, i) => x.classList.toggle("on", LEVELS[i] === levelSel.value));
+      durationRows.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.dataset.min === durationSel.value));
       renderMastery();
     }
     window.SumDeTing = {

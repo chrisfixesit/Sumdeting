@@ -124,3 +124,6 @@ export function parseSigninFragment(hash) {
 
 /** Fresh id for /progress/merge. */
 export const newMergeId = () => crypto.randomUUID();
+
+/** Clamp a hint/turn count to an integer 0..99 (the server's limit). */
+export const clampCount = (n) => Math.min(99, Math.max(0, Math.trunc(Number(n)) || 0));
