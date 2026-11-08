@@ -48,12 +48,12 @@ Prerequisites: an AWS account with Bedrock model access enabled for Claude (chec
 
 ```bash
 cd infra
-cp terraform.tfvars.example terraform.tfvars   # then fill in your own values
+cp terraform.tfvars.example terraform.tfvars   # then fill in your own values, including domain_name (or "" for no custom domain)
 tofu init
 tofu apply
 ```
 
-Outputs include `site_url` (the CloudFront URL) and `api_url` (the same-origin `/api` path). The Function URL itself requires IAM auth and only accepts SigV4-signed requests from this CloudFront distribution (Origin Access Control), so there is no public API endpoint to abuse. A monthly cost budget emails `alert_email` (set in `infra/terraform.tfvars`) if spend runs hot; the limit is `monthly_budget_usd` in `infra/variables.tf`.
+Outputs include `site_url` (the CloudFront URL) and `api_url` (the same-origin `/api` path). The Function URL itself requires IAM auth and only accepts SigV4-signed requests from this CloudFront distribution (Origin Access Control), so it can't be called directly. The `/api` path through CloudFront is still public and anonymous by design, so anyone can trigger Bedrock calls billed to your account; add a WAF rate limit in front of it before you share the site widely. A monthly cost budget emails `alert_email` (set in `infra/terraform.tfvars`) when spend runs hot, but it only alerts: it doesn't cap spend. The limit is `monthly_budget_usd` in `infra/variables.tf`.
 
 Cost: serverless throughout; a few cents per study session with Claude Haiku.
 

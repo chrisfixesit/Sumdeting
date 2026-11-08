@@ -201,7 +201,9 @@ locals {
   }
 }
 
-# Versioned paths (katex-0.16.21/...) make these safe to cache hard.
+# Versioned paths (katex-0.16.21/..., marked-15.0.12.min.js) are safe to cache
+# hard. Unversioned ones (fonts/fonts.css and its font files) get a day, so an
+# update reaches returning browsers.
 resource "aws_s3_object" "vendor" {
   for_each      = { for f in local.vendor_files : f => f }
   bucket        = aws_s3_bucket.web.id
@@ -209,7 +211,7 @@ resource "aws_s3_object" "vendor" {
   source        = "${path.module}/../web/vendor/${each.value}"
   etag          = filemd5("${path.module}/../web/vendor/${each.value}")
   content_type  = lookup(local.vendor_mime, regex("\\.([a-z0-9]+)$", each.value)[0], "application/octet-stream")
-  cache_control = "public, max-age=31536000, immutable"
+  cache_control = can(regex("[0-9]+\\.[0-9]+\\.[0-9]+", each.value)) ? "public, max-age=31536000, immutable" : "public, max-age=86400"
 }
 
 # SumDeTing brand images referenced by index.html <head> and the manifest.
