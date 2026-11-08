@@ -21,13 +21,3 @@ output "domain_validation_record" {
     o.resource_record_name => o.resource_record_value
   }
 }
-
-output "accounts_table" {
-  description = "DynamoDB table holding accounts, profiles and progress"
-  value       = aws_dynamodb_table.accounts.name
-}
-
-output "account_function" {
-  description = "Account Lambda function name"
-  value       = aws_lambda_function.account.function_name
-}

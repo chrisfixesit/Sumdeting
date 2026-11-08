@@ -6,7 +6,7 @@ A Bajan AI math tutor that refuses to just give you the answer. SumDeTing uses C
 
 Built for Barbadian students: the tutor knows the local journey from Common Entrance (BSSEE) through CSEC/CXC Mathematics to CAPE, encourages in a warm Bajan voice while keeping every mathematical step in clear standard English, and uses everyday Barbadian contexts (BBD prices, bus fares, cricket) in its examples.
 
-**Stack:** Claude (Amazon Bedrock Converse API) · AWS Lambda (Function URL) · S3 + CloudFront (OAC) · OpenTofu · Docker (hardened local runtime)
+**Stack:** Claude (Amazon Bedrock Converse API) · AWS Lambda (Function URL) · S3 + CloudFront (OAC) · OpenTofu (in tofu-or-not-tofu) · Docker (hardened local runtime)
 
 One codebase, two runtimes: `backend/tutor.mjs` powers both the serverless Lambda deployment and a hardened Docker container for local development.
 
@@ -68,18 +68,9 @@ The end-to-end suite starts its own server with `ACCOUNT_DEV=1` on port 8099. Be
 
 ## Deploy to AWS
 
-Prerequisites: an AWS account with Bedrock model access enabled for Claude (check the model ID in `infra/variables.tf`), plus OpenTofu or Terraform.
+Infrastructure no longer lives in this repo. It is managed in [chrisfixesit/tofu-or-not-tofu](https://github.com/chrisfixesit/tofu-or-not-tofu) under `accounts/eportfolio-prod/sumdeting` (the accounts feature arrives with tofu PR #40: the `sumdeting-account` and `sumdeting-janitor` Lambdas, the `sumdeting-accounts` table, SES, and the CloudFront `/api/account/*` behaviour). DKIM records are a separate PR in that repo's `management/dns`, and the `sumdeting-github-deploy` role's access to the new functions is a separate github-deploy PR. The old `infra/` folder is retired: do not apply it.
 
-```bash
-cd infra
-cp terraform.tfvars.example terraform.tfvars   # then fill in your own values, including domain_name (or "" for no custom domain)
-tofu init
-tofu apply
-```
-
-For a fresh deployment without a custom domain, set `domain_name = ""` and leave `dns_role_arn` empty; the AWS provider then skips the cross-account DNS role. If DNS records were created earlier, removing them still needs working DNS-role credentials.
-
-Outputs include `site_url` (the CloudFront URL) and `api_url` (the same-origin `/api` path). The Function URL itself requires IAM auth. Its resource policy grants invoke access only to this CloudFront distribution, which signs requests with Origin Access Control, so anonymous callers can't reach it directly. IAM principals in your own account with Lambda invoke permissions still can, and those calls bypass CloudFront. The `/api` path through CloudFront is still public and anonymous by design, so anyone can trigger Bedrock calls billed to your account; add a WAF rate limit in front of it before you share the site widely. A monthly cost budget emails `alert_email` (set in `infra/terraform.tfvars`) when spend runs hot, but it only alerts: it doesn't cap spend. The limit is `monthly_budget_usd` in `infra/variables.tf`.
+Code and site files ship through `.github/workflows/deploy.yml` on merge to `main` (behind the `production` environment approval). It updates the three Lambdas from one zip, uploads the site, and invalidates CloudFront. It refuses to deploy while `web/privacy.html` is still a draft (see the launch runbook).
 
 Cost: serverless throughout; a few cents per study session with Claude Haiku.
 

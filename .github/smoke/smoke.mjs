@@ -5,7 +5,7 @@
  * assets silently failing to load (CDN 503s, bad SRI hashes, CSP blocks),
  * which breaks math rendering with no server-side error to alarm on.
  *
- * Run after every `tofu apply` (and nightly via cron):
+ * Run after every deploy (and nightly via cron):
  *   BASE_URL=https://sumdeting.246labs.cloud node .github/smoke/smoke.mjs
  *
  * Requires: npm i playwright && npx playwright install --with-deps chromium
@@ -105,7 +105,7 @@ try {
   // 6b. Accounts: privacy page, account endpoint, account UI module
   const priv = await page.request.get(BASE_URL + "/privacy.html");
   check("privacy page loads (200)", priv.status() === 200, `status ${priv.status()}`);
-  // The draft notice must never be live (tofu also refuses it unless allow_draft_privacy is set).
+  // The draft notice must never be live (deploy.yml also refuses it unless ALLOW_DRAFT_PRIVACY is set).
   const privHtml = await priv.text();
   const draftMarks = ["DRAFT", "owner to fill in"].filter((m) => privHtml.includes(m));
   check("privacy page is the reviewed notice, not the draft", draftMarks.length === 0, draftMarks.join(", "));

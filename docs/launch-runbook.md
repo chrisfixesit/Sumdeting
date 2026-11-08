@@ -2,7 +2,7 @@
 
 For the owner. This covers turning on the cross-device accounts feature (sign-in by emailed link, student profiles, parent consent) in the live AWS account.
 
-Every command below changes or reads a live AWS account. Always pass an explicit `--profile <sumdeting account profile>`. If the target is a production account, confirm with yourself (or the account owner) before each change. Replace `<project>` with the `project` variable (default `math-mentor`) and `<domain>` with `domain_name` (default `sumdeting.246labs.cloud`). If your SSO session has expired, run `aws sso login --sso-session <session>` first.
+Every command below changes or reads a live AWS account. Always pass an explicit `--profile <sumdeting account profile>`. If the target is a production account, confirm with yourself (or the account owner) before each change. Names are fixed by the tofu stack: functions `sumdeting-account` and `sumdeting-janitor`, table `sumdeting-accounts`, domain `sumdeting.246labs.cloud`. If your SSO session has expired, run `aws sso login --sso-session <session>` first.
 
 ## 1. Lead-time requests (do these first)
 
@@ -39,20 +39,20 @@ aws service-quotas get-requested-service-quota-change-history-by-quota \
 ```
 The first shows the current value. The second shows the request status (`PENDING`, `APPROVED`, `DENIED`).
 
-You do not have to wait for approval to deploy. While SES is in sandbox, test only with a verified inbox: `aws sesv2 create-email-identity --email-identity you@example.com --profile <...>`, then click the link AWS emails you. Keep `reserved_concurrency` at `-1` until the quota increase is granted.
+You do not have to wait for approval to deploy. While SES is in sandbox, test only with a verified inbox: `aws sesv2 create-email-identity --email-identity you@example.com --profile <...>`, then click the link AWS emails you. Leave function concurrency settings in the tofu stack at their defaults until the quota increase is granted.
 
 ## 2. Deploy
 
-1. From the repo root: `cd infra`.
-2. Review the plan, then apply: `tofu plan`, then `tofu apply`.
-   - Required variables (usually already set in your tfvars): `alert_email`, `dns_role_arn`, `dns_zone_id`, `dns_external_id`.
-   - Optional: `domain_name` (default `sumdeting.246labs.cloud`) and `email_from` (empty means `SumDeTing <no-reply@<domain>>`; it must be on the verified domain).
-   - `allow_draft_privacy` (bool, default `false`): the plan fails while `web/privacy.html` still contains the placeholder text "owner to fill in", so the draft notice can't reach production by accident. Finish section 4 first. Set it to `true` only for a non-public test deploy, and never leave it set in the production tfvars.
-3. The apply creates the DynamoDB table `<project>-accounts`, the account Lambda `<project>-account` and its log group, the Function URL behind CloudFront at `/api/account/*`, the SES domain identity with DKIM records in Route53, the janitor Lambda `<project>-janitor` (same code and role, 5-minute timeout) with its own log group, the daily janitor schedule, and CloudWatch alarms (account errors, janitor errors, janitor record failures) that email `alert_email` through the existing alerts topic. Confirm the SNS subscription email if you haven't already.
+1. Infrastructure is not applied from this repo (`infra/` is retired; never run `tofu apply` there). It lives in chrisfixesit/tofu-or-not-tofu. Merge these PRs (owner) and CI applies them:
+   - Tofu PR #40, `accounts/eportfolio-prod/sumdeting`: the DynamoDB table `sumdeting-accounts`, the account Lambda `sumdeting-account` and its log group, the CloudFront `/api/account/*` behaviour, the SES domain identity, the janitor Lambda `sumdeting-janitor` (5-minute timeout) with its log group and daily schedule, and CloudWatch alarms (account errors, janitor errors, janitor record failures) that email the alerts topic. Confirm the SNS subscription email if you haven't already.
+   - The DKIM records PR in `management/dns`.
+   - The github-deploy PR that lets the `sumdeting-github-deploy` role update the code of the two new functions.
+2. Merge this Sumdeting PR (#19) to `main` and approve the `production` environment. `.github/workflows/deploy.yml` ships the code to `math-mentor`, `sumdeting-account` and `sumdeting-janitor`, uploads the site and invalidates CloudFront. Merge the tofu PRs first, so the functions exist and have their configuration.
+3. Privacy guard: the deploy job fails before uploading anything while `web/privacy.html` still contains "owner to fill in" or a DRAFT marker, so the draft notice can't reach production by accident. Finish section 4 first. Set the repository or environment variable `ALLOW_DRAFT_PRIVACY` to `true` only for a non-public test deploy, and never leave it set for launch. (The post-deploy smoke test also rejects a draft page, so expect it to fail on a draft deploy.)
 4. Wait for DKIM to verify (usually a few minutes, can take up to 72 hours):
 
    ```
-   aws sesv2 get-email-identity --email-identity <domain> --profile <sumdeting account profile> \
+   aws sesv2 get-email-identity --email-identity sumdeting.246labs.cloud --profile <sumdeting account profile> \
      --query 'DkimAttributes.Status'
    ```
    Repeat until it prints `"SUCCESS"`. Do not test sign-in before then.
@@ -63,21 +63,21 @@ You do not have to wait for approval to deploy. While SES is in sandbox, test on
 
 ```
 BODY='{}'
-curl -s -i -X POST https://<domain>/api/account/me \
+curl -s -i -X POST https://sumdeting.246labs.cloud/api/account/me \
   -H 'content-type: application/json' \
   -H "x-amz-content-sha256: $(printf '%s' "$BODY" | shasum -a 256 | cut -d' ' -f1)" \
   --data "$BODY"
 ```
 Expect HTTP 401 with `{"error":"not_signed_in"}`. A 403 usually means the hash did not match the body.
 
-(b) Real sign-in. Open the site, choose to sign in, and use a test inbox (a verified address while SES is in sandbox). The email should arrive from the `email_from` address; click the link and confirm you are signed in. This proves the Lambda can use DynamoDB and SES.
+(b) Real sign-in. Open the site, choose to sign in, and use a test inbox (a verified address while SES is in sandbox). The email should arrive from the sender address configured in the tofu stack; click the link and confirm you are signed in. This proves the Lambda can use DynamoDB and SES.
 
-(c) SDK check. The Lambda relies on the AWS SDK that the Node runtime provides. If sign-in fails with `Cannot find package '@aws-sdk/...'` in the logs, bundle `backend/node_modules` into the account Lambda package only (not the tutor Lambda), then apply again.
+(c) SDK check. The Lambda relies on the AWS SDK that the Node runtime provides. If sign-in fails with `Cannot find package '@aws-sdk/...'` in the logs, bundle `backend/node_modules` into the account Lambda package only (not the tutor Lambda), then ask for a change in the tofu stack or the deploy zip.
 
 (d) Run the janitor once by hand:
 
 ```
-aws lambda invoke --function-name <project>-janitor --payload '{"janitor":true}' \
+aws lambda invoke --function-name sumdeting-janitor --payload '{"janitor":true}' \
   --cli-binary-format raw-in-base64-out out.json --profile <sumdeting account profile>
 cat out.json
 ```
@@ -86,14 +86,14 @@ Expect `StatusCode: 200`, no `FunctionError`, and counts such as `{"warned":0,"d
 (e) Check logs for errors:
 
 ```
-aws logs tail /aws/lambda/<project>-account --since 30m --profile <sumdeting account profile>
-aws logs tail /aws/lambda/<project>-janitor --since 30m --profile <sumdeting account profile>
+aws logs tail /aws/lambda/sumdeting-account --since 30m --profile <sumdeting account profile>
+aws logs tail /aws/lambda/sumdeting-janitor --since 30m --profile <sumdeting account profile>
 ```
-Look for stack traces, `Missing required environment variable`, SES errors (for example `MessageRejected` while in sandbox with an unverified recipient), or janitor lines starting `Janitor:` (one record it couldn't process; these also raise the `<project>-janitor-record-failures` alarm).
+Look for stack traces, `Missing required environment variable`, SES errors (for example `MessageRejected` while in sandbox with an unverified recipient), or janitor lines starting `Janitor:` (one record it couldn't process; these also raise the `sumdeting-janitor-record-failures` alarm).
 
 ## 4. Privacy notice review (before public launch)
 
-The service stores children's data (names, profile and progress data) and parent email addresses. `web/privacy.html` is a draft until this section is done, and `tofu plan` refuses to deploy it while it contains "owner to fill in" (unless `allow_draft_privacy = true`, see section 2). Before announcing it publicly:
+The service stores children's data (names, profile and progress data) and parent email addresses. `web/privacy.html` is a draft until this section is done, and the deploy workflow refuses to deploy it while it contains "owner to fill in" or a DRAFT marker (unless `ALLOW_DRAFT_PRIVACY` is `true`, see section 2). Before announcing it publicly:
 
 1. Review the privacy notice against the Barbados Data Protection Act 2019: what is collected, why, who can see it, and how a parent or student can see, correct or delete it. Check that the notice matches these rules in the code (keep this list and the notice in sync):
    - Sign-in links and codes expire after 15 minutes.
@@ -120,14 +120,14 @@ The service stores children's data (names, profile and progress data) and parent
 ## 5. Rollback and recovery
 
 - The account feature is optional for students. If the account API misbehaves, the tutor itself keeps working, because it is a separate Lambda and the site does not need sign-in to be used.
-- To switch the feature off quickly, revert the infra and site change and run `tofu apply` again. The DynamoDB table has deletion protection on, so `tofu` will refuse to destroy it. That is intentional. To remove it deliberately, set `deletion_protection_enabled = false`, apply, and only then remove the table.
+- To switch the feature off quickly, revert the site change (a revert PR to `main` redeploys) and the CloudFront behaviour in the tofu stack. The DynamoDB table has deletion protection on, so `tofu` will refuse to destroy it. That is intentional. To remove it deliberately, set `deletion_protection_enabled = false` in the tofu stack, apply, and only then remove the table.
 - DynamoDB has point-in-time recovery (PITR, AWS default 35-day window). To restore after bad data or an accidental delete, restore to a NEW table (you cannot restore over the existing one):
 
   ```
   aws dynamodb restore-table-to-point-in-time \
-    --source-table-name <project>-accounts --target-table-name <project>-accounts-restored \
+    --source-table-name sumdeting-accounts --target-table-name sumdeting-accounts-restored \
     --use-latest-restorable-time --profile <sumdeting account profile>
   ```
-  Then check the data in the new table, and either point the Lambda `TABLE_NAME` at it or copy items back. Importing the restored table into tofu state needs care, so ask for a second pair of eyes first.
-- A point-in-time restore brings back everything as it was at that moment, including accounts and profiles that were deleted after it (by their owners, by a decline, or by the janitor). Before switching the Lambdas to a restored table: list the deletions made since the restore point (owner requests you have a record of, and the janitor's daily counts in `/aws/lambda/<project>-janitor`), repeat each owner-requested deletion against the restored table, run the janitor once against it (section 3(d), with `TABLE_NAME` pointing at the restored table), and check that the deleted accounts and profiles are really gone. Only then switch over.
-- Stop the janitor while investigating a data problem: add `state = "DISABLED"` to `aws_scheduler_schedule.janitor` in `infra/main.tf` and run `tofu apply` (the argument is not set today). Remove it again to resume.
+  Then check the data in the new table, and either point the Lambda `TABLE_NAME` at it or copy items back. Importing the restored table into the tofu state needs care, so ask for a second pair of eyes first.
+- A point-in-time restore brings back everything as it was at that moment, including accounts and profiles that were deleted after it (by their owners, by a decline, or by the janitor). Before switching the Lambdas to a restored table: list the deletions made since the restore point (owner requests you have a record of, and the janitor's daily counts in `/aws/lambda/sumdeting-janitor`), repeat each owner-requested deletion against the restored table, run the janitor once against it (section 3(d), with `TABLE_NAME` pointing at the restored table), and check that the deleted accounts and profiles are really gone. Only then switch over.
+- Stop the janitor while investigating a data problem: disable the janitor schedule in the tofu stack (`accounts/eportfolio-prod/sumdeting`, via a PR; CI applies it), or as an emergency measure disable the EventBridge schedule in the console and record that you did. Re-enable it to resume.
