@@ -2,10 +2,15 @@ name: Live smoke test
 
 # Verifies the DEPLOYED site end-to-end: assets execute (KaTeX/marked/DOMPurify),
 # math renders, brand fonts load, security headers present, /api streams.
-# Deploys are manual (tofu apply), so this runs nightly and on demand —
-# trigger it manually right after each deploy.
+# Runs after every deploy (deploy.yml calls it), nightly, and on demand.
 
 on:
+  workflow_call:
+    inputs:
+      strict_csp:
+        description: "Require a 'self'-only CSP (false while cdnjs is still allowed)"
+        type: boolean
+        default: true
   workflow_dispatch:
   schedule:
     - cron: "23 9 * * *" # daily, 09:23 UTC (~05:23 in Barbados)
@@ -37,4 +42,6 @@ jobs:
       - name: Run smoke checks
         env:
           BASE_URL: https://sumdeting.246labs.cloud
+          # Scheduled and manual runs have no inputs, so they default to strict.
+          STRICT_CSP: ${{ inputs.strict_csp == false && 'false' || 'true' }}
         run: node .github/smoke/smoke.mjs
