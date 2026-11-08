@@ -404,3 +404,61 @@ test("janitor keeps a parent with no children of their own after 8 days (setup i
   assert.equal(r.deletedUnfinished, 0);
   assert.ok(await app.repo.getAccount(acct.id));
 });
+
+test("awaiting sweep finds consent invites by the parent's email, without scanning all invites", async () => {
+  const app = makeApp();
+  const { s, p } = await awaitingStudent(app, "k@x.com", 8);
+  await app.repo.createProfile(s.id, { ...PROFILE, firstName: "Own", under13: false, consentStatus: "active" });
+  await app.repo.createInvite({ kind: "consent", fromAccountId: s.id, toEmail: "par@x.com", profileIds: [p.id] });
+  // An unrelated invite to the same parent stays.
+  const keep = await app.repo.createInvite({ kind: "share", fromAccountId: s.id, toEmail: "par@x.com", profileIds: [p.id] });
+  let scans = 0;
+  const repo = { ...app.repo, listInvitesFromAccount: async (id) => { scans++; return app.repo.listInvitesFromAccount(id); } };
+  const r = await runJanitor({ repo, mailer: app.mailer, now: () => app.clock.t });
+  assert.equal(r.deletedAwaiting, 1);
+  assert.equal(scans, 0);
+  assert.equal(await app.repo.getProfile(p.id), null);
+  assert.deepEqual((await app.repo.listInvitesForEmail("par@x.com")).map((i) => i.id), [keep.id]);
+});
+
+test("idle owner: a child with an active guardian moves to the most recently active guardian", async () => {
+  const app = makeApp();
+  const idle = await aged(app, "idle@x.com", 731);
+  const p = await app.repo.createProfile(idle.id, { ...PROFILE, under13: false, consentStatus: "active" });
+  const orphan = await app.repo.createProfile(idle.id, { ...PROFILE, firstName: "Solo", under13: false, consentStatus: "active" });
+  const older = await aged(app, "older@x.com", 100);
+  const recent = await aged(app, "recent@x.com", 5);
+  const stale = await aged(app, "stale@x.com", 800); // not active: doesn't count
+  const viewer = await aged(app, "viewer@x.com", 1); // view only: doesn't count
+  await app.repo.grantAccess(older.id, p.id, "guardian");
+  await app.repo.grantAccess(recent.id, p.id, "guardian");
+  await app.repo.grantAccess(stale.id, orphan.id, "guardian");
+  await app.repo.grantAccess(viewer.id, orphan.id, "view_only");
+  await app.repo.updateAccount(idle.id, { warningSentAt: app.clock.t - 31 * DAY });
+  // Keep the helpers' own accounts out of the idle rules.
+  for (const a of [stale]) await app.repo.updateAccount(a.id, { warningSentAt: app.clock.t });
+  const r = await run(app);
+  assert.equal(r.deletedAccounts, 1);
+  assert.equal(await app.repo.getAccount(idle.id), null);
+  const moved = await app.repo.getProfile(p.id);
+  assert.ok(moved, "the guarded child is kept");
+  assert.equal(moved.ownerAccountId, recent.id);
+  assert.equal(await app.repo.getAccess(recent.id, p.id), "owner");
+  assert.equal(await app.repo.getAccess(older.id, p.id), "guardian");
+  assert.equal(await app.repo.getAccess(idle.id, p.id), null);
+  assert.deepEqual((await app.repo.listAccessForProfile(p.id)).map((a) => a.kind).sort(), ["guardian", "owner"]);
+  assert.equal(await app.repo.getProfile(orphan.id), null, "no active guardian: the child is deleted");
+});
+
+test("hand-over that stopped part-way is finished, not undone, on the next run", async () => {
+  const app = makeApp();
+  const idle = await aged(app, "idle@x.com", 731, { warningSentAt: app.clock.t - 31 * DAY });
+  const p = await app.repo.createProfile(idle.id, { ...PROFILE, under13: false, consentStatus: "active" });
+  const g = await aged(app, "g@x.com", 1);
+  // The guardian was already made owner, but the idle owner's row is still there.
+  await app.repo.grantAccess(g.id, p.id, "owner");
+  await run(app);
+  assert.equal(await app.repo.getAccount(idle.id), null);
+  assert.ok(await app.repo.getProfile(p.id));
+  assert.equal(await app.repo.getAccess(g.id, p.id), "owner");
+});

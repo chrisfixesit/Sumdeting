@@ -145,6 +145,11 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
       const item = await merge(profileKey(pid), "META", patch);
       return item ? { id: pid, ...strip(item) } : null;
     },
+    /** Record a new owner on the profile (access rows are changed separately). */
+    async setProfileOwner(pid, accountId) {
+      const item = await update(profileKey(pid), "META", (i) => ({ ...i, ownerAccountId: accountId }));
+      return item ? { id: pid, ...strip(item) } : null;
+    },
     async deleteProfile(pid) {
       const access = await table.query(profileKey(pid), "ACCESS#");
       const ops = [

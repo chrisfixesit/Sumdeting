@@ -296,3 +296,15 @@ test("concurrent updateAccount and touchActive both persist", async () => {
   assert.equal(a.lastActiveAt, clock.t);
   assert.equal(a.warningSentAt, undefined);
 });
+
+test("setProfileOwner records the new owner id (updateProfile can't change it)", async () => {
+  const table = createMemoryTable({ now: () => 1 });
+  const repo = createRepo(table, { now: () => 1 });
+  const p = await repo.createProfile("a1", { firstName: "A", lastName: "B", level: "CSEC", colour: "#F4C143" });
+  await repo.updateProfile(p.id, { ownerAccountId: "evil" });
+  assert.equal((await repo.getProfile(p.id)).ownerAccountId, "a1");
+  const out = await repo.setProfileOwner(p.id, "a2");
+  assert.equal(out.ownerAccountId, "a2");
+  assert.equal((await repo.getProfile(p.id)).ownerAccountId, "a2");
+  assert.equal(await repo.setProfileOwner("missing", "a2"), null);
+});
