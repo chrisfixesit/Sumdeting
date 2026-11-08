@@ -181,22 +181,23 @@ test("janitor warns at 2y-30d, deletes at 2y, not before", async () => {
   const old = await aged(app, "old@x.com", 731);
   const before = app.outbox.length;
   const r1 = await run(app);
-  assert.deepEqual(r1, { warned: 1, deletedAccounts: 1, deletedAwaiting: 0, deletedUnfinished: 0 });
+  assert.deepEqual(r1, { warned: 2, deletedAccounts: 0, deletedAwaiting: 0, deletedUnfinished: 0 });
   assert.ok(await app.repo.getAccount(young.id));
   assert.ok(await app.repo.getAccount(mid.id));
-  assert.equal(await app.repo.getAccount(old.id), null);
+  assert.ok(await app.repo.getAccount(old.id), "never-warned account is warned, not deleted");
   const mails = app.outbox.slice(before);
-  assert.equal(mails.length, 1);
-  assert.equal(mails[0].to, "mid@x.com");
+  assert.equal(mails.length, 2);
+  assert.deepEqual(mails.map((m) => m.to).sort(), ["mid@x.com", "old@x.com"]);
   assert.match(mails[0].text, /#signin=/);
   assert.ok((await app.repo.getAccount(mid.id)).warningSentAt);
   const r2 = await run(app);
   assert.deepEqual(r2, { warned: 0, deletedAccounts: 0, deletedAwaiting: 0, deletedUnfinished: 0 });
-  assert.equal(app.outbox.length, before + 1);
+  assert.equal(app.outbox.length, before + 2);
   app.clock.t += 30 * DAY;
   const r3 = await run(app);
-  assert.equal(r3.deletedAccounts, 1);
+  assert.equal(r3.deletedAccounts, 2);
   assert.equal(await app.repo.getAccount(mid.id), null);
+  assert.equal(await app.repo.getAccount(old.id), null);
 });
 
 test("accounts without lastActiveAt fall back to createdAt", async () => {
@@ -206,8 +207,10 @@ test("accounts without lastActiveAt fall back to createdAt", async () => {
   const item = await app.table.get(`ACCOUNT#${a.id}`, "META");
   const { lastActiveAt, ...rest } = item;
   await app.table.put(rest);
-  const r = await run(app);
-  assert.equal(r.deletedAccounts, 1);
+  assert.equal((await run(app)).deletedAccounts, 0);
+  assert.equal((await run(app)).warned, 0);
+  app.clock.t += 30 * DAY;
+  assert.equal((await run(app)).deletedAccounts, 1);
 });
 
 test("activity after warning prevents deletion", async () => {
@@ -265,4 +268,79 @@ test("janitor deletes 8-day-old unfinished setup, keeps 6-day-old and finished",
   assert.ok(await app.repo.getAccount(newA.id));
   assert.ok(await app.repo.getAccount(done.id));
   assert.deepEqual(await run(app), { warned: 0, deletedAccounts: 0, deletedAwaiting: 0, deletedUnfinished: 0 });
+});
+
+test("late warning: warned on day 725, kept on day 731, deleted on day 756", async () => {
+  const app = makeApp();
+  const base = app.clock.t;
+  const a = await app.repo.createAccount("late@x.com");
+  await app.repo.updateAccount(a.id, { createdAt: base, lastActiveAt: base, setupComplete: true, type: "parent" });
+  app.clock.t = base + 725 * DAY;
+  assert.equal((await run(app)).warned, 1);
+  app.clock.t = base + 731 * DAY;
+  assert.equal((await run(app)).deletedAccounts, 0);
+  assert.ok(await app.repo.getAccount(a.id));
+  app.clock.t = base + 756 * DAY;
+  assert.equal((await run(app)).deletedAccounts, 1);
+  assert.equal(await app.repo.getAccount(a.id), null);
+});
+
+test("decline deletes a student account that owns nothing even with a view_only link", async () => {
+  const app = makeApp();
+  const s = await app.repo.createAccount("kid@x.com");
+  await app.repo.updateAccount(s.id, { type: "student", setupComplete: true, holderOver13: false });
+  const p = await app.repo.createProfile(s.id, {
+    ...PROFILE, under13: true, consentStatus: "awaiting_parent", parentEmail: "par@x.com",
+  });
+  await app.repo.createInvite({ kind: "consent", fromAccountId: s.id, toEmail: "par@x.com", profileIds: [p.id] });
+  const other = await app.repo.createAccount("o@x.com");
+  const op = await app.repo.createProfile(other.id, { ...PROFILE, under13: false, consentStatus: "active" });
+  await app.repo.grantAccess(s.id, op.id, "view_only");
+  await signIn(app, "par@x.com");
+  await app.call("POST", "/setup", { type: "parent" });
+  const res = await app.call("POST", "/consent/respond", { profileId: p.id, approve: false });
+  assert.equal(res.status, 200);
+  assert.equal(await app.repo.getAccount(s.id), null);
+  assert.ok(await app.repo.getProfile(op.id));
+});
+
+test("janitor deletes an old student account that owns no profiles, keeps a new one", async () => {
+  const app = makeApp();
+  const mk = async (email, ageDays) => {
+    const a = await app.repo.createAccount(email);
+    await app.repo.updateAccount(a.id, {
+      type: "student", setupComplete: true, createdAt: app.clock.t - ageDays * DAY, lastActiveAt: app.clock.t,
+    });
+    return a;
+  };
+  const oldA = await mk("o@x.com", 8);
+  const newA = await mk("n@x.com", 6);
+  await run(app);
+  assert.equal(await app.repo.getAccount(oldA.id), null);
+  assert.ok(await app.repo.getAccount(newA.id));
+});
+
+test("one failing account does not stop the janitor and the failure is logged", async () => {
+  const app = makeApp();
+  const bad = await aged(app, "bad@x.com", 701);
+  const good = await aged(app, "good@x.com", 701);
+  const mailer = {
+    send: async (tpl, to, data) => {
+      if (to === "bad@x.com") throw new Error("ses down");
+      return app.mailer.send(tpl, to, data);
+    },
+  };
+  const logged = [];
+  const orig = console.error;
+  console.error = (...args) => logged.push(args);
+  let r;
+  try {
+    r = await runJanitor({ repo: app.repo, mailer, now: () => app.clock.t });
+  } finally {
+    console.error = orig;
+  }
+  assert.equal(r.warned, 1);
+  assert.ok((await app.repo.getAccount(good.id)).warningSentAt);
+  assert.equal((await app.repo.getAccount(bad.id)).warningSentAt, undefined);
+  assert.ok(logged.some((l) => String(l[0]).includes(bad.id)));
 });

@@ -3,6 +3,7 @@ import { httpError, clearCookie, COOKIE_NAME } from "./http.mjs";
 const DAY_MS = 86400e3;
 const RETENTION_DAYS = 730;
 const WARN_DAYS = RETENTION_DAYS - 30;
+const WARN_LEAD_DAYS = 30;
 const GRACE_DAYS = 7;
 const CODE_TTL_SEC = 600;
 const HOUR_SEC = 3600;
@@ -118,12 +119,22 @@ export async function runJanitor({ repo, mailer, now = () => Date.now() }) {
     await safe(`account ${account.id}`, async () => {
       const lastActive = account.lastActiveAt ?? account.createdAt;
       const idleDays = typeof lastActive === "number" ? (t - lastActive) / DAY_MS : 0;
-      if (idleDays > RETENTION_DAYS) {
+      const warnedLongEnough =
+        typeof account.warningSentAt === "number" && t - account.warningSentAt >= WARN_LEAD_DAYS * DAY_MS;
+      if (idleDays > RETENTION_DAYS && warnedLongEnough) {
         await deleteAccountCascade(repo, account.id);
         result.deletedAccounts++;
       } else if (account.setupComplete !== true && t - account.createdAt > GRACE_DAYS * DAY_MS) {
         await deleteAccountCascade(repo, account.id);
         result.deletedUnfinished++;
+      } else if (
+        account.type === "student" &&
+        t - account.createdAt > GRACE_DAYS * DAY_MS &&
+        !(await repo.listAccessForAccount(account.id)).some((a) => a.kind === "owner")
+      ) {
+        // Left behind when an awaiting sweep removed the profile but the cascade failed.
+        await deleteAccountCascade(repo, account.id);
+        result.deletedAwaiting++;
       } else if (idleDays > WARN_DAYS && !account.warningSentAt) {
         const token = await repo.issueToken("signin", account.email, WARNING_TOKEN_SEC);
         await mailer.send("retention_warning", account.email, { token });

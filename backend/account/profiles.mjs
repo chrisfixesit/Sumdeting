@@ -175,7 +175,7 @@ export function register(router) {
       await repo.deleteProfile(profileId);
       await repo.deleteInvite(invite.id);
       const owner = await repo.getAccount(ownerId);
-      if (owner?.type === "student" && (await repo.listAccessForAccount(ownerId)).length === 0) {
+      if (owner?.type === "student" && !(await repo.listAccessForAccount(ownerId)).some((a) => a.kind === "owner")) {
         await deleteAccountCascade(repo, ownerId);
       }
     }
