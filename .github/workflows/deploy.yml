@@ -1,0 +1,104 @@
+name: Deploy
+
+# Ships the tutor's code and the site to production. Infrastructure (the function's configuration,
+# buckets, CloudFront, WAF) lives in chrisfixesit/tofu-or-not-tofu; this only updates contents,
+# through the sumdeting-github-deploy role, which can touch nothing else.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "web/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ROLE_ARN: arn:aws:iam::590716168923:role/sumdeting-github-deploy
+  FUNCTION: math-mentor
+  BUCKET: math-mentor-web-590716168923
+  DISTRIBUTION: E2L14FMWA4XB4G
+  SITE_ORIGIN: https://sumdeting.246labs.cloud
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Requires Chris's approval; the role's trust also pins this environment and main.
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Nothing later in this job needs Git credentials.
+          persist-credentials: false
+
+      - name: AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy Lambda code
+        run: |
+          (cd backend && zip -qr ../handler.zip . -x 'node_modules/*' 'package.json')
+          aws lambda update-function-code --function-name "$FUNCTION" --zip-file fileb://handler.zip --query LastUpdateStatus --output text
+          aws lambda wait function-updated-v2 --function-name "$FUNCTION"
+
+      - name: Build site
+        run: |
+          cp -R web dist
+          # Same substitutions Tofu's local.index_html used to make
+          sed -i -e 's|%%API_URL%%|/api|g' -e "s|https://d297i0l0pfbu7x.cloudfront.net|$SITE_ORIGIN|g" dist/index.html
+          grep -q '%%API_URL%%' dist/index.html && { echo "API_URL placeholder left in index.html"; exit 1; } || true
+
+      - name: Upload site
+        run: |
+          S3="s3://$BUCKET"
+          # Explicit content types: the site sends nosniff, so a wrong type blocks a script or stylesheet.
+          upload() { # upload <src> <dest> <cache-control> [extra filters...]
+            local src=$1 dest=$2 cache=$3; shift 3
+            for pair in css:text/css js:text/javascript woff2:font/woff2 woff:font/woff ttf:font/ttf; do
+              aws s3 cp "$src" "$dest" --recursive --only-show-errors \
+                --exclude "*" --include "*.${pair%%:*}" "$@" \
+                --content-type "${pair#*:}" --cache-control "$cache"
+            done
+          }
+          # Versioned vendor paths (katex-0.16.21/, marked-15.0.12, purify-3.2.6) never change: cache hard.
+          upload dist/vendor "$S3/vendor" "public, max-age=31536000, immutable" --exclude "fonts/*"
+          # Unversioned vendor fonts (fonts.css and its files): a day, so updates reach returning visitors.
+          upload dist/vendor/fonts "$S3/vendor/fonts" "public, max-age=86400"
+          aws s3 cp dist "$S3" --recursive --only-show-errors --exclude "*" --include "*.png" \
+            --content-type image/png --cache-control "public, max-age=86400"
+          aws s3 cp dist/manifest.webmanifest "$S3/manifest.webmanifest" --only-show-errors \
+            --content-type application/manifest+json --cache-control "no-cache"
+          # Last, so the new page never references assets that aren't there yet.
+          aws s3 cp dist/index.html "$S3/index.html" --only-show-errors \
+            --content-type "text/html; charset=utf-8" --cache-control "no-cache"
+
+      - name: Invalidate CloudFront
+        run: |
+          id=$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" \
+            --paths "/" "/index.html" "/manifest.webmanifest" "/vendor/fonts/*" --query Invalidation.Id --output text)
+          aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION" --id "$id"
+
+  smoke:
+    name: Smoke test
+    needs: deploy
+    uses: ./.github/workflows/smoke.yml
+    with:
+      # The CSP still allows cdnjs until the 'self'-only policy lands in tofu-or-not-tofu (Plan 3b
+      # Task 8c). Flip this to true in that change.
+      strict_csp: "false"

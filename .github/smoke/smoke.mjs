@@ -41,9 +41,12 @@ try {
   // allowances the page needs); any host, scheme or wildcard source fails.
   const csp = headers["content-security-policy"] ?? "";
   const ALLOWED = new Set(["'self'", "'unsafe-inline'", "'none'", "data:", "blob:"]);
+  // Transition (see deploy.yml): cdnjs is still allowed alongside 'self', but nothing else is.
+  if (process.env.STRICT_CSP === "false") ALLOWED.add("https://cdnjs.cloudflare.com");
   const badSources = csp.split(";").map((d) => d.trim().split(/\s+/)).filter((d) => d[0])
     .flatMap(([, ...srcs]) => srcs.filter((src) => !ALLOWED.has(src)));
-  check("CSP allows only 'self'", /(^|;)\s*default-src 'self'\s*(;|$)/.test(csp) && badSources.length === 0,
+  check(process.env.STRICT_CSP === "false" ? "CSP allows only 'self' and cdnjs" : "CSP allows only 'self'",
+    /(^|;)\s*default-src 'self'\s*(;|$)/.test(csp) && badSources.length === 0,
     badSources.join(" ") || csp.slice(0, 80));
   check("HSTS header present", !!headers["strict-transport-security"]);
   check("nosniff header present", headers["x-content-type-options"] === "nosniff");
