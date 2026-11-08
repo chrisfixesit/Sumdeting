@@ -45,9 +45,11 @@ export function register(router) {
     if (type !== "parent" && type !== "student") throw bad();
     if (ctx.account.type !== null || ctx.account.setupComplete) throw bad();
     if (type === "student" && typeof holderOver13 !== "boolean") throw bad();
+    // A parent's setup is complete at once: their only child may already have
+    // their own account, so they may never add a profile here.
     await repo.updateAccount(
       ctx.account.id,
-      type === "student" ? { type, holderOver13 } : { type }
+      type === "student" ? { type, holderOver13 } : { type, setupComplete: true }
     );
     if (type === "parent") await repo.setParentUnlocked(ctx.session.id, now() + UNLOCK_MS);
     return {};

@@ -393,3 +393,21 @@ test("consent/respond: existing parent must be unlocked; null-type caller need n
   await app.repo.setParentUnlocked(session.id, app.clock.t + 60000);
   assert.equal((await app.call("POST", "/consent/respond", { profileId, approve: true }, { cookie })).status, 200);
 });
+
+test("setup as parent completes setup at once, so a parent with no child of their own can carry on", async () => {
+  const app = await parentApp("solo@x.com");
+  const acct = await app.repo.findAccountByEmail("solo@x.com");
+  assert.equal(acct.setupComplete, true);
+  const me = await app.call("POST", "/me");
+  assert.equal(me.body.account.setupComplete, true);
+  assert.deepEqual(me.body.profiles, []);
+  // Setup can't be run a second time.
+  assert.equal((await app.call("POST", "/setup", { type: "student", holderOver13: true })).status, 400);
+});
+
+test("setup as student still waits for the first profile", async () => {
+  const app = makeApp();
+  await signIn(app, "st@x.com");
+  await app.call("POST", "/setup", { type: "student", holderOver13: true });
+  assert.equal((await app.repo.findAccountByEmail("st@x.com")).setupComplete, false);
+});

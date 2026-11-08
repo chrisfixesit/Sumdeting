@@ -393,3 +393,14 @@ test("one failing account does not stop the janitor and the failure is logged", 
   assert.equal((await app.repo.getAccount(bad.id)).warningSentAt, undefined);
   assert.ok(logged.some((l) => String(l[0]).includes(bad.id)));
 });
+
+test("janitor keeps a parent with no children of their own after 8 days (setup is complete)", async () => {
+  const app = makeApp();
+  await signIn(app, "solo@x.com");
+  await app.call("POST", "/setup", { type: "parent" });
+  const acct = await app.repo.findAccountByEmail("solo@x.com");
+  app.clock.t += 8 * DAY;
+  const r = await run(app);
+  assert.equal(r.deletedUnfinished, 0);
+  assert.ok(await app.repo.getAccount(acct.id));
+});
