@@ -71,6 +71,16 @@ export async function buildMe(ctx) {
       under13: p.under13,
     });
   }
+  const pendingConsents = [];
+  for (const invite of await repo.listInvitesForEmail(account.email)) {
+    if (invite.kind !== "consent") continue;
+    for (const pid of invite.profileIds ?? []) {
+      const p = await repo.getProfile(pid);
+      if (p && p.consentStatus === "awaiting_parent" && p.parentEmail === account.email) {
+        pendingConsents.push({ profileId: p.id, firstName: p.firstName, lastName: p.lastName });
+      }
+    }
+  }
   return {
     signedIn: true,
     account: {
@@ -82,7 +92,7 @@ export async function buildMe(ctx) {
     parentUnlocked: (session?.parentUnlockedUntil ?? 0) > now(),
     profiles,
     pendingRequests: [],
-    pendingConsents: [],
+    pendingConsents,
   };
 }
 

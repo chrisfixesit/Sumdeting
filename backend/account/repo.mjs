@@ -96,6 +96,13 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
       const item = await merge(accountKey(id), "META", patch);
       return item ? { id, ...strip(item) } : null;
     },
+    // Minimal removal of the account item and its email link (no data cascade).
+    async deleteAccountRecord(id) {
+      const item = await table.get(accountKey(id), "META");
+      const ops = [{ delete: { pk: accountKey(id), sk: "META" } }];
+      if (item) ops.push({ delete: { pk: emailKey(item.email), sk: "ACCOUNT" } });
+      await table.transact(ops);
+    },
     async touchActive(id) {
       const t = now();
       await update(accountKey(id), "META", (item) => {
