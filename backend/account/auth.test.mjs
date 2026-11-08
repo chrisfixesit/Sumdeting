@@ -228,7 +228,7 @@ test("lambda adapter maps rawPath, cookies and viewer address", async () => {
   const handler = makeHandler(() => app.router);
   const event = (path, body, extra = {}) => ({
     rawPath: `/api/account${path}`,
-    headers: { "cloudfront-viewer-address": "2001:db8::1:54321" },
+    headers: { "cloudfront-viewer-address": "2001:db8::1:54321", "content-type": "application/json" },
     requestContext: { http: { method: "POST", sourceIp: "10.0.0.1" } },
     cookies: [],
     body: JSON.stringify(body),
@@ -249,7 +249,7 @@ test("lambda adapter maps rawPath, cookies and viewer address", async () => {
   await spy(event("/x", {}));
   assert.equal(seen.ip, "2001:db8::1");
   assert.equal(seen.path, "/x");
-  await spy(event("/x", {}, { headers: {} }));
+  await spy(event("/x", {}, { headers: { "content-type": "application/json" } }));
   assert.equal(seen.ip, "10.0.0.1");
   const bad = await spy(event("/x", {}, { body: "{nope" }));
   assert.equal(bad.statusCode, 400);
@@ -324,4 +324,67 @@ test("IP limit is checked before spending the email budget", async () => {
   const blocked = await app.call("POST", "/signin/start", { email: "victim@x.com" }, { ip: "8.8.8.8" });
   assert.equal(blocked.status, 429);
   for (let i = 0; i < 5; i++) assert.equal((await app.call("POST", "/signin/start", { email: "victim@x.com" }, { ip: "7.7.7.7" })).status, 200);
+});
+
+// ---- CSRF defence in depth ----
+
+test("router refuses a POST from another origin; same origin or no Origin is fine", async () => {
+  const app = makeApp();
+  const req = (headers, extra = {}) => app.router({ method: "POST", path: "/signin/start", headers, cookies: {}, body: { email: "c@x.com" }, ip: "1.1.1.1", ...extra });
+  const evil = await req({ origin: "https://evil.example", "content-type": "application/json" }, { hasBody: true });
+  assert.deepEqual([evil.status, evil.body], [403, { error: "forbidden" }]);
+  const nul = await req({ Origin: "null", "content-type": "application/json" }, { hasBody: true });
+  assert.equal(nul.status, 403);
+  assert.equal(app.outbox.length, 0);
+  assert.equal((await req({ origin: "https://sumdeting.test", "content-type": "application/json" }, { hasBody: true })).status, 200);
+  assert.equal((await req({ "content-type": "application/json" }, { hasBody: true })).status, 200);
+  // An adapter can name the allowed origins itself (the container uses its own Host).
+  const own = await req({ origin: "http://localhost:8080", "content-type": "application/json" }, { hasBody: true, allowedOrigins: ["http://localhost:8080"] });
+  assert.equal(own.status, 200);
+});
+
+test("router refuses a POST body that isn't JSON (415); an empty body needs no content type", async () => {
+  const app = makeApp();
+  const req = (headers, hasBody) => app.router({ method: "POST", path: "/signin/start", headers, cookies: {}, body: { email: "c@x.com" }, ip: "1.1.1.1", hasBody });
+  for (const ct of [undefined, "text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x"]) {
+    const res = await req(ct ? { "content-type": ct } : {}, true);
+    assert.deepEqual([res.status, res.body], [415, { error: "bad_request" }], String(ct));
+  }
+  assert.equal((await req({ "Content-Type": "application/json; charset=utf-8" }, true)).status, 200);
+  const empty = await app.router({ method: "POST", path: "/me", headers: {}, cookies: {}, body: {}, ip: "1.1.1.1", hasBody: false });
+  assert.equal(empty.status, 401);
+});
+
+test("lambda adapter passes origin and body checks through", async () => {
+  const app = makeApp();
+  const handler = makeHandler(() => app.router);
+  const event = (headers, body) => ({
+    rawPath: "/api/account/signin/start",
+    headers,
+    requestContext: { http: { method: "POST", sourceIp: "10.0.0.1" } },
+    body,
+  });
+  const json = JSON.stringify({ email: "l@x.com" });
+  assert.equal((await handler(event({ "content-type": "text/plain" }, json))).statusCode, 415);
+  assert.equal((await handler(event({ "content-type": "application/json", origin: "https://evil.example" }, json))).statusCode, 403);
+  assert.equal((await handler(event({ "content-type": "application/json", origin: "https://sumdeting.test" }, json))).statusCode, 200);
+});
+
+test("container server checks Origin against its own host and needs JSON bodies", async () => {
+  const app = makeApp();
+  const server = createAppServer({ accountRouter: app.router });
+  server.listen(0);
+  await once(server, "listening");
+  try {
+    const { port } = server.address();
+    const url = `http://127.0.0.1:${port}/api/account/signin/start`;
+    const body = JSON.stringify({ email: "srv@x.com" });
+    const post = (headers) => fetch(url, { method: "POST", headers, body });
+    assert.equal((await post({ "content-type": "text/plain" })).status, 415);
+    assert.equal((await post({ "content-type": "application/json", origin: "https://evil.example" })).status, 403);
+    assert.equal((await post({ "content-type": "application/json", origin: `http://127.0.0.1:${port}` })).status, 200);
+  } finally {
+    server.close();
+    server.closeAllConnections?.();
+  }
 });

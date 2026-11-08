@@ -65,7 +65,8 @@ function handleAccount(accountRouter, req, res) {
   req.on("end", async () => {
     if (tooLarge) return;
     try {
-      const body = parseBody(Buffer.concat(chunks).toString("utf-8"));
+      const raw = Buffer.concat(chunks).toString("utf-8");
+      const body = parseBody(raw);
       if (body === null) return accountJson(res, 400, { error: "bad_request" });
       let pathname;
       try {
@@ -79,6 +80,9 @@ function handleAccount(accountRouter, req, res) {
         headers: req.headers,
         cookies: parseCookies(req.headers.cookie),
         body,
+        hasBody: raw.length > 0,
+        // The container serves the page itself, so its own host is the only allowed origin.
+        allowedOrigins: req.headers.host ? [`http://${req.headers.host}`, `https://${req.headers.host}`] : undefined,
         ip: req.socket.remoteAddress ?? "unknown",
       });
       accountJson(res, out.status, out.body, out.setCookies);

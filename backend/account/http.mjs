@@ -55,6 +55,37 @@ export const sessionCookie = (id, { secureCookies }) =>
 export const clearCookie = ({ secureCookies }) =>
   `${COOKIE_NAME}=; HttpOnly;${secureCookies ? " Secure;" : ""} SameSite=Lax; Path=/api/account; Max-Age=0`;
 
+/** Case-insensitive header lookup (Node and Function URLs lower-case names; tests may not). */
+export function header(headers, name) {
+  if (!headers) return undefined;
+  const want = name.toLowerCase();
+  for (const [k, v] of Object.entries(headers)) if (k.toLowerCase() === want) return Array.isArray(v) ? v[0] : v;
+  return undefined;
+}
+
+function originOf(url) {
+  try { return url ? new URL(url).origin : null; } catch { return null; }
+}
+
+/**
+ * CSRF defence in depth on top of SameSite=Lax: a POST that names another
+ * origin is refused, and a POST with a body must be JSON (a plain HTML form
+ * can't send application/json without a CORS preflight).
+ */
+function checkPost(req, deps) {
+  if (req.method !== "POST") return null;
+  const origin = header(req.headers, "origin");
+  const allowed = req.allowedOrigins ?? [originOf(deps.siteUrl)].filter(Boolean);
+  if (origin !== undefined && allowed.length && !allowed.includes(origin)) {
+    return { status: 403, body: { error: "forbidden" } };
+  }
+  if (req.hasBody) {
+    const type = String(header(req.headers, "content-type") ?? "").toLowerCase();
+    if (!type.startsWith("application/json")) return { status: 415, body: { error: "bad_request" } };
+  }
+  return null;
+}
+
 export async function buildMe(ctx) {
   const { repo, now } = ctx.deps;
   const { account, session } = ctx;
@@ -145,6 +176,8 @@ export function createRouter(deps) {
       body: res.body,
       ...(res.setCookies.length ? { setCookies: res.setCookies } : {}),
     });
+    const refused = checkPost(req, deps);
+    if (refused) return refused;
     try {
       const route = routes.find((r) => r.method === req.method && r.path === req.path);
       if (!route) throw httpError("not_found");

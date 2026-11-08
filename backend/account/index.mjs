@@ -80,6 +80,7 @@ export function makeHandler(routerFactory) {
       headers: event.headers ?? {},
       cookies,
       body,
+      hasBody: typeof raw === "string" && raw.length > 0,
       ip: clientIp(event),
     });
     return respond(res.status, res.body, res.setCookies);
