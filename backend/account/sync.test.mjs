@@ -266,3 +266,69 @@ test("topics named toString/hasOwnProperty work through the endpoints", async ()
   assert.equal(res.body.progress.topics.toString.solved, 1);
   assert.equal(res.body.progress.topics.hasOwnProperty.hist.length, 1);
 });
+
+// ---- Caps (the test clock is 2026-01-01 12:00 UTC) ----
+
+const dayAfter = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400e3).toISOString().slice(0, 10);
+
+test("sync accepts tomorrow (time zones) but rejects events dated later", async () => {
+  const { app, pid } = await setup();
+  assert.equal((await app.call("POST", "/progress/sync", { profileId: pid, events: [activity("t1", { d: "2026-01-02" })] })).status, 200);
+  for (const ev of [activity("t2", { d: "2026-01-03" }), outcome("t3", { d: "2027-06-01" })]) {
+    const res = await app.call("POST", "/progress/sync", { profileId: pid, events: [ev] });
+    assert.deepEqual([res.status, res.body], [400, { error: "bad_request" }]);
+  }
+  const got = await app.call("POST", "/progress/get", { profileId: pid });
+  assert.deepEqual(Object.keys(got.body.progress.days), ["2026-01-02"]);
+});
+
+test("sync rejects a batch that would take a profile past 100 topics; existing topics still work", async () => {
+  const { app, pid } = await setup();
+  const fill = Array.from({ length: 100 }, (_, i) => activity(`f${i}`, { topic: `T${i}` }));
+  assert.equal((await app.call("POST", "/progress/sync", { profileId: pid, events: fill })).status, 200);
+  const extra = await app.call("POST", "/progress/sync", { profileId: pid, events: [activity("x1", { topic: "New" })] });
+  assert.deepEqual([extra.status, extra.body], [400, { error: "bad_request" }]);
+  const same = await app.call("POST", "/progress/sync", { profileId: pid, events: [activity("x2", { topic: "T5" })] });
+  assert.equal(same.status, 200);
+  assert.equal(Object.keys(same.body.progress.topics).length, 100);
+  assert.equal(same.body.progress.topics.T5.solved, 2);
+});
+
+test("sync keeps at most 800 days, dropping the oldest", async () => {
+  const { app, pid } = await setup();
+  const days = {};
+  for (let i = 0; i < 800; i++) days[dayAfter("2023-01-01", i)] = 1;
+  await app.repo.updateProgress(pid, (p) => ({ ...p, days }));
+  const res = await app.call("POST", "/progress/sync", { profileId: pid, events: [activity("d1", { d: "2026-01-01" })] });
+  assert.equal(res.status, 200);
+  const keys = Object.keys(res.body.progress.days).sort();
+  assert.equal(keys.length, 800);
+  assert.equal(keys.includes("2023-01-01"), false);
+  assert.equal(keys.includes("2026-01-01"), true);
+});
+
+test("merge applies the same caps: future dates rejected, 100 topics, 800 days", async () => {
+  const { app, pid } = await setup();
+  const mastery = (over) => ({ topics: {}, streak: { count: 0, last: "" }, days: {}, ...over });
+  const merge = (local, mergeId) => app.call("POST", "/progress/merge", { profileId: pid, mergeId, local: { mastery: local, prefs: null } });
+  assert.equal((await merge(mastery({ days: { "2026-01-05": 1 } }), "m1")).status, 400);
+  assert.equal((await merge(mastery({ streak: { count: 1, last: "2026-02-01" } }), "m2")).status, 400);
+  assert.equal((await merge(mastery({ topics: { A: { attempted: 1, solved: 0, hist: [{ d: "2026-03-01", ok: 1, hints: 0, turns: 1 }] } } }), "m3")).status, 400);
+
+  const fill = Array.from({ length: 60 }, (_, i) => activity(`f${i}`, { topic: `S${i}` }));
+  await app.call("POST", "/progress/sync", { profileId: pid, events: fill });
+  const topics = {};
+  for (let i = 0; i < 60; i++) topics[`L${i}`] = { attempted: 1, solved: 0, hist: [] };
+  const tooMany = await merge(mastery({ topics }), "m4");
+  assert.deepEqual([tooMany.status, tooMany.body], [400, { error: "bad_request" }]);
+
+  const days = {};
+  for (let i = 0; i < 900; i++) days[dayAfter("2023-06-01", i)] = 1;
+  const big = await merge(mastery({ days }), "m5");
+  assert.equal(big.status, 200);
+  const keys = Object.keys(big.body.progress.days).sort();
+  assert.equal(keys.length, 800);
+  // 900 merged days plus today's from the sync above: the oldest 101 go.
+  assert.equal(keys[0], dayAfter("2023-06-01", 101));
+  assert.equal(keys.at(-1), "2026-01-01");
+});
