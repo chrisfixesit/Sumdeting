@@ -41,6 +41,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Nothing later in this job needs Git credentials.
+          persist-credentials: false
 
       - name: AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -98,4 +101,4 @@ jobs:
     with:
       # The CSP still allows cdnjs until the 'self'-only policy lands in tofu-or-not-tofu (Plan 3b
       # Task 8c). Flip this to true in that change.
-      strict_csp: false
+      strict_csp: "false"
