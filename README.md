@@ -33,7 +33,7 @@ Most AI tutors default to US curricula and contexts. SumDeTing is syllabus-aware
 
 ## Run locally with Docker
 
-The same tutor logic (`backend/tutor.mjs`) runs in a hardened container for local development and demos. You need AWS credentials with Bedrock access (via `~/.aws` or environment variables).
+The same tutor logic (`backend/tutor.mjs`) runs in a hardened container for local development and demos. You need AWS credentials with Bedrock access (via `~/.aws` or environment variables). Use Docker Engine 28.0.0 or later: the port is published on `127.0.0.1` only, and older Linux engines don't fully isolate localhost-published ports from the local network.
 
 ```bash
 docker compose up --build
@@ -48,11 +48,12 @@ Prerequisites: an AWS account with Bedrock model access enabled for Claude (chec
 
 ```bash
 cd infra
+cp terraform.tfvars.example terraform.tfvars   # then fill in your own values
 tofu init
 tofu apply
 ```
 
-Outputs include `site_url` (the CloudFront URL) and `api_url` (the same-origin `/api` path). The Function URL itself requires IAM auth and only accepts SigV4-signed requests from this CloudFront distribution (Origin Access Control), so there is no public API endpoint to abuse. A monthly cost budget (`alert_email`, `monthly_budget_usd` in `infra/variables.tf`) emails you if spend runs hot.
+Outputs include `site_url` (the CloudFront URL) and `api_url` (the same-origin `/api` path). The Function URL itself requires IAM auth and only accepts SigV4-signed requests from this CloudFront distribution (Origin Access Control), so there is no public API endpoint to abuse. A monthly cost budget emails `alert_email` (set in `infra/terraform.tfvars`) if spend runs hot; the limit is `monthly_budget_usd` in `infra/variables.tf`.
 
 Cost: serverless throughout; a few cents per study session with Claude Haiku.
 
@@ -73,7 +74,7 @@ Cost: serverless throughout; a few cents per study session with Claude Haiku.
 - Security headers (CSP locked to `'self'`, HSTS, `frame-ancestors 'none'`) are set at CloudFront.
 - The code is audited with Cloudflare's [security-audit skill](https://github.com/cloudflare/security-audit-skill); findings are fixed in the open.
 
-Found a vulnerability? Please open a private [security advisory](../../security/advisories/new) rather than a public issue.
+Found a vulnerability? Please open a private [security advisory](https://github.com/chrisfixesit/Sumdeting/security/advisories/new) rather than a public issue.
 
 ## Roadmap
 

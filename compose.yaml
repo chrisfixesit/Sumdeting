@@ -3,7 +3,9 @@ services:
     build: .
     ports:
       # Localhost only: the container uses your own AWS credentials, so don't
-      # expose it to the rest of the network
+      # expose it to the rest of the network. Needs Docker Engine 28.0.0+:
+      # older Linux engines let hosts on the same L2 network reach ports
+      # published on 127.0.0.1.
       - "127.0.0.1:8080:8080"
     environment:
       # Bedrock model/inference profile (must be enabled in your account)

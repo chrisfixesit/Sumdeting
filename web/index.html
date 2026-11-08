@@ -1393,8 +1393,9 @@
 
     // Runs after every completed tutor reply.
     function afterReply(replyText) {
-      // The prompt asks the tutor to lead with ✅ only when a final answer is correct.
-      if (replyText.includes("✅")) {
+      // The prompt asks the tutor to lead with ✅ only when a final answer is
+      // correct, so a ✅ elsewhere in the reply doesn't count as a solve.
+      if (replyText.trimStart().startsWith("✅")) {
         recordActivity(currentTopic || "General", true);
         if (activeProblem) {
           recordOutcome(activeProblem.topic, true, activeProblem.hints, activeProblem.userTurns);

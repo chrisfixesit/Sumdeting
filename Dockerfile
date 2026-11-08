@@ -15,6 +15,7 @@ WORKDIR /app
 COPY --from=deps --chown=node:node /app/backend/node_modules backend/node_modules
 COPY --chown=node:node backend/tutor.mjs backend/
 COPY --chown=node:node web/index.html web/
+COPY --chown=node:node web/vendor/ web/vendor/
 COPY --chown=node:node server.mjs .
 
 ENV NODE_ENV=production \

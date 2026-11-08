@@ -88,12 +88,25 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && req.url === "/api/chat") {
-    let raw = "";
+    // Count bytes, not characters, and decode once at the end so multi-byte
+    // characters split across chunks survive. 5 MB fits 4 photos + history.
+    const chunks = [];
+    let size = 0;
+    let tooLarge = false;
     req.on("data", (chunk) => {
-      raw += chunk;
-      if (raw.length > 4_000_000) req.destroy(); // allow base64 photos
+      if (tooLarge) return;
+      size += chunk.length;
+      if (size > 5_000_000) {
+        tooLarge = true;
+        json(res, 413, { error: "Request too large" });
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
     });
     req.on("end", async () => {
+      if (tooLarge) return;
+      const raw = Buffer.concat(chunks).toString("utf-8");
       // An exception escaping this async listener would be an unhandled
       // rejection, which terminates the whole server process.
       try {
