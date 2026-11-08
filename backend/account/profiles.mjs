@@ -7,6 +7,7 @@ export const COLOURS = ["#F4C143", "#BFD0FF", "#C8E6C9", "#F8C9B8", "#E1C6F2", "
 const UNLOCK_MS = 15 * 60 * 1000;
 const CONSENT_TOKEN_SEC = 7 * 24 * 3600;
 const HOUR_SEC = 3600;
+const MAX_PROFILES = 10;
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 
 const bad = () => httpError("bad_request");
@@ -66,6 +67,7 @@ export function register(router) {
     const colour = cleanColour(b.colour);
 
     const owned = (await repo.listAccessForAccount(account.id)).filter((a) => a.kind === "owner");
+    if (owned.length >= MAX_PROFILES) throw forbidden();
     let fields;
     let invitee = null;
 
@@ -86,6 +88,9 @@ export function register(router) {
       } else {
         const parentEmail = normaliseEmail(b.parentEmail);
         if (!parentEmail || parentEmail === account.email) throw bad();
+        if (!(await repo.hitRate(`consent:create:${account.id}`, HOUR_SEC, 5))) {
+          throw httpError("rate_limited");
+        }
         const existing = await repo.findAccountByEmail(parentEmail);
         if (existing?.type === "student") throw new HttpError(400, "parent_email_is_student");
         fields = { under13: true, consentStatus: "awaiting_parent", parentEmail };
@@ -149,6 +154,8 @@ export function register(router) {
     const { profileId, approve } = ctx.req.body;
     if (typeof profileId !== "string" || !profileId || typeof approve !== "boolean") throw bad();
     const { account } = ctx;
+    if (account.type === "student") throw new HttpError(400, "parent_email_is_student");
+    if (account.type === "parent" && !isUnlocked(ctx)) throw httpError("parent_locked");
     const invite = (await repo.listInvitesForEmail(account.email)).find(
       (i) => i.kind === "consent" && i.profileIds?.includes(profileId)
     );
@@ -194,15 +201,17 @@ export function register(router) {
     if (!(await repo.hitRate(`consent:resend:${ctx.account.id}`, HOUR_SEC, 5))) {
       throw httpError("rate_limited");
     }
+    // Replace the invite so it gets a fresh 30-day ttl.
     const invites = await repo.listInvitesForEmail(profile.parentEmail);
-    if (!invites.some((i) => i.kind === "consent" && i.profileIds?.includes(profileId))) {
-      await repo.createInvite({
-        kind: "consent",
-        fromAccountId: ctx.account.id,
-        toEmail: profile.parentEmail,
-        profileIds: [profileId],
-      });
+    for (const i of invites) {
+      if (i.kind === "consent" && i.profileIds?.includes(profileId)) await repo.deleteInvite(i.id);
     }
+    await repo.createInvite({
+      kind: "consent",
+      fromAccountId: ctx.account.id,
+      toEmail: profile.parentEmail,
+      profileIds: [profileId],
+    });
     await sendConsentRequest(ctx.deps, profile.parentEmail, profile.firstName);
     return {};
   });

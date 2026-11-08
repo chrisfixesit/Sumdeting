@@ -337,3 +337,59 @@ test("consent token in the email is valid for 7 days", async () => {
   const res = await app.call("POST", "/signin/verify", { token: tokenFrom(mail) }, { cookie: {} });
   assert.equal(res.status, 400);
 });
+
+test("under-13 invite creation is rate limited 5/hour -> 429", async () => {
+  const app = makeApp();
+  await signIn(app, "kid@x.com");
+  await app.call("POST", "/setup", { type: "student", holderOver13: false });
+  const acct = await app.repo.findAccountByEmail("kid@x.com");
+  for (let i = 0; i < 5; i++) assert.equal(await app.repo.hitRate(`consent:create:${acct.id}`, 3600, 5), true);
+  const res = await app.call("POST", "/profiles/create", child({ over13: false, parentEmail: "mum@x.com" }));
+  assert.deepEqual([res.status, res.body], [429, { error: "rate_limited" }]);
+});
+
+test("profiles per account capped at 10", async () => {
+  const app = await parentApp();
+  for (let i = 0; i < 10; i++) assert.equal((await app.call("POST", "/profiles/create", child())).status, 200);
+  const res = await app.call("POST", "/profiles/create", child());
+  assert.deepEqual([res.status, res.body], [403, { error: "forbidden" }]);
+});
+
+test("resend on day 29 refreshes the invite so respond on day 33 succeeds", async () => {
+  const { app, profileId, cookie } = await consentFlow();
+  const DAY = 24 * 3600 * 1000;
+  app.clock.t += 29 * DAY;
+  const kid = await app.repo.findAccountByEmail("kid@x.com");
+  const ks = await app.repo.createSession(kid.id);
+  assert.equal((await app.call("POST", "/consent/resend", { profileId }, { cookie: { sd_session: ks.id } })).status, 200);
+  app.clock.t += 4 * DAY;
+  const res = await app.call("POST", "/consent/respond", { profileId, approve: true }, { cookie });
+  assert.equal(res.status, 200);
+});
+
+test("expired invites are ignored by respond and pendingConsents", async () => {
+  const { app, profileId, cookie } = await consentFlow();
+  app.clock.t += 31 * 24 * 3600 * 1000;
+  const me = await app.call("POST", "/me", {}, { cookie });
+  assert.deepEqual(me.body.pendingConsents, []);
+  assert.equal((await app.call("POST", "/consent/respond", { profileId, approve: true }, { cookie })).status, 403);
+});
+
+test("consent/respond by a student account -> 400 parent_email_is_student", async () => {
+  const { app, profileId, cookie } = await consentFlow();
+  const mum = await app.repo.findAccountByEmail("mum@x.com");
+  await app.repo.updateAccount(mum.id, { type: "student" });
+  const res = await app.call("POST", "/consent/respond", { profileId, approve: true }, { cookie });
+  assert.deepEqual([res.status, res.body], [400, { error: "parent_email_is_student" }]);
+});
+
+test("consent/respond: existing parent must be unlocked; null-type caller need not be", async () => {
+  const { app, profileId, cookie } = await consentFlow();
+  const mum = await app.repo.findAccountByEmail("mum@x.com");
+  await app.repo.updateAccount(mum.id, { type: "parent", setupComplete: true });
+  const locked = await app.call("POST", "/consent/respond", { profileId, approve: true }, { cookie });
+  assert.deepEqual([locked.status, locked.body], [403, { error: "parent_locked" }]);
+  const session = await app.repo.getSession(cookie.sd_session);
+  await app.repo.setParentUnlocked(session.id, app.clock.t + 60000);
+  assert.equal((await app.call("POST", "/consent/respond", { profileId, approve: true }, { cookie })).status, 200);
+});

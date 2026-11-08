@@ -337,7 +337,8 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
       const invites = await Promise.all(
         links.map((l) => repo.getInvite(l.sk.slice("INVITE#".length)))
       );
-      return invites.filter(Boolean);
+      const nowSec = now() / 1000;
+      return invites.filter((i) => i && !(typeof i.ttl === "number" && i.ttl <= nowSec));
     },
     async deleteInvite(id) {
       const invite = await table.get(`INVITE#${id}`, "I");
