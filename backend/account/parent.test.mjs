@@ -72,7 +72,7 @@ test("overview never includes chat or message fields", async () => {
   await unlock(app);
   const ov = await app.call("POST", "/parent/overview");
   assert.deepEqual(Object.keys(ov.body.children[0]).sort(), [
-    "access", "colour", "firstName", "lastName", "level", "profileId", "summary",
+    "access", "colour", "consentGiver", "firstName", "lastName", "level", "profileId", "summary",
   ]);
 });
 

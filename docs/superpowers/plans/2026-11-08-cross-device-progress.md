@@ -374,7 +374,7 @@ Rules, mirroring `web/index.html:1300-1360` exactly:
 - Produces these endpoints, which require a session and an account of type `parent` (otherwise `403 forbidden`):
   - `POST /parent/unlock/start` → `200 {}`. Issues a code (purpose `parent_unlock`, subject = accountId, 10 minutes) and sends `parent_code`. Rate-limited to 5 per hour.
   - `POST /parent/unlock/verify { code }` → `{ parentUnlocked: true }`. Unlocks for 15 minutes. Returns `invalid_code` or `too_many_attempts` on failure.
-  - `POST /parent/overview` (`auth: 'parentUnlocked'`) → `{ children: [{ profileId, firstName, lastName, level, colour, access: 'owner' | 'guardian' | 'view_only', summary: childSummary(progress) }] }`, covering every profile the account has any access to, excluding `awaiting_parent`.
+  - `POST /parent/overview` (`auth: 'parentUnlocked'`) → `{ children: [{ profileId, firstName, lastName, level, colour, access: 'owner' | 'guardian' | 'view_only', consentGiver: boolean (true when this account approved the under-13 profile; used for "Withdraw approval"), summary: childSummary(progress) }] }`, covering every profile the account has any access to, excluding `awaiting_parent`.
   - The router's `parentUnlocked` guard returns `403 parent_locked` when `session.parentUnlockedUntil < now`.
 
 - [ ] **Step 1: Write the failing tests:**

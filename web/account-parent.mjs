@@ -130,6 +130,11 @@ export function createParentSection(ctx) {
           actions.push(remove);
         }
       }
+      if (c.consentGiver) {
+        const withdraw = h("button", { type: "button", class: "acct-secondary acct-secondary-danger" }, `Withdraw approval and delete ${c.firstName}'s data`);
+        withdraw.addEventListener("click", () => busy(withdraw, () => withdrawConsent(pid, status)));
+        actions.push(withdraw);
+      }
       if (c.access !== "owner") {
         const stop = h("button", { type: "button", class: "acct-secondary acct-secondary-danger" }, `Stop seeing ${c.firstName}'s progress`);
         stop.addEventListener("click", () => busy(stop, () => stopSeeing(pid, status)));
@@ -339,6 +344,32 @@ export function createParentSection(ctx) {
       if (d.open) list(`${fullName(c)} has been removed.`);
     }
 
+    /** The parent who approved an under-13 child withdraws that approval: the profile is deleted. */
+    async function withdrawConsent(pid, status) {
+      const c = find(pid);
+      if (!c) return;
+      const sure = await confirmDanger({
+        title: `Withdraw approval for ${fullName(c)}?`,
+        lines: [
+          `This deletes ${c.firstName}'s profile and all of ${c.firstName}'s practice progress from SumDeTing, on every device.`,
+          `${c.firstName} can keep practising on their device, but nothing will be saved to an account.`,
+        ],
+        action: "Withdraw approval",
+        irreversible: true,
+      });
+      if (!sure) return;
+      const r = await ctx.withParentUnlock(() => api("/consent/withdraw", { profileId: pid }));
+      if (!r.ok) {
+        const msg = fail(r);
+        if (msg) status.show(msg);
+        return;
+      }
+      ctx.profileRemoved(pid);
+      drop(pid);
+      await reload();
+      if (d.open) list(`Approval withdrawn. ${c.firstName}'s data has been deleted.`);
+    }
+
     /** A guardian or view-only parent ends their own access to this child. */
     async function stopSeeing(pid, status) {
       const c = find(pid);
@@ -346,9 +377,12 @@ export function createParentSection(ctx) {
       if (!c || !self) return;
       const sure = await confirmDanger({
         title: `Stop seeing ${c.firstName}'s progress?`,
-        lines: [c.access === "guardian"
-          ? `You will no longer be able to practise as ${c.firstName} or see ${c.firstName}'s progress. Another parent or guardian can invite you again.`
-          : `You will no longer see ${c.firstName}'s progress. ${c.firstName} can share it with you again.`],
+        lines: c.consentGiver
+          ? [`You approved ${c.firstName}'s profile. If you stop seeing it, ${c.firstName}'s profile goes back to waiting for a parent's approval and the progress saved on SumDeTing is deleted.`,
+            "We'll email you to approve again. To delete everything instead, choose Withdraw approval."]
+          : [c.access === "guardian"
+            ? `You will no longer be able to practise as ${c.firstName} or see ${c.firstName}'s progress. Another parent or guardian can invite you again.`
+            : `You will no longer see ${c.firstName}'s progress. ${c.firstName} can share it with you again.`],
         action: "Stop seeing",
       });
       if (!sure) return;

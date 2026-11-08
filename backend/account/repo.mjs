@@ -150,6 +150,10 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
       const item = await update(profileKey(pid), "META", (i) => ({ ...i, ownerAccountId: accountId }));
       return item ? { id: pid, ...strip(item) } : null;
     },
+    /** Remove a profile's server-side progress (consent ended). */
+    async deleteProgress(pid) {
+      await table.delete(profileKey(pid), "PROGRESS");
+    },
     async deleteProfile(pid) {
       const access = await table.query(profileKey(pid), "ACCESS#");
       const ops = [

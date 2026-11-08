@@ -71,7 +71,7 @@ The mockups from the brainstorm are in `.superpowers/brainstorm/70060-1794155028
      - **On decline, or no answer after 7 days:** the waiting profile and its account details are deleted, and the device goes back to signed out. *(My call.)*
    - **Siblings on student accounts:** a student account can add another profile only if the account holder is 13 or older, and each added sibling goes through the same "13 or older?" question, so under-13 siblings need parent approval too. *(My call.)*
 
-The parent's approval is recorded per profile (who approved and when). An under-13 student can't use "Stop sharing" on the parent who approved them.
+The parent's approval is recorded per profile (who approved and when). An under-13 student can't use "Stop sharing" on the parent who approved them. The approving parent can withdraw approval at any time, which deletes the profile and its progress (see "Withdrawing approval" under "Parent section"). If the approving parent instead leaves without withdrawing (removes their own link, deletes their account, or is deleted for inactivity) and no other approving parent remains, the profile goes back to waiting for approval: its saved progress on the server is deleted, the parent's email is kept and a fresh approval email is sent, the student keeps practising on the device as for any waiting profile (and can resend), and the usual 7-day rule runs from that moment.
 
 The account records which path was taken (`parent` or `student`), because only parent accounts get the parent section.
 
@@ -118,6 +118,13 @@ Merge rules:
   - **Confident:** the last 2–3 were solved with no hints in 3 turns or fewer (the same rule `difficultyGuidance` uses to make problems harder).
   - **Getting there:** anything else.
 - Children linked from their own accounts appear here too, marked "View only".
+
+#### Withdrawing approval
+
+- On the progress page of an under-13 child they approved, the parent sees "Withdraw approval and delete <First>'s data".
+- It asks for confirmation (it can't be undone): it deletes the child's profile and progress from SumDeTing on every device, and the child can keep practising on their device without saving.
+- It needs the parent section to be unlocked, like every other change there. Afterwards the list shows "Approval withdrawn. <First>'s data has been deleted."
+- If the student account then owns no profiles, it is deleted too.
 
 ### Linking a parent to a child who has their own account
 

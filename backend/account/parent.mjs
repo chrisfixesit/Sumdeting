@@ -57,6 +57,7 @@ export function register(router) {
           level: p.level,
           colour: p.colour,
           access: a.kind,
+          consentGiver: a.consentGiver === true,
           summary: childSummary(progress),
         });
       }

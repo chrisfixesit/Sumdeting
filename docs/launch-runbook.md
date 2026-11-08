@@ -100,7 +100,9 @@ The service stores children's data (names, profile and progress data) and parent
    - Invite and consent email links expire after 7 days.
    - Pending invites expire after 30 days.
    - Unfinished sign-ups are deleted after 7 days. (A parent's setup is complete as soon as they choose "parent", so this applies to accounts that never chose a type, and to students who never saved their own profile.)
-   - Under-13 profiles still waiting for a parent are deleted after 7 days.
+   - Under-13 profiles still waiting for a parent are deleted after 7 days (counted from when they started waiting again, if their approving parent left).
+   - The approving parent can withdraw approval (`/consent/withdraw`, behind the parent code): the profile, its progress and its access links are deleted at once, and the student account too if it owns nothing else.
+   - If the approving parent removes their own link, deletes their account or is retention-deleted without withdrawing, and no other approving parent remains, the under-13 profile goes back to waiting: its server-side progress is deleted, a new consent email goes to the same parent address, and the 7-day rule applies again.
    - Inactive accounts get a warning email at 700 days idle and are deleted only when idle for more than 730 days and at least 30 days after the warning. Any activity resets this. The sign-in link in the warning email works for 30 days.
    - When an idle account is deleted, each child profile it owns that has a guardian who was active in the last 730 days moves to the most recently active guardian (who becomes the owner) instead of being deleted.
    - The sign-in cookie lasts until 90 days after last use.

@@ -986,3 +986,34 @@ test("signing out with unsaved practice asks first", async ({ page, request }) =
   await dialog(page).getByRole("button", { name: "Sign out" }).click();
   await expect(accountBtn(page)).toHaveAttribute("aria-label", /sign in/i);
 });
+
+test("the approving parent withdraws an under-13 child's approval; the child disappears", async ({ browser, page, request }) => {
+  const parentEmail = uniqueEmail("withdraw");
+  await signIn(page, request, uniqueEmail("withdraw-kid"));
+  await dialog(page).getByRole("button", { name: /I'm a student/ }).click();
+  await fillProfile(dialog(page), { first: "Tia", last: "Rowe", level: "Common Entrance" });
+  await dialog(page).getByRole("radio", { name: "No" }).check();
+  await dialog(page).getByLabel(/parent's or guardian's email/i).fill(parentEmail);
+  await dialog(page).getByRole("button", { name: "Start practising" }).click();
+  const mail = await lastMail(request, parentEmail, "consent_request");
+  const pc = await browser.newContext();
+  const pp = await pc.newPage();
+  await pp.goto(`/#signin=${tokenOf(mail)}`);
+  await dialog(pp).getByLabel(PARENT_CONSENT).check();
+  await dialog(pp).getByRole("button", { name: "Approve" }).click();
+  await expect(pp.getByText("You approved Tia. Their practice progress will be saved.")).toBeVisible();
+  const before = await mailCount(request, parentEmail, "parent_code");
+  await dialog(pp).getByRole("button", { name: "See how everyone is doing" }).click();
+  await unlock(pp, request, parentEmail, before);
+  await childRow(pp, "Tia Rowe").click();
+  await dialog(pp).getByRole("button", { name: "Withdraw approval and delete Tia's data" }).click();
+  const sure = dialog(pp);
+  await expect(sure.getByRole("heading", { name: "Withdraw approval for Tia Rowe?" })).toBeVisible();
+  await expect(sure).toContainText("can keep practising on their device");
+  await expect(sure).toContainText("can't be undone");
+  await sure.getByRole("button", { name: "Withdraw approval" }).click();
+  await expect(overviewHeading(pp)).toBeVisible();
+  await expect(dialog(pp).getByRole("status")).toContainText("Approval withdrawn. Tia's data has been deleted.");
+  await expect(childRow(pp, "Tia Rowe")).toHaveCount(0);
+  await pc.close();
+});

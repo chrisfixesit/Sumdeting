@@ -2,12 +2,12 @@ import { normaliseEmail } from "./tokens.mjs";
 import { HttpError, httpError } from "./http.mjs";
 import { deleteAccountCascade } from "./deletion.mjs";
 import { limitRecipient } from "./links.mjs";
+import { sendConsentRequest } from "./consent.mjs";
 
 export const LEVELS = ["Common Entrance", "CSEC", "Additional Maths", "CAPE"];
 export const COLOURS = ["#F4C143", "#BFD0FF", "#C8E6C9", "#F8C9B8", "#E1C6F2", "#FFE0A3"];
 
 const UNLOCK_MS = 15 * 60 * 1000;
-const CONSENT_TOKEN_SEC = 7 * 24 * 3600;
 const HOUR_SEC = 3600;
 const MAX_PROFILES = 10;
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
@@ -34,10 +34,6 @@ function cleanColour(v) {
 
 const isUnlocked = (ctx) => (ctx.session?.parentUnlockedUntil ?? 0) > ctx.deps.now();
 
-async function sendConsentRequest(deps, parentEmail, childFirstName) {
-  const token = await deps.repo.issueToken("signin", parentEmail, CONSENT_TOKEN_SEC);
-  await deps.mailer.send("consent_request", parentEmail, { token, childFirstName });
-}
 
 export function register(router) {
   router.route("POST", "/setup", async (ctx) => {
@@ -180,11 +176,38 @@ export function register(router) {
       await repo.deleteInvite(invite.id);
       const owner = await repo.getAccount(ownerId);
       if (owner?.type === "student" && !(await repo.listAccessForAccount(ownerId)).some((a) => a.kind === "owner")) {
-        await deleteAccountCascade(repo, ownerId);
+        await deleteAccountCascade(repo, ownerId, ctx.deps);
       }
     }
     return {};
   });
+
+  // The parent who approved an under-13 profile withdraws approval: the profile
+  // and its progress are deleted (the child keeps practising on their device).
+  router.route("POST", "/consent/withdraw", async (ctx) => {
+    const { repo } = ctx.deps;
+    const { profileId } = ctx.req.body;
+    if (typeof profileId !== "string" || !profileId) throw bad();
+    const profile = await repo.getProfile(profileId);
+    const mine = profile
+      ? (await repo.listAccessForProfile(profileId)).find((a) => a.accountId === ctx.account.id)
+      : null;
+    if (!profile || profile.under13 !== true || mine?.kind !== "view_only" || mine.consentGiver !== true) {
+      throw forbidden();
+    }
+    if (profile.parentEmail) {
+      for (const i of await repo.listInvitesForEmail(profile.parentEmail)) {
+        if (i.kind === "consent" && i.profileIds?.includes(profileId)) await repo.deleteInvite(i.id);
+      }
+    }
+    await repo.deleteProfile(profileId);
+    const ownerId = profile.ownerAccountId;
+    const owner = await repo.getAccount(ownerId);
+    if (owner?.type === "student" && !(await repo.listAccessForAccount(ownerId)).some((a) => a.kind === "owner")) {
+      await deleteAccountCascade(repo, ownerId, ctx.deps);
+    }
+    return { withdrawn: true };
+  }, { auth: "parentUnlocked" });
 
   router.route("POST", "/consent/resend", async (ctx) => {
     const { repo } = ctx.deps;

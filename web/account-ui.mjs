@@ -393,7 +393,7 @@ async function flushNow({ keepalive = false } = {}) {
   try { res = await inflight; } finally { inflight = null; }
   if (state.syncPid !== pid) return res;
   if (res === "signedOut") dropToSignedOut(SIGNED_OUT_MSG);
-  else if (res === "gone") profileGone(pid);
+  else if (res === "gone") await goneOrAwaiting(pid);
   else if (res === "retry") scheduleFlush(RETRY_MS);
   return res;
 }
@@ -450,6 +450,20 @@ function dropToSignedOut(message) {
   closeAllDialogs();
   render();
   showNotice(message);
+}
+
+/**
+ * Sync was refused. If the profile went back to waiting for a parent (its
+ * approving parent left), keep practising on this device as for any waiting
+ * profile; otherwise it is gone.
+ */
+async function goneOrAwaiting(pid) {
+  const r = await refreshMe();
+  const p = r.ok ? selectable().find((x) => x.id === pid) : null;
+  if (p?.consentStatus === "awaiting_parent" && state.syncPid === pid) {
+    return chooseProfile(p, { explicit: false });
+  }
+  return profileGone(pid);
 }
 
 /** The active profile was deleted or access removed: forget it and fall back to signed-out storage. */

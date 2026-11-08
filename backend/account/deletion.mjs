@@ -1,4 +1,5 @@
 import { httpError, clearCookie, COOKIE_NAME } from "./http.mjs";
+import { revertIfLastConsentGiver } from "./consent.mjs";
 
 const DAY_MS = 86400e3;
 const RETENTION_DAYS = 730;
@@ -9,19 +10,29 @@ const CODE_TTL_SEC = 600;
 const HOUR_SEC = 3600;
 const WARNING_TOKEN_SEC = 30 * 24 * 3600;
 
-/** Delete an account and everything it owns. Safe to call again after a partial failure. */
-export async function deleteAccountCascade(repo, accountId) {
+/**
+ * Delete an account and everything it owns. Safe to call again after a partial
+ * failure. `deps` ({ repo, mailer, now }) lets an under-13 profile this account
+ * approved go back to waiting for a parent (see consent.mjs).
+ */
+export async function deleteAccountCascade(repo, accountId, deps = { repo, now: () => Date.now() }) {
   const account = await repo.getAccount(accountId);
-  for (const a of await repo.listAccessForAccount(accountId)) {
-    if (a.kind === "owner") await repo.deleteProfile(a.profileId);
-    else await repo.revokeAccess(accountId, a.profileId);
-  }
+  // Invites first: a consent-giver leaving below creates a fresh consent invite
+  // to the parent's email, which must survive.
   for (const invite of await repo.listInvitesFromAccount(accountId)) {
     await repo.deleteInvite(invite.id);
   }
   if (account) {
     for (const invite of await repo.listInvitesForEmail(account.email)) {
       await repo.deleteInvite(invite.id);
+    }
+  }
+  for (const a of await repo.listAccessForAccount(accountId)) {
+    if (a.kind === "owner") {
+      await repo.deleteProfile(a.profileId);
+    } else {
+      if (a.consentGiver === true) await revertIfLastConsentGiver({ ...deps, repo }, accountId, a.profileId);
+      await repo.revokeAccess(accountId, a.profileId);
     }
   }
   await repo.deleteAccountRecord(accountId);
@@ -100,7 +111,7 @@ export function register(router) {
   router.route("POST", "/account/delete", async (ctx) => {
     const { repo } = ctx.deps;
     await requireDeleteLock(ctx, ctx.req.body.code);
-    await deleteAccountCascade(repo, ctx.account.id);
+    await deleteAccountCascade(repo, ctx.account.id, ctx.deps);
     const sid = ctx.req.cookies?.[COOKIE_NAME];
     if (sid) await repo.deleteSession(sid);
     ctx.res.setCookies.push(clearCookie(ctx.deps));
@@ -112,6 +123,7 @@ export function register(router) {
 export async function runJanitor({ repo, mailer, now = () => Date.now() }) {
   const result = { warned: 0, deletedAccounts: 0, deletedAwaiting: 0, deletedUnfinished: 0 };
   const t = now();
+  const deps = { repo, mailer, now };
   const safe = async (label, fn) => {
     try {
       return await fn();
@@ -124,7 +136,9 @@ export async function runJanitor({ repo, mailer, now = () => Date.now() }) {
   // Consent never given within the grace period.
   for (const profile of await repo.listProfiles()) {
     if (profile.consentStatus !== "awaiting_parent") continue;
-    if (!(typeof profile.createdAt === "number" && t - profile.createdAt > GRACE_DAYS * DAY_MS)) continue;
+    // A profile that went back to waiting (its approving parent left) counts from then.
+    const since = profile.awaitingSince ?? profile.createdAt;
+    if (!(typeof since === "number" && t - since > GRACE_DAYS * DAY_MS)) continue;
     const ok = await safe(`awaiting profile ${profile.id}`, async () => {
       // Consent invites are addressed to the parent's email: a keyed query, not a table scan.
       const invites = (profile.parentEmail ? await repo.listInvitesForEmail(profile.parentEmail) : [])
@@ -137,7 +151,7 @@ export async function runJanitor({ repo, mailer, now = () => Date.now() }) {
       for (const i of invites) await repo.deleteInvite(i.id);
       if (ownerIsStudent) {
         const owned = (await repo.listAccessForAccount(owner.id)).filter((a) => a.kind === "owner");
-        if (owned.length === 0) await deleteAccountCascade(repo, owner.id);
+        if (owned.length === 0) await deleteAccountCascade(repo, owner.id, deps);
         else await repo.updateAccount(owner.id, { pendingCascade: false });
       }
       return true;
@@ -153,10 +167,10 @@ export async function runJanitor({ repo, mailer, now = () => Date.now() }) {
         typeof account.warningSentAt === "number" && t - account.warningSentAt >= WARN_LEAD_DAYS * DAY_MS;
       if (idleDays > RETENTION_DAYS && warnedLongEnough) {
         await handOverToActiveGuardians(repo, account.id, t);
-        await deleteAccountCascade(repo, account.id);
+        await deleteAccountCascade(repo, account.id, deps);
         result.deletedAccounts++;
       } else if (account.setupComplete !== true && t - account.createdAt > GRACE_DAYS * DAY_MS) {
-        await deleteAccountCascade(repo, account.id);
+        await deleteAccountCascade(repo, account.id, deps);
         result.deletedUnfinished++;
       } else if (
         account.type === "student" &&
@@ -164,7 +178,7 @@ export async function runJanitor({ repo, mailer, now = () => Date.now() }) {
         !(await repo.listAccessForAccount(account.id)).some((a) => a.kind === "owner")
       ) {
         // Flagged by an awaiting sweep whose cascade failed part-way.
-        await deleteAccountCascade(repo, account.id);
+        await deleteAccountCascade(repo, account.id, deps);
         result.deletedAwaiting++;
       } else if (idleDays > WARN_DAYS && !account.warningSentAt) {
         const token = await repo.issueToken("signin", account.email, WARNING_TOKEN_SEC);

@@ -1,5 +1,6 @@
 import { normaliseEmail } from "./tokens.mjs";
 import { httpError } from "./http.mjs";
+import { revertIfLastConsentGiver } from "./consent.mjs";
 
 const SIGNIN_TTL_SEC = 7 * 24 * 3600;
 const HOUR_SEC = 3600;
@@ -235,6 +236,9 @@ export function register(router) {
     if (!canRemove({ callerId: ctx.account.id, callerKind: kind, targetId: accountId, target, profile })) {
       throw forbidden();
     }
+    // Only the approving parent can remove their own consent-giver link; without
+    // a withdrawal, the profile goes back to waiting for approval.
+    if (target.consentGiver === true) await revertIfLastConsentGiver(ctx.deps, accountId, profileId);
     await repo.revokeAccess(accountId, profileId);
     for (const i of await repo.listInvitesFromAccount(accountId)) {
       if ((i.kind === "share" || i.kind === "guardian") && i.profileIds?.includes(profileId)) {
