@@ -8,3 +8,18 @@ node_modules/
 
 # FUSE deleted-but-open tempfiles
 .fuse_hidden*
+
+# Operator-specific Terraform values (see infra/terraform.tfvars.example)
+*.tfvars
+!*.tfvars.example
+
+# Secrets and local Python caches
+.env
+.env.*
+*.pem
+*.key
+__pycache__/
+
+# Local QA/audit notes (contain operator details)
+QA-REPORT.md
+SECURITY-QA-AUDIT.md

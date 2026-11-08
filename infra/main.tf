@@ -17,7 +17,7 @@ provider "aws" {
 }
 
 # Cross-account provider: assumes Route53RecordWriter in the DNS management
-# account (438465156498) to write records in 246labs.cloud.
+# account (var.dns_role_arn) to write records in the site's hosted zone.
 provider "aws" {
   alias  = "dns"
   region = "us-east-1"
@@ -184,6 +184,36 @@ resource "aws_s3_object" "apple_touch_icon" {
   etag         = filemd5("${path.module}/../web/apple-touch-icon.png")
 }
 
+# Self-hosted third-party assets (fonts, KaTeX + its fonts, marked, DOMPurify).
+# Serving these from our own origin removes all runtime CDN dependencies —
+# after two silent production breakages via cdnjs (missing version 503s, then
+# wrong SRI hashes) — and lets the CSP stay locked to 'self'.
+locals {
+  vendor_files = fileset("${path.module}/../web/vendor", "**")
+  vendor_mime = {
+    css   = "text/css"
+    js    = "text/javascript"
+    mjs   = "text/javascript"
+    woff2 = "font/woff2"
+    woff  = "font/woff"
+    ttf   = "font/ttf"
+    map   = "application/json"
+  }
+}
+
+# Versioned paths (katex-0.16.21/..., marked-15.0.12.min.js) are safe to cache
+# hard. Unversioned ones (fonts/fonts.css and its font files) get a day, so an
+# update reaches returning browsers.
+resource "aws_s3_object" "vendor" {
+  for_each      = { for f in local.vendor_files : f => f }
+  bucket        = aws_s3_bucket.web.id
+  key           = "vendor/${each.value}"
+  source        = "${path.module}/../web/vendor/${each.value}"
+  etag          = filemd5("${path.module}/../web/vendor/${each.value}")
+  content_type  = lookup(local.vendor_mime, regex("\\.([a-z0-9]+)$", each.value)[0], "application/octet-stream")
+  cache_control = can(regex("[0-9]+\\.[0-9]+\\.[0-9]+", each.value)) ? "public, max-age=31536000, immutable" : "public, max-age=86400"
+}
+
 # SumDeTing brand images referenced by index.html <head> and the manifest.
 resource "aws_s3_object" "brand_images" {
   for_each = toset([
@@ -215,7 +245,12 @@ resource "aws_cloudfront_origin_access_control" "api" {
   signing_protocol                  = "sigv4"
 }
 
-# Security headers for the static site (CSP locked to self + cdnjs).
+# Security headers for the static site. CSP is locked to 'self' only: every
+# third-party asset (fonts, KaTeX, marked, DOMPurify) is self-hosted under
+# /vendor. NOTE: the previous cdnjs-based CSP silently blocked the Google
+# Fonts stylesheet the redesign added (fonts.googleapis.com was never in
+# style-src), so the brand typography never loaded in production — fixed by
+# self-hosting the fonts.
 resource "aws_cloudfront_response_headers_policy" "security" {
   name = "${var.project}-security-headers"
 
@@ -237,7 +272,7 @@ resource "aws_cloudfront_response_headers_policy" "security" {
       override                   = true
     }
     content_security_policy {
-      content_security_policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src https://cdnjs.cloudflare.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+      content_security_policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
       override                = true
     }
   }
