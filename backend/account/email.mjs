@@ -32,8 +32,8 @@ const TEMPLATES = {
     code,
     ignore: true,
   }),
-  consent_request: ({ childFirstName }) => ({
-    subject: `${childFirstName} wants to use SumDeTing`,
+  consent_request: ({ childFirstName }, sv) => ({
+    subject: `${sv.childFirstName} wants to use SumDeTing`,
     why: "You're getting this because a child entered your email as their parent or guardian.",
     body: [
       `${childFirstName} wants to use SumDeTing. Approve saving their practice progress?`,
@@ -42,14 +42,14 @@ const TEMPLATES = {
     linkLabel: "Review and decide",
     ignore: true,
   }),
-  share: ({ studentFirstName }) => ({
-    subject: `${studentFirstName} wants to share their SumDeTing progress with you`,
+  share: ({ studentFirstName }, sv) => ({
+    subject: `${sv.studentFirstName} wants to share their SumDeTing progress with you`,
     why: "You're getting this because a student chose to share their practice progress with this email.",
     body: [`${studentFirstName} wants to share their SumDeTing progress with you. Use the link below to sign in and see it.`],
     linkLabel: "Sign in to see progress",
     ignore: true,
   }),
-  access_request: ({ parentEmail }) => ({
+  access_request: ({ parentEmail }, sv) => ({
     subject: "Someone would like to see your SumDeTing progress",
     why: "You're getting this because someone asked for access to your SumDeTing practice progress.",
     body: [
@@ -59,8 +59,8 @@ const TEMPLATES = {
     linkLabel: "Sign in to respond",
     ignore: true,
   }),
-  guardian_invite: ({ childFirstName, inviterEmail }) => ({
-    subject: `You've been added as a parent or guardian for ${childFirstName}`,
+  guardian_invite: ({ childFirstName, inviterEmail }, sv) => ({
+    subject: `You've been added as a parent or guardian for ${sv.childFirstName}`,
     why: "You're getting this because someone added this email as a parent or guardian on SumDeTing.",
     body: [
       `${inviterEmail} has added you as a parent or guardian for ${childFirstName} on SumDeTing.`,
@@ -80,10 +80,42 @@ const TEMPLATES = {
   }),
 };
 
+const LINK_VALIDITY = {
+  consent_request: "7 days",
+  share: "7 days",
+  access_request: "7 days",
+  guardian_invite: "7 days",
+  retention_warning: "30 days",
+};
+
+const REQUIRED = {
+  signin: ["token", "code"],
+  parent_code: ["code"],
+  confirm_delete: ["code"],
+  consent_request: ["token"],
+  share: ["token"],
+  access_request: ["token"],
+  guardian_invite: ["token"],
+  retention_warning: ["token"],
+};
+
+// Collapse control characters (incl. CR/LF) to a space and cap length, for subject lines.
+const subjectSafe = (v) =>
+  String(v ?? "").replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").trim().slice(0, 80);
+
 function render(kind, vars, siteUrl) {
   const make = TEMPLATES[kind];
   if (!make) throw new Error(`Unknown email kind: ${kind}`);
-  const t = make(vars);
+  for (const key of REQUIRED[kind]) {
+    if (typeof vars[key] !== "string" || !vars[key]) {
+      throw new Error(`Email kind ${kind} requires ${key}`);
+    }
+  }
+  const sv = Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, subjectSafe(v)]));
+  const t = make(vars, sv);
+  if (LINK_VALIDITY[kind]) {
+    t.body = [...t.body, `This link works for ${LINK_VALIDITY[kind]} and can only be used once.`];
+  }
   const link = vars.token ? `${siteUrl}/#signin=${vars.token}` : null;
   const privacy = `${siteUrl}/privacy.html`;
 
@@ -116,6 +148,12 @@ function render(kind, vars, siteUrl) {
   return { subject: t.subject, text, html };
 }
 
+function checkTo(to) {
+  if (typeof to !== "string" || !to || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(to)) {
+    throw new Error("Invalid recipient address");
+  }
+}
+
 export function createMailer({ mode, from, siteUrl, sesClient } = {}) {
   const base = String(siteUrl ?? "").replace(/\/+$/, "");
   if (mode === "ses") {
@@ -123,6 +161,7 @@ export function createMailer({ mode, from, siteUrl, sesClient } = {}) {
     let Command;
     return {
       async send(kind, to, vars = {}) {
+        checkTo(to);
         const { subject, text, html } = render(kind, vars, base);
         if (!Command) {
           ({ SendEmailCommand: Command } = await import("@aws-sdk/client-sesv2"));
@@ -153,6 +192,7 @@ export function createMailer({ mode, from, siteUrl, sesClient } = {}) {
   return {
     outbox,
     async send(kind, to, vars = {}) {
+      checkTo(to);
       const { subject, text, html } = render(kind, vars, base);
       outbox.push({ kind, to, subject, text, html });
     },
