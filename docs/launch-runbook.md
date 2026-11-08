@@ -93,7 +93,13 @@ Look for stack traces, `Missing required environment variable`, or SES errors (f
 
 The service stores children's data (names, profile and progress data) and parent email addresses. Before announcing it publicly:
 
-1. Review the privacy notice against the Barbados Data Protection Act 2019: what is collected, why, how long it is kept (the janitor deletes after two years of inactivity and removes unfinished sign-ups after 8 days), who can see it, and how a parent or student can see, correct or delete it.
+1. Review the privacy notice against the Barbados Data Protection Act 2019: what is collected, why, who can see it, and how a parent or student can see, correct or delete it. Check that the notice matches these retention rules in the code:
+   - Sign-in links and codes expire after 15 minutes.
+   - Invite and consent email links expire after 7 days.
+   - Pending invites expire after 30 days.
+   - Unfinished sign-ups are deleted after 7 days.
+   - Under-13 profiles still waiting for a parent are deleted after 7 days.
+   - Inactive accounts get a warning email at 700 days idle and are deleted only when idle for more than 730 days and at least 30 days after the warning. Any activity resets this.
 2. Confirm the under-13 parent consent wording is accurate for what the app does.
 3. The owner signs off in writing (a dated note in the repo or an email to yourself is enough). Do not launch publicly until this is done.
 
@@ -101,7 +107,7 @@ The service stores children's data (names, profile and progress data) and parent
 
 - The account feature is optional for students. If the account API misbehaves, the tutor itself keeps working, because it is a separate Lambda and the site does not need sign-in to be used.
 - To switch the feature off quickly, revert the infra and site change and run `tofu apply` again. The DynamoDB table has deletion protection on, so `tofu` will refuse to destroy it. That is intentional. To remove it deliberately, set `deletion_protection_enabled = false`, apply, and only then remove the table.
-- DynamoDB has point-in-time recovery (35 days). To restore after bad data or an accidental delete, restore to a NEW table (you cannot restore over the existing one):
+- DynamoDB has point-in-time recovery (PITR, AWS default 35-day window). To restore after bad data or an accidental delete, restore to a NEW table (you cannot restore over the existing one):
 
   ```
   aws dynamodb restore-table-to-point-in-time \
@@ -109,4 +115,4 @@ The service stores children's data (names, profile and progress data) and parent
     --use-latest-restorable-time --profile <sumdeting account profile>
   ```
   Then check the data in the new table, and either point the Lambda `TABLE_NAME` at it or copy items back. Importing the restored table into tofu state needs care, so ask for a second pair of eyes first.
-- Stop the janitor while investigating a data problem: disable the schedule `<project>-janitor` in EventBridge Scheduler (or set its state to `DISABLED` in infra and apply).
+- Stop the janitor while investigating a data problem: add `state = "DISABLED"` to `aws_scheduler_schedule.janitor` in `infra/main.tf` and run `tofu apply` (the argument is not set today). Remove it again to resume.
