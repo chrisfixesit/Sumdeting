@@ -34,7 +34,7 @@ data "archive_file" "handler" {
   source_dir = "${path.module}/../backend"
   # Tests and the in-memory test kit never ship to Lambda. The archive provider
   # (>= 2.4) supports globs in excludes, relative to source_dir.
-  excludes    = ["node_modules", "package.json", "**/*.test.mjs", "account/testkit.mjs"]
+  excludes    = ["node_modules", "package.json", "package-lock.json", "**/*.test.mjs", "account/testkit.mjs"]
   output_path = "${path.module}/.build/handler.zip"
 }
 
@@ -303,7 +303,32 @@ resource "aws_route53_record" "ses_dkim" {
   allow_overwrite = true
 }
 
-# ---------- Janitor schedule ----------
+# ---------- Janitor ----------
+
+# The daily retention sweep runs in its own function: same code and role as the
+# account API, but a scan of every account and profile can take minutes, so it
+# gets a long timeout while the API keeps its short one.
+resource "aws_cloudwatch_log_group" "janitor" {
+  name              = "/aws/lambda/${var.project}-janitor"
+  retention_in_days = 90
+}
+
+resource "aws_lambda_function" "janitor" {
+  function_name    = "${var.project}-janitor"
+  role             = aws_iam_role.account_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "account/index.handler"
+  filename         = data.archive_file.handler.output_path
+  source_code_hash = data.archive_file.handler.output_base64sha256
+  timeout          = 300
+  memory_size      = 256
+
+  environment {
+    variables = aws_lambda_function.account.environment[0].variables
+  }
+
+  depends_on = [aws_cloudwatch_log_group.janitor]
+}
 
 resource "aws_iam_role" "janitor_scheduler" {
   name = "${var.project}-janitor-scheduler"
@@ -328,7 +353,7 @@ resource "aws_iam_role_policy" "janitor_scheduler" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["lambda:InvokeFunction"]
-      Resource = [aws_lambda_function.account.arn]
+      Resource = [aws_lambda_function.janitor.arn]
     }]
   })
 }
@@ -342,7 +367,7 @@ resource "aws_scheduler_schedule" "janitor" {
   }
 
   target {
-    arn      = aws_lambda_function.account.arn
+    arn      = aws_lambda_function.janitor.arn
     role_arn = aws_iam_role.janitor_scheduler.arn
     input    = jsonencode({ janitor = true })
 
@@ -394,6 +419,16 @@ resource "aws_s3_object" "privacy" {
   source        = "${path.module}/../web/privacy.html"
   etag          = filemd5("${path.module}/../web/privacy.html")
   cache_control = "public, max-age=300"
+
+  # The notice still has placeholders until the owner completes the review in
+  # docs/launch-runbook.md section 4. Set allow_draft_privacy = true only for a
+  # non-public test deploy.
+  lifecycle {
+    precondition {
+      condition     = var.allow_draft_privacy || !strcontains(file("${path.module}/../web/privacy.html"), "owner to fill in")
+      error_message = "web/privacy.html still contains \"owner to fill in\". Finish the privacy review (docs/launch-runbook.md section 4), or set allow_draft_privacy = true for a non-public test deploy."
+    }
+  }
 }
 
 resource "aws_s3_object" "manifest" {
@@ -810,6 +845,69 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+# The account API: any thrown error (a bug, DynamoDB or SES trouble) emails the owner.
+resource "aws_cloudwatch_metric_alarm" "account_errors" {
+  alarm_name          = "${var.project}-account-errors"
+  alarm_description   = "SumDeTing account API Lambda reported errors"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = aws_lambda_function.account.function_name }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+# The janitor runs once a day, so a one-day period covers exactly one run.
+# This catches a run that crashed or timed out as a whole.
+resource "aws_cloudwatch_metric_alarm" "janitor_errors" {
+  alarm_name          = "${var.project}-janitor-errors"
+  alarm_description   = "SumDeTing retention janitor Lambda failed or timed out"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = aws_lambda_function.janitor.function_name }
+  statistic           = "Sum"
+  period              = 86400
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+# The janitor skips a record it can't process and logs "Janitor: <record> failed"
+# (backend/account/deletion.mjs) without failing the run, so count those lines too.
+resource "aws_cloudwatch_log_metric_filter" "janitor_failures" {
+  name           = "${var.project}-janitor-failures"
+  log_group_name = aws_cloudwatch_log_group.janitor.name
+  pattern        = "\"Janitor:\""
+
+  metric_transformation {
+    name          = "JanitorRecordFailures"
+    namespace     = "SumDeTing/${var.project}"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "janitor_record_failures" {
+  alarm_name          = "${var.project}-janitor-record-failures"
+  alarm_description   = "SumDeTing janitor could not process one or more records (see the janitor log group)"
+  namespace           = "SumDeTing/${var.project}"
+  metric_name         = "JanitorRecordFailures"
+  statistic           = "Sum"
+  period              = 86400
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
 }
 
 # Throttles mean the reserved-concurrency cap (10) is being hit — either real

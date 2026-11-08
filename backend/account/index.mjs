@@ -64,7 +64,10 @@ export function makeHandler(routerFactory) {
   return async function handler(event) {
     if (event.source === "aws.scheduler" || event.janitor === true) {
       const { runJanitor } = await import("./deletion.mjs");
-      return runJanitor(lambdaDepsFromEnv());
+      const result = await runJanitor(lambdaDepsFromEnv());
+      // Counts only (no ids or emails), so a restore can be checked against the history.
+      console.log("Janitor finished", JSON.stringify(result));
+      return result;
     }
     router ??= routerFactory();
     const raw = event.isBase64Encoded

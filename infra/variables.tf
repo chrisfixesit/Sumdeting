@@ -59,3 +59,9 @@ variable "email_from" {
   type        = string
   default     = ""
 }
+
+variable "allow_draft_privacy" {
+  description = "Allow deploying web/privacy.html while it still has the draft placeholders (\"owner to fill in\"). Keep false for production; true only for a non-public test deploy."
+  type        = bool
+  default     = false
+}
