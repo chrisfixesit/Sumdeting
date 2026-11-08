@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { makeApp } from "./testkit.mjs";
-import { makeHandler } from "./index.mjs";
+import { makeHandler, lambdaDepsFromEnv } from "./index.mjs";
 import { createAppServer } from "../../server.mjs";
 
 const DAY = 24 * 3600 * 1000;
@@ -265,4 +265,36 @@ test("GET with a signin fragment has no side effects", async () => {
     server.close();
     server.closeAllConnections?.();
   }
+});
+
+test("unannotated routes require a session by default", async () => {
+  const app = makeApp();
+  app.router.route("POST", "/secret", () => ({ ok: true }));
+  const res = await app.call("POST", "/secret");
+  assert.deepEqual([res.status, res.body], [401, { error: "not_signed_in" }]);
+});
+
+test("lambda deps throw when required env is missing", () => {
+  const full = { TABLE_NAME: "t", SITE_URL: "https://x.test", EMAIL_FROM: "a@x.test", EMAIL_MODE: "ses" };
+  for (const name of Object.keys(full)) {
+    const env = { ...full };
+    delete env[name];
+    assert.throws(() => lambdaDepsFromEnv(env), new RegExp(name));
+  }
+});
+
+test("a throwing onSignIn hook does not fail verify", async () => {
+  const app = makeApp();
+  app.router.onSignIn(() => { throw new Error("boom"); });
+  const mail = await start(app);
+  const res = await app.call("POST", "/signin/verify", { token: tokenFrom(mail) });
+  assert.equal(res.status, 200);
+});
+
+test("IP limit is checked before spending the email budget", async () => {
+  const app = makeApp();
+  for (let i = 0; i < 30; i++) await app.call("POST", "/signin/start", { email: `u${i}@x.com` }, { ip: "8.8.8.8" });
+  const blocked = await app.call("POST", "/signin/start", { email: "victim@x.com" }, { ip: "8.8.8.8" });
+  assert.equal(blocked.status, 429);
+  for (let i = 0; i < 5; i++) assert.equal((await app.call("POST", "/signin/start", { email: "victim@x.com" }, { ip: "7.7.7.7" })).status, 200);
 });

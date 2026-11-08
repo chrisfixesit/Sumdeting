@@ -9,14 +9,13 @@ export function register(router) {
     const { repo, mailer } = ctx.deps;
     const email = normaliseEmail(ctx.req.body.email);
     if (!email) throw httpError("bad_request");
-    const okEmail = await repo.hitRate(`signin:email:${email}`, HOUR_SEC, 5);
-    const okIp = await repo.hitRate(`signin:ip:${ctx.req.ip}`, HOUR_SEC, 30);
-    if (!okEmail || !okIp) throw httpError("rate_limited");
+    if (!(await repo.hitRate(`signin:ip:${ctx.req.ip}`, HOUR_SEC, 30))) throw httpError("rate_limited");
+    if (!(await repo.hitRate(`signin:email:${email}`, HOUR_SEC, 5))) throw httpError("rate_limited");
     const token = await repo.issueToken("signin", email, SIGNIN_TTL_SEC);
     const code = await repo.issueCode("signin", email, SIGNIN_TTL_SEC);
     await mailer.send("signin", email, { token, code });
     return {};
-  });
+  }, { auth: "none" });
 
   router.route("POST", "/signin/verify", async (ctx) => {
     const { repo } = ctx.deps;
@@ -41,9 +40,15 @@ export function register(router) {
     ctx.res.setCookies.push(sessionCookie(session.id, ctx.deps));
     const fresh = await repo.getSession(session.id);
     const inner = { ...ctx, session: fresh, account: (await repo.getAccount(account.id)) ?? account };
-    for (const hook of ctx.router?.signInHooks ?? []) await hook(inner, inner.account);
+    for (const hook of ctx.router?.signInHooks ?? []) {
+      try {
+        await hook(inner, inner.account);
+      } catch (err) {
+        console.error("onSignIn hook failed", err);
+      }
+    }
     return buildMe(inner);
-  });
+  }, { auth: "none" });
 
   router.route(
     "POST",
@@ -60,6 +65,6 @@ export function register(router) {
   router.route("POST", "/me", (ctx) => buildMe(ctx), { auth: "session" });
 
   if (router.deps.dev) {
-    router.route("GET", "/_dev/outbox", (ctx) => ctx.deps.mailer.outbox ?? []);
+    router.route("GET", "/_dev/outbox", (ctx) => ctx.deps.mailer.outbox ?? [], { auth: "none" });
   }
 }

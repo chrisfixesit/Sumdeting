@@ -1,4 +1,4 @@
-import { createRouter, parseBody } from "./http.mjs";
+import { createRouter, parseBody, parseCookies } from "./http.mjs";
 import { register as registerAuth } from "./auth.mjs";
 import { createMemoryTable, createDynamoTable } from "./table.mjs";
 import { createRepo } from "./repo.mjs";
@@ -52,8 +52,7 @@ export function makeHandler(routerFactory) {
   let router;
   return async function handler(event) {
     if (event.source === "aws.scheduler" || event.janitor === true) {
-      // Janitor arrives in a later task.
-      const { runJanitor } = await import("./janitor.mjs");
+      const { runJanitor } = await import("./deletion.mjs");
       return runJanitor(depsFromEnv());
     }
     router ??= routerFactory();
@@ -63,11 +62,7 @@ export function makeHandler(routerFactory) {
     const body = parseBody(raw);
     if (body === null) return respond(400, { error: "bad_request" });
     const rawPath = event.rawPath ?? "";
-    const cookies = {};
-    for (const c of event.cookies ?? []) {
-      const i = c.indexOf("=");
-      if (i > 0 && !(c.slice(0, i).trim() in cookies)) cookies[c.slice(0, i).trim()] = c.slice(i + 1).trim();
-    }
+    const cookies = parseCookies((event.cookies ?? []).join("; "));
     const res = await router({
       method: event.requestContext?.http?.method ?? "GET",
       path: rawPath.startsWith(PREFIX) ? rawPath.slice(PREFIX.length) : rawPath,
@@ -80,9 +75,15 @@ export function makeHandler(routerFactory) {
   };
 }
 
-export const handler = makeHandler(() => {
-  const deps = depsFromEnv();
+export function lambdaDepsFromEnv(env = process.env) {
+  for (const name of ["TABLE_NAME", "SITE_URL", "EMAIL_FROM"]) {
+    if (!env[name]) throw new Error(`Missing required environment variable ${name}`);
+  }
+  if (env.EMAIL_MODE !== "ses") throw new Error("EMAIL_MODE must be 'ses' in Lambda");
+  const deps = depsFromEnv({ ...env, ACCOUNT_DEV: "0" });
   deps.dev = false;
   deps.secureCookies = true;
-  return createAppRouter(deps);
-});
+  return deps;
+}
+
+export const handler = makeHandler(() => createAppRouter(lambdaDepsFromEnv()));

@@ -143,7 +143,7 @@ export function createRouter(deps) {
   }
 
   dispatch.deps = deps;
-  dispatch.route = (method, path, handler, { auth = "none" } = {}) => {
+  dispatch.route = (method, path, handler, { auth = "session" } = {}) => {
     routes.push({ method, path, handler, auth });
   };
   dispatch.onSignIn = (fn) => {

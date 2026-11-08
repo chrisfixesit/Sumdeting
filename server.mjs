@@ -54,8 +54,10 @@ function handleAccount(accountRouter, req, res) {
     size += chunk.length;
     if (size > ACCOUNT_BODY_LIMIT) {
       tooLarge = true;
+      chunks.length = 0;
+      res.setHeader("Connection", "close");
+      res.on("finish", () => req.destroy());
       accountJson(res, 413, { error: "bad_request" });
-      req.destroy();
       return;
     }
     chunks.push(chunk);
@@ -91,122 +93,122 @@ function handleAccount(accountRouter, req, res) {
 export function createAppServer(opts = {}) {
   const accountRouter = opts.accountRouter ?? createAppRouter(opts.accountDeps ?? depsFromEnv());
   return createServer(async (req, res) => {
-  if (req.url === ACCOUNT_PREFIX || req.url.startsWith(ACCOUNT_PREFIX + "/") || req.url.startsWith(ACCOUNT_PREFIX + "?")) {
-    handleAccount(accountRouter, req, res);
-    return;
-  }
-
-  if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(indexHtml);
-    return;
-  }
-
-  if (req.method === "GET" && STATIC_FILES[req.url]) {
-    try {
-      const body = readFileSync(path.join(root, "web", req.url));
-      res.writeHead(200, { "Content-Type": STATIC_FILES[req.url], "Cache-Control": "public, max-age=86400" });
-      res.end(body);
-    } catch {
-      json(res, 404, { error: "Not found" });
-    }
-    return;
-  }
-
-  if (req.method === "GET" && req.url === "/healthz") {
-    json(res, 200, { status: "ok" });
-    return;
-  }
-
-  // Static assets (self-hosted vendor libs/fonts, brand images, manifest),
-  // mirroring what S3/CloudFront serves in production.
-  if (req.method === "GET") {
-    const MIME = {
-      ".css": "text/css", ".js": "text/javascript", ".mjs": "text/javascript",
-      ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf",
-      ".html": "text/html; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon",
-      ".webmanifest": "application/manifest+json", ".json": "application/json",
-    };
-    const webRoot = path.join(root, "web");
-    let urlPath;
-    try {
-      urlPath = decodeURIComponent(new URL(req.url, "http://x").pathname);
-    } catch {
-      // Malformed percent-encoding: reject this request, don't crash the process
-      json(res, 400, { error: "Bad request" });
+    if (req.url === ACCOUNT_PREFIX || req.url.startsWith(ACCOUNT_PREFIX + "/") || req.url.startsWith(ACCOUNT_PREFIX + "?")) {
+      handleAccount(accountRouter, req, res);
       return;
     }
-    const filePath = path.normalize(path.join(webRoot, urlPath));
-    const ext = path.extname(filePath);
-    if (
-      filePath.startsWith(webRoot + path.sep) && // no traversal out of web/
-      MIME[ext] &&
-      existsSync(filePath) && statSync(filePath).isFile()
-    ) {
-      res.writeHead(200, { "Content-Type": MIME[ext], "Cache-Control": "public, max-age=3600" });
-      res.end(readFileSync(filePath));
+
+    if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(indexHtml);
       return;
     }
-  }
 
-  if (req.method === "POST" && req.url === "/api/chat") {
-    // Count bytes, not characters, and decode once at the end so multi-byte
-    // characters split across chunks survive. 5 MB fits 4 photos + history.
-    const chunks = [];
-    let size = 0;
-    let tooLarge = false;
-    req.on("data", (chunk) => {
-      if (tooLarge) return;
-      size += chunk.length;
-      if (size > 5_000_000) {
-        tooLarge = true;
-        json(res, 413, { error: "Request too large" });
-        req.destroy();
+    if (req.method === "GET" && STATIC_FILES[req.url]) {
+      try {
+        const body = readFileSync(path.join(root, "web", req.url));
+        res.writeHead(200, { "Content-Type": STATIC_FILES[req.url], "Cache-Control": "public, max-age=86400" });
+        res.end(body);
+      } catch {
+        json(res, 404, { error: "Not found" });
+      }
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/healthz") {
+      json(res, 200, { status: "ok" });
+      return;
+    }
+
+    // Static assets (self-hosted vendor libs/fonts, brand images, manifest),
+    // mirroring what S3/CloudFront serves in production.
+    if (req.method === "GET") {
+      const MIME = {
+        ".css": "text/css", ".js": "text/javascript", ".mjs": "text/javascript",
+        ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf",
+        ".html": "text/html; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon",
+        ".webmanifest": "application/manifest+json", ".json": "application/json",
+      };
+      const webRoot = path.join(root, "web");
+      let urlPath;
+      try {
+        urlPath = decodeURIComponent(new URL(req.url, "http://x").pathname);
+      } catch {
+        // Malformed percent-encoding: reject this request, don't crash the process
+        json(res, 400, { error: "Bad request" });
         return;
       }
-      chunks.push(chunk);
-    });
-    req.on("end", async () => {
-      if (tooLarge) return;
-      const raw = Buffer.concat(chunks).toString("utf-8");
-      // An exception escaping this async listener would be an unhandled
-      // rejection, which terminates the whole server process.
-      try {
-        let payload;
-        try {
-          payload = JSON.parse(raw);
-        } catch {
-          json(res, 400, { error: "Invalid JSON body" });
-          return;
-        }
-
-        const validationError = validateMessages(payload?.messages);
-        if (validationError) {
-          json(res, 400, { error: validationError });
-          return;
-        }
-
-        res.writeHead(200, {
-          "Content-Type": "text/plain; charset=utf-8",
-          "Cache-Control": "no-cache",
-        });
-        try {
-          await askTutorStream(payload.messages, MODEL_ID, (text) => res.write(text));
-        } catch (err) {
-          console.error("Bedrock invocation failed", err);
-          res.write("\n\n[SumDeTing hit a snag; please send that again.]");
-        }
-        res.end();
-      } catch (err) {
-        console.error("Chat request failed", err);
-        if (!res.headersSent) json(res, 500, { error: "Internal error" });
-        else res.end();
+      const filePath = path.normalize(path.join(webRoot, urlPath));
+      const ext = path.extname(filePath);
+      if (
+        filePath.startsWith(webRoot + path.sep) && // no traversal out of web/
+        MIME[ext] &&
+        existsSync(filePath) && statSync(filePath).isFile()
+      ) {
+        res.writeHead(200, { "Content-Type": MIME[ext], "Cache-Control": "public, max-age=3600" });
+        res.end(readFileSync(filePath));
+        return;
       }
-    });
-    return;
-  }
+    }
 
-  json(res, 404, { error: "Not found" });
+    if (req.method === "POST" && req.url === "/api/chat") {
+      // Count bytes, not characters, and decode once at the end so multi-byte
+      // characters split across chunks survive. 5 MB fits 4 photos + history.
+      const chunks = [];
+      let size = 0;
+      let tooLarge = false;
+      req.on("data", (chunk) => {
+        if (tooLarge) return;
+        size += chunk.length;
+        if (size > 5_000_000) {
+          tooLarge = true;
+          json(res, 413, { error: "Request too large" });
+          req.destroy();
+          return;
+        }
+        chunks.push(chunk);
+      });
+      req.on("end", async () => {
+        if (tooLarge) return;
+        const raw = Buffer.concat(chunks).toString("utf-8");
+        // An exception escaping this async listener would be an unhandled
+        // rejection, which terminates the whole server process.
+        try {
+          let payload;
+          try {
+            payload = JSON.parse(raw);
+          } catch {
+            json(res, 400, { error: "Invalid JSON body" });
+            return;
+          }
+
+          const validationError = validateMessages(payload?.messages);
+          if (validationError) {
+            json(res, 400, { error: validationError });
+            return;
+          }
+
+          res.writeHead(200, {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "no-cache",
+          });
+          try {
+            await askTutorStream(payload.messages, MODEL_ID, (text) => res.write(text));
+          } catch (err) {
+            console.error("Bedrock invocation failed", err);
+            res.write("\n\n[SumDeTing hit a snag; please send that again.]");
+          }
+          res.end();
+        } catch (err) {
+          console.error("Chat request failed", err);
+          if (!res.headersSent) json(res, 500, { error: "Internal error" });
+          else res.end();
+        }
+      });
+      return;
+    }
+
+    json(res, 404, { error: "Not found" });
   });
 }
 
