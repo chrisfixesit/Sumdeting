@@ -119,6 +119,7 @@ export function createRouter(deps) {
         res.setCookies.push(sessionCookie(sid, deps));
       }
     }
+    if (auth === "parentUnlocked" && account.type !== "parent") throw httpError("forbidden");
     if (auth === "parentUnlocked" && !((session.parentUnlockedUntil ?? 0) > deps.now())) {
       throw httpError("parent_locked");
     }

@@ -2,6 +2,7 @@ import { createRouter, parseBody, parseCookies } from "./http.mjs";
 import { register as registerAuth } from "./auth.mjs";
 import { register as registerProfiles } from "./profiles.mjs";
 import { register as registerSync } from "./sync.mjs";
+import { register as registerParent } from "./parent.mjs";
 import { createMemoryTable, createDynamoTable } from "./table.mjs";
 import { createRepo } from "./repo.mjs";
 import { createMailer } from "./email.mjs";
@@ -10,7 +11,7 @@ const PREFIX = "/api/account";
 const JSON_HEADERS = { "content-type": "application/json", "cache-control": "no-store" };
 
 /** Feature modules register here; later tasks add theirs to this list. */
-const MODULES = [registerAuth, registerProfiles, registerSync];
+const MODULES = [registerAuth, registerProfiles, registerSync, registerParent];
 
 export function createAppRouter(deps) {
   const router = createRouter(deps);
