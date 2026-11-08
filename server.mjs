@@ -4,9 +4,11 @@
  */
 import { createServer } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import { askTutorStream, validateMessages } from "./backend/tutor.mjs";
+import { createAppRouter, depsFromEnv } from "./backend/account/index.mjs";
+import { parseBody, parseCookies } from "./backend/account/http.mjs";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const MODEL_ID = process.env.MODEL_ID ?? "us.anthropic.claude-haiku-4-5-20251001-v1:0";
@@ -33,7 +35,67 @@ const STATIC_FILES = {
   "/manifest.webmanifest": "application/manifest+json",
 };
 
-const server = createServer(async (req, res) => {
+const ACCOUNT_PREFIX = "/api/account";
+const ACCOUNT_BODY_LIMIT = 64 * 1024;
+
+const accountJson = (res, status, body, setCookies) => {
+  const headers = { "Content-Type": "application/json", "Cache-Control": "no-store" };
+  if (setCookies?.length) headers["Set-Cookie"] = setCookies;
+  res.writeHead(status, headers);
+  res.end(JSON.stringify(body));
+};
+
+function handleAccount(accountRouter, req, res) {
+  const chunks = [];
+  let size = 0;
+  let tooLarge = false;
+  req.on("data", (chunk) => {
+    if (tooLarge) return;
+    size += chunk.length;
+    if (size > ACCOUNT_BODY_LIMIT) {
+      tooLarge = true;
+      accountJson(res, 413, { error: "bad_request" });
+      req.destroy();
+      return;
+    }
+    chunks.push(chunk);
+  });
+  req.on("end", async () => {
+    if (tooLarge) return;
+    try {
+      const body = parseBody(Buffer.concat(chunks).toString("utf-8"));
+      if (body === null) return accountJson(res, 400, { error: "bad_request" });
+      let pathname;
+      try {
+        pathname = decodeURIComponent(new URL(req.url, "http://x").pathname);
+      } catch {
+        return accountJson(res, 400, { error: "bad_request" });
+      }
+      const out = await accountRouter({
+        method: req.method,
+        path: pathname.slice(ACCOUNT_PREFIX.length),
+        headers: req.headers,
+        cookies: parseCookies(req.headers.cookie),
+        body,
+        ip: req.socket.remoteAddress ?? "unknown",
+      });
+      accountJson(res, out.status, out.body, out.setCookies);
+    } catch (err) {
+      console.error("Account request failed", err);
+      if (!res.headersSent) accountJson(res, 500, { error: "internal" });
+      else res.end();
+    }
+  });
+}
+
+export function createAppServer(opts = {}) {
+  const accountRouter = opts.accountRouter ?? createAppRouter(opts.accountDeps ?? depsFromEnv());
+  return createServer(async (req, res) => {
+  if (req.url === ACCOUNT_PREFIX || req.url.startsWith(ACCOUNT_PREFIX + "/") || req.url.startsWith(ACCOUNT_PREFIX + "?")) {
+    handleAccount(accountRouter, req, res);
+    return;
+  }
+
   if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(indexHtml);
@@ -62,7 +124,7 @@ const server = createServer(async (req, res) => {
     const MIME = {
       ".css": "text/css", ".js": "text/javascript", ".mjs": "text/javascript",
       ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf",
-      ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon",
+      ".html": "text/html; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon",
       ".webmanifest": "application/manifest+json", ".json": "application/json",
     };
     const webRoot = path.join(root, "web");
@@ -145,8 +207,11 @@ const server = createServer(async (req, res) => {
   }
 
   json(res, 404, { error: "Not found" });
-});
+  });
+}
 
-server.listen(PORT, () => {
-  console.log(`SumDeTing listening on http://localhost:${PORT} (model: ${MODEL_ID})`);
-});
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  createAppServer().listen(PORT, () => {
+    console.log(`SumDeTing listening on http://localhost:${PORT} (model: ${MODEL_ID})`);
+  });
+}

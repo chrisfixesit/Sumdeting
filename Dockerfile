@@ -14,6 +14,8 @@ RUN apk add --no-cache wget
 WORKDIR /app
 COPY --from=deps --chown=node:node /app/backend/node_modules backend/node_modules
 COPY --chown=node:node backend/tutor.mjs backend/
+COPY --chown=node:node backend/account/ backend/account/
+RUN rm -f backend/account/*.test.mjs backend/account/testkit.mjs
 COPY --chown=node:node web/index.html web/
 COPY --chown=node:node web/vendor/ web/vendor/
 COPY --chown=node:node server.mjs .
