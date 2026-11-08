@@ -27,13 +27,33 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
   };
 
   const strip = ({ pk, sk, ttl, version, ...rest }) => rest;
-  const merge = async (pk, sk, patch) => {
-    const item = await table.get(pk, sk);
-    if (!item) return null;
-    const next = { ...item, ...patch };
-    await table.put(next);
-    return next;
+  const isConflict = (err) =>
+    err instanceof ConditionFailed || err?.name === "ConditionFailed";
+  const RESERVED = ["pk", "sk", "ttl", "version", "id", "ownerAccountId"];
+  const clean = (input = {}) =>
+    Object.fromEntries(Object.entries(input).filter(([k]) => !RESERVED.includes(k)));
+
+  // Optimistic read-modify-write. fn(item) returns the next item, or null to skip.
+  // Returns the written item, the unchanged item when skipped, or null if missing.
+  const update = async (pk, sk, fn) => {
+    for (let attempt = 0; attempt < MAX_PROGRESS_TRIES; attempt++) {
+      const item = await table.get(pk, sk);
+      if (!item) return null;
+      const next = fn(item);
+      if (!next) return item;
+      const version = item.version ?? 0;
+      const written = { ...next, pk, sk, version: version + 1 };
+      try {
+        await table.put(written, { ifVersion: version });
+        return written;
+      } catch (err) {
+        if (!isConflict(err)) throw err;
+      }
+    }
+    throw new Error("Update conflict: too many concurrent writes");
   };
+  const merge = (pk, sk, patch) =>
+    update(pk, sk, (item) => ({ ...item, ...clean(patch) }));
 
   const repo = {
     // ---- Accounts ----
@@ -61,12 +81,14 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
               holderOver13: null,
               createdAt: t,
               lastActiveAt: t,
+              version: 1,
             },
           },
         ]);
       } catch (err) {
-        if (!(err instanceof ConditionFailed) && err?.name !== "ConditionFailed") throw err;
-        return repo.findAccountByEmail(email);
+        const existing = await repo.findAccountByEmail(email);
+        if (existing) return existing;
+        throw err;
       }
       return repo.getAccount(id);
     },
@@ -75,12 +97,12 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
       return item ? { id, ...strip(item) } : null;
     },
     async touchActive(id) {
-      const item = await table.get(accountKey(id), "META");
-      if (!item) return;
       const t = now();
-      if (item.lastActiveAt && utcDay(item.lastActiveAt) === utcDay(t)) return;
-      const { warningSentAt, ...rest } = item;
-      await table.put({ ...rest, lastActiveAt: t });
+      await update(accountKey(id), "META", (item) => {
+        if (item.lastActiveAt && utcDay(item.lastActiveAt) === utcDay(t)) return null;
+        const { warningSentAt, ...rest } = item;
+        return { ...rest, lastActiveAt: t };
+      });
     },
     async listAccounts() {
       const items = await table.scan("ACCOUNT#");
@@ -92,9 +114,12 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
     // ---- Profiles and access ----
     async createProfile(ownerAccountId, fields) {
       const id = randomUUID();
-      const profile = { ...fields, ownerAccountId, createdAt: now() };
+      const profile = { ...clean(fields), ownerAccountId, createdAt: now() };
       await table.transact([
-        { put: { pk: profileKey(id), sk: "META", ...profile }, ifNotExists: true },
+        {
+          put: { ...profile, pk: profileKey(id), sk: "META", version: 1 },
+          ifNotExists: true,
+        },
         ...accessItems(ownerAccountId, id, "owner").map((put) => ({ put })),
       ]);
       return { id, ...profile };
@@ -170,7 +195,7 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
           );
           return next;
         } catch (err) {
-          if (!(err instanceof ConditionFailed) && err?.name !== "ConditionFailed") throw err;
+          if (!isConflict(err)) throw err;
         }
       }
       throw new Error("Progress update conflict: too many concurrent writes");
@@ -198,9 +223,10 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
         // Conditional on version: exactly one concurrent consumer wins.
         await table.put({ ...item, used: true, version: item.version + 1 }, { ifVersion: item.version });
       } catch (err) {
-        if (err instanceof ConditionFailed || err?.name === "ConditionFailed") return null;
+        if (isConflict(err)) return null;
         throw err;
       }
+      await table.delete(pk, "T");
       return { email: item.email };
     },
     async issueCode(purpose, subject, ttlSec) {
@@ -210,6 +236,8 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
         sk: "C",
         codeHash: hash(code),
         attempts: 0,
+        used: false,
+        version: 1,
         ttl: sec(now()) + ttlSec,
       });
       return code;
@@ -217,13 +245,27 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
     async checkCode(purpose, subject, code) {
       const pk = `CODE#${purpose}#${subject}`;
       const item = await table.get(pk, "C");
-      if (!item) return "invalid";
+      if (!item || item.used) return "invalid";
+      // Count the attempt before comparing so parallel guesses can't bypass the limit.
+      const n = await table.add(pk, "C", "attempts", 1, item.ttl);
+      if (n > MAX_CODE_ATTEMPTS) {
+        await table.delete(pk, "C");
+        return "locked";
+      }
       if (item.codeHash === hash(code)) {
+        try {
+          await table.put(
+            { ...item, used: true, version: item.version + 1 },
+            { ifVersion: item.version }
+          );
+        } catch (err) {
+          if (isConflict(err)) return "invalid";
+          throw err;
+        }
         await table.delete(pk, "C");
         return "ok";
       }
-      const attempts = await table.add(pk, "C", "attempts", 1, item.ttl);
-      if (attempts >= MAX_CODE_ATTEMPTS) {
+      if (n >= MAX_CODE_ATTEMPTS) {
         await table.delete(pk, "C");
         return "locked";
       }
@@ -240,6 +282,7 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
         accountId,
         expiresAt,
         parentUnlockedUntil: 0,
+        version: 1,
         ttl: sec(expiresAt),
       });
       return { id, expiresAt };
@@ -253,7 +296,11 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
       const session = await repo.getSession(id);
       if (!session) return null;
       const expiresAt = now() + SESSION_MS;
-      await merge(`SESSION#${hash(id)}`, "S", { expiresAt, ttl: sec(expiresAt) });
+      await update(`SESSION#${hash(id)}`, "S", (item) => ({
+        ...item,
+        expiresAt,
+        ttl: sec(expiresAt),
+      }));
       return { ...session, expiresAt };
     },
     async setParentUnlocked(id, untilMs) {

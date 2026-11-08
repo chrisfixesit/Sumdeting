@@ -218,3 +218,81 @@ test("touchActive writes at most once per day", async () => {
   assert.equal(a.lastActiveAt, clock.t);
   assert.equal(a.warningSentAt, undefined);
 });
+
+test("checkCode: parallel guesses cannot exceed 5 attempts", async () => {
+  const { repo } = setup();
+  const code = await repo.issueCode("signin", "a@x.com", 600);
+  const wrong = code === "000000" ? "111111" : "000000";
+  const results = await Promise.all([
+    ...Array.from({ length: 10 }, () => repo.checkCode("signin", "a@x.com", wrong)),
+    repo.checkCode("signin", "a@x.com", code),
+  ]);
+  assert.equal(results.filter((r) => r === "invalid").length, 4);
+  assert.equal(results.filter((r) => r === "ok").length, 0);
+  assert.equal(results.at(-1), "locked");
+});
+
+test("checkCode: two concurrent correct submissions give one ok", async () => {
+  const { repo } = setup();
+  const code = await repo.issueCode("signin", "a@x.com", 600);
+  const results = await Promise.all([
+    repo.checkCode("signin", "a@x.com", code),
+    repo.checkCode("signin", "a@x.com", code),
+  ]);
+  assert.equal(results.filter((r) => r === "ok").length, 1);
+});
+
+test("consumeToken deletes the token", async () => {
+  const { repo, table } = setup();
+  const t = await repo.issueToken("signin", "a@x.com", 900);
+  await repo.consumeToken(t, "signin");
+  assert.deepEqual(await table.scan("TOKEN#"), []);
+});
+
+test("createAccount re-checks on non-condition transact error", async () => {
+  const { table, repo } = setup();
+  const acc = await repo.createAccount("a@x.com");
+  const flaky = createRepo(
+    { ...table, transact: async () => { throw new Error("TransactionConflict"); } },
+    { now: () => 0 }
+  );
+  assert.equal((await flaky.createAccount("a@x.com")).id, acc.id);
+  await assert.rejects(flaky.createAccount("new@x.com"), /TransactionConflict/);
+});
+
+test("caller input cannot overwrite key fields", async () => {
+  const { repo, table } = setup();
+  const o = await repo.createAccount("o@x.com");
+  const p = await repo.createProfile(o.id, { ...profileFields, pk: "X", sk: "Y", id: "z", ownerAccountId: "evil" });
+  assert.equal(p.ownerAccountId, o.id);
+  assert.notEqual(p.id, "z");
+  const victim = await repo.createProfile(o.id, profileFields);
+  await repo.updateProfile(p.id, { pk: `PROFILE#${victim.id}`, sk: "META", firstName: "Zed", ownerAccountId: "evil" });
+  assert.equal((await repo.getProfile(victim.id)).firstName, "Ann");
+  assert.equal((await repo.getProfile(p.id)).firstName, "Zed");
+  assert.equal((await repo.getProfile(p.id)).ownerAccountId, o.id);
+  assert.equal(await table.get("X", "Y"), null);
+});
+
+test("concurrent renewSession and setParentUnlocked both persist", async () => {
+  const { repo, clock } = setup();
+  const acc = await repo.createAccount("a@x.com");
+  const s = await repo.createSession(acc.id);
+  clock.t += 10 * 86400e3;
+  await Promise.all([repo.renewSession(s.id), repo.setParentUnlocked(s.id, 777)]);
+  const got = await repo.getSession(s.id);
+  assert.equal(got.parentUnlockedUntil, 777);
+  assert.equal(got.expiresAt, clock.t + 90 * 86400e3);
+});
+
+test("concurrent updateAccount and touchActive both persist", async () => {
+  const { repo, clock } = setup(Date.UTC(2026, 0, 1, 10));
+  const acc = await repo.createAccount("a@x.com");
+  await repo.updateAccount(acc.id, { warningSentAt: 5 });
+  clock.t = Date.UTC(2026, 0, 3, 1);
+  await Promise.all([repo.touchActive(acc.id), repo.updateAccount(acc.id, { type: "parent" })]);
+  const a = await repo.getAccount(acc.id);
+  assert.equal(a.type, "parent");
+  assert.equal(a.lastActiveAt, clock.t);
+  assert.equal(a.warningSentAt, undefined);
+});
