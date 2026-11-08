@@ -15,6 +15,9 @@ const PREFS = "mathmentor.prefs.v1";
 const ACTIVE = "sumdeting.activeProfile";
 const MERGE_PREFIX = "sumdeting.mergeId.";
 const QUEUE_PREFIX = "sumdeting.queue.";
+const DECLINED_PREFIX = "sumdeting.mergeDeclined.";
+const LAST_ACCOUNT = "sumdeting.lastAccount";
+const AWAITING = "sumdeting.awaitingProfile";
 const FLUSH_GAP_MS = 5000;
 const RETRY_MS = 15000;
 
@@ -151,31 +154,68 @@ function ensurePrefs(p) {
 }
 
 function forgetProfile(pid) {
-  for (const k of [SD.storageKey(MASTERY, pid), SD.storageKey(PREFS, pid), QUEUE_PREFIX + pid, MERGE_PREFIX + pid]) {
+  for (const k of [SD.storageKey(MASTERY, pid), SD.storageKey(PREFS, pid), QUEUE_PREFIX + pid, MERGE_PREFIX + pid, DECLINED_PREFIX + pid]) {
     store.removeItem(k);
   }
 }
 
+/** Remove merge ids, merge declines and the awaiting marker (the extras clearProfileCaches doesn't know). */
 function removeMergeIds() {
   const doomed = [];
   for (let i = 0; i < store.length; i++) {
     const k = store.key(i);
-    if (k?.startsWith(MERGE_PREFIX)) doomed.push(k);
+    if (k?.startsWith(MERGE_PREFIX) || k?.startsWith(DECLINED_PREFIX)) doomed.push(k);
   }
   doomed.forEach((k) => store.removeItem(k));
+  store.removeItem(AWAITING);
+}
+
+/** Everything a previous account left on this device. Bumps the session generation first. */
+function wipeAccountData() {
+  generation += 1;
+  clearProfileCaches(store);
+  removeMergeIds();
+  store.removeItem(LAST_ACCOUNT);
+}
+
+/** Cheap fingerprint of the signed-out mastery blob: length plus a 32-bit string hash. */
+export function anonFingerprint(raw) {
+  const text = raw ?? "";
+  let hash = 5381;
+  for (let i = 0; i < text.length; i++) hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0;
+  return `${text.length}:${hash.toString(36)}`;
+}
+
+/** Offer the merge unless the person said "Not mine" to this exact signed-out blob. */
+async function maybeOfferMerge(p) {
+  if (!hasAnonymousProgress(store)) return;
+  const fp = anonFingerprint(store.getItem(MASTERY));
+  if (store.getItem(DECLINED_PREFIX + p.id) === fp) return;
+  const result = await screens.offerMerge(p);
+  if (result === "declined") store.setItem(DECLINED_PREFIX + p.id, fp);
+}
+
+async function rememberAccount(me) {
+  try { store.setItem(LAST_ACCOUNT, await SD.sha256Hex(`sumdeting:${me.account.email}`)); } catch { /* no crypto */ }
 }
 
 // ---- Choosing a profile ----
 
-/** Make `p` the active profile on this device: load its progress and offer a merge. */
-async function chooseProfile(p) {
+/**
+ * Make `p` the active profile on this device and load its progress. The merge
+ * prompt is offered only on an explicit choice (picker, after sign-in or setup),
+ * never on the silent restore at page load.
+ */
+async function chooseProfile(p, { explicit = true } = {}) {
   if (state.syncPid && state.syncPid !== p.id) await flushNow();
+  if (!state.me) return; // the flush found we were signed out (and already said so)
   if (store.getItem(ACTIVE) !== p.id) SD.clearChat();
   store.setItem(ACTIVE, p.id);
   state.profile = p;
 
   if (p.consentStatus === "awaiting_parent") {
     // Until a parent approves, the app keeps using signed-out storage.
+    store.setItem(AWAITING, p.id);
     state.syncPid = null;
     SD.setActiveProfile(null);
     SD.reloadLocalState();
@@ -183,6 +223,9 @@ async function chooseProfile(p) {
     return;
   }
 
+  // A profile that was waiting for approval and is now active gets the merge offer once, as on approval.
+  const justApproved = store.getItem(AWAITING) === p.id;
+  store.removeItem(AWAITING);
   state.syncPid = p.id;
   SD.setActiveProfile(p.id);
   render();
@@ -200,7 +243,7 @@ async function chooseProfile(p) {
   }
   SD.reloadLocalState();
   render();
-  if (hasAnonymousProgress(store)) await screens.offerMerge(p);
+  if (explicit || justApproved) await maybeOfferMerge(p);
 }
 
 const isDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
@@ -246,6 +289,7 @@ async function mergeInto(p) {
   if (!r.ok) return r;
   clearAnonymous(store);
   store.removeItem(key);
+  store.removeItem(DECLINED_PREFIX + p.id);
   if (state.syncPid === p.id && !createQueue(store, p.id).size()) writeCache(p, r.data?.progress);
   SD.reloadLocalState();
   return r;
@@ -256,6 +300,14 @@ async function mergeInto(p) {
 let flushTimer = null;
 let lastFlush = 0;
 let inflight = null;
+// Bumped whenever a session ends on this device, so a flush still in flight
+// can't write a queue back after the caches were cleared.
+let generation = 0;
+const guardedStore = (gen) => ({
+  getItem: (k) => store.getItem(k),
+  setItem: (k, v) => { if (gen === generation) store.setItem(k, v); },
+  removeItem: (k) => { if (gen === generation) store.removeItem(k); },
+});
 
 window.addEventListener("sumdeting:progress", (e) => {
   const pid = state.syncPid;
@@ -279,7 +331,7 @@ async function flushNow({ keepalive = false } = {}) {
   flushTimer = null;
   inflight = (async () => {
     lastFlush = Date.now();
-    const queue = createQueue(store, pid);
+    const queue = createQueue(guardedStore(generation), pid);
     let res = await queue.flush(keepalive ? keepaliveApi : api);
     while (!keepalive && res === "ok" && queue.size()) res = await queue.flush(api);
     return res;
@@ -327,8 +379,18 @@ function deactivate() {
   SD.reloadLocalState();
 }
 
-/** The server no longer knows us: back to signed-out storage. Queued events stay for the next sign-in. */
+/**
+ * The server no longer knows us: back to signed-out storage. The profile's
+ * cached progress is removed (shared computers), but its queue stays so unsent
+ * events reach the server at the next sign-in. sumdeting.lastAccount stays so
+ * the next person's sign-in still clears whatever is left.
+ */
 function dropToSignedOut(message) {
+  const pid = state.profile?.id ?? store.getItem(ACTIVE);
+  if (pid) {
+    store.removeItem(SD.storageKey(MASTERY, pid));
+    store.removeItem(SD.storageKey(PREFS, pid));
+  }
   state.me = null;
   deactivate();
   closeAllDialogs();
@@ -358,10 +420,15 @@ async function refreshMe() {
 /** Called with the /me-shaped body after a successful /signin/verify. */
 async function afterSignIn(me) {
   const marker = store.getItem(ACTIVE);
-  if (marker && !me.profiles.some((p) => p.id === marker)) {
-    // A different account was signed in on this device before: drop its copies.
-    clearProfileCaches(store);
-    removeMergeIds();
+  const last = store.getItem(LAST_ACCOUNT);
+  let mine = null;
+  try { mine = await SD.sha256Hex(`sumdeting:${me.account.email}`); } catch { /* no crypto */ }
+  const otherAccount = (last && mine && last !== mine) || (marker && !me.profiles.some((p) => p.id === marker));
+  if (otherAccount) {
+    // A different account was signed in on this device before: send what it
+    // can still send (bounded), then drop its copies.
+    if (state.syncPid) await Promise.race([flushNow(), new Promise((r) => setTimeout(r, 3000))]);
+    wipeAccountData();
     state.profile = null;
     state.syncPid = null;
     SD.setActiveProfile(null);
@@ -369,6 +436,7 @@ async function afterSignIn(me) {
     SD.reloadLocalState();
   }
   state.me = me;
+  await rememberAccount(me);
   render();
   await route({ showPicker: true });
 }
@@ -392,15 +460,16 @@ async function route({ showPicker }) {
     showNotice(GONE_MSG);
   }
   render();
-  if (!showPicker && remembered) return chooseProfile(remembered);
+  if (!showPicker && remembered) return chooseProfile(remembered, { explicit: false });
   if (showPicker || list.length) return screens.openPicker();
 }
 
 async function signInWithFragment() {
   const token = parseSigninFragment(location.hash);
   if (!token) return false;
-  const r = await api("/signin/verify", { token });
+  // Strip the token from the address bar before anything else can see or reuse it.
   window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  const r = await api("/signin/verify", { token });
   if (r.ok && r.data?.signedIn) {
     closeAllDialogs();
     await afterSignIn(r.data);
@@ -415,8 +484,7 @@ async function signInWithFragment() {
 async function signOut() {
   if (state.syncPid) await Promise.race([flushNow(), new Promise((r) => setTimeout(r, 3000))]);
   await api("/signout");
-  clearProfileCaches(store);
-  removeMergeIds();
+  wipeAccountData();
   state.me = null;
   state.profile = null;
   state.syncPid = null;
@@ -478,6 +546,7 @@ async function init() {
   const r = await api("/me");
   if (r.ok && r.data?.signedIn) {
     state.me = r.data;
+    await rememberAccount(r.data);
     await route({ showPicker: false });
   } else if (r.status === 401 && store.getItem(ACTIVE)) {
     dropToSignedOut(SIGNED_OUT_MSG);

@@ -429,7 +429,7 @@ export function createScreens(ctx) {
       h("h2", {}, `Add the progress on this device to ${p.firstName}'s profile?`),
       h("p", { class: "acct-sub" }, "This is practice done on this device while nobody was signed in. Choose Not mine if someone else did it."),
       err,
-      h("div", { class: "acct-actions" }, add, secondary("Not mine", () => d.close())),
+      h("div", { class: "acct-actions" }, add, secondary("Not mine", () => d.close("declined"))),
     );
     return d.closed;
   }

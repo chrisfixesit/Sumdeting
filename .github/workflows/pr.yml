@@ -104,7 +104,7 @@ jobs:
 
       - name: Install e2e dependencies
         working-directory: e2e
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Install Chromium
         working-directory: e2e

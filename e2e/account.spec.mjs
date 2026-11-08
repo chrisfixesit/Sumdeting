@@ -188,6 +188,56 @@ test("merge prompt: Add moves device progress into profile; Not mine leaves it",
   }), { ANON_MASTERY, pid });
   expect(left.anon.topics.Fractions.solved).toBe(3);
   expect(left.cached.topics.Fractions.solved).toBe(3); // not added twice
+
+  // The decline is remembered: no prompt on reload, nor on choosing again with the same data.
+  await page.reload();
+  await expect(accountBtn(page)).toHaveText("MK");
+  await page.waitForTimeout(500);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: "Switch student" }).click();
+  await dialog(page).getByRole("button", { name: /Maya King/ }).click();
+  await page.waitForTimeout(500);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // New signed-out practice changes the blob, so an explicit choice asks again.
+  await page.evaluate(({ ANON_MASTERY }) => {
+    const m = JSON.parse(localStorage.getItem(ANON_MASTERY));
+    m.topics.Fractions.solved += 1;
+    localStorage.setItem(ANON_MASTERY, JSON.stringify(m));
+  }, { ANON_MASTERY });
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: "Switch student" }).click();
+  await dialog(page).getByRole("button", { name: /Maya King/ }).click();
+  await expect(dialog(page).getByText("Add the progress on this device to Maya's profile?")).toBeVisible();
+});
+
+test("involuntary sign-out drops cached progress, keeps the queue, and the next account clears it", async ({ page, context, request }) => {
+  await signUpStudent(page, request, uniqueEmail("expired"), { first: "Ava", last: "Hope" });
+  await expect(accountBtn(page)).toHaveText("AH");
+  const pid = await activePid(page);
+  await page.evaluate((pid) => localStorage.setItem(`mathmentor.mastery.v1.${pid}`, JSON.stringify({ topics: { Algebra: { attempted: 1, solved: 0 } }, streak: { count: 0, last: "" }, days: {} })), pid);
+  await context.clearCookies(); // the session ends server-side as far as this browser knows
+  await page.evaluate((d) => window.dispatchEvent(new CustomEvent("sumdeting:progress", {
+    detail: { id: crypto.randomUUID(), type: "activity", topic: "Algebra", solved: true, d },
+  })), today());
+  await expect(page.getByText("You've been signed out. Your practice still works on this device.")).toBeVisible();
+  await expect(accountBtn(page)).toHaveAttribute("aria-label", /sign in/i);
+  const after = await page.evaluate((pid) => ({
+    mastery: localStorage.getItem(`mathmentor.mastery.v1.${pid}`),
+    prefs: localStorage.getItem(`mathmentor.prefs.v1.${pid}`),
+    queue: JSON.parse(localStorage.getItem(`sumdeting.queue.${pid}`) ?? "[]").length,
+    last: localStorage.getItem("sumdeting.lastAccount"),
+  }), pid);
+  expect(after.mastery).toBeNull();
+  expect(after.prefs).toBeNull();
+  expect(after.queue).toBe(1);
+  expect(after.last).toBeTruthy();
+
+  // Someone else signs in on this device: the previous account's leftovers go.
+  await signIn(page, request, uniqueEmail("next-person"));
+  await expect(dialog(page).getByRole("heading", { name: "Who's setting this up?" })).toBeVisible();
+  const keys = await page.evaluate(() => Object.keys(localStorage));
+  expect(keys.filter((k) => k.includes(pid))).toEqual([]);
 });
 
 test("sign out clears profile caches and chat", async ({ page, request }) => {
