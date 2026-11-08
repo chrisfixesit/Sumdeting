@@ -2,7 +2,13 @@
   "name": "math-mentor-backend",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test": "node --test account/*.test.mjs"
+  },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.0.0"
+    "@aws-sdk/client-bedrock-runtime": "^3.0.0",
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/client-sesv2": "^3.0.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0"
   }
 }
