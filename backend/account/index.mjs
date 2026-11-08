@@ -4,6 +4,7 @@ import { register as registerProfiles } from "./profiles.mjs";
 import { register as registerSync } from "./sync.mjs";
 import { register as registerParent } from "./parent.mjs";
 import { register as registerLinks } from "./links.mjs";
+import { register as registerDeletion } from "./deletion.mjs";
 import { createMemoryTable, createDynamoTable } from "./table.mjs";
 import { createRepo } from "./repo.mjs";
 import { createMailer } from "./email.mjs";
@@ -12,7 +13,7 @@ const PREFIX = "/api/account";
 const JSON_HEADERS = { "content-type": "application/json", "cache-control": "no-store" };
 
 /** Feature modules register here; later tasks add theirs to this list. */
-const MODULES = [registerAuth, registerProfiles, registerSync, registerParent, registerLinks];
+const MODULES = [registerAuth, registerProfiles, registerSync, registerParent, registerLinks, registerDeletion];
 
 export function createAppRouter(deps) {
   const router = createRouter(deps);
@@ -57,7 +58,7 @@ export function makeHandler(routerFactory) {
   return async function handler(event) {
     if (event.source === "aws.scheduler" || event.janitor === true) {
       const { runJanitor } = await import("./deletion.mjs");
-      return runJanitor(depsFromEnv());
+      return runJanitor(lambdaDepsFromEnv());
     }
     router ??= routerFactory();
     const raw = event.isBase64Encoded

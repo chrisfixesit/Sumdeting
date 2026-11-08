@@ -1,5 +1,6 @@
 import { normaliseEmail } from "./tokens.mjs";
 import { HttpError, httpError } from "./http.mjs";
+import { deleteAccountCascade } from "./deletion.mjs";
 
 export const LEVELS = ["Common Entrance", "CSEC", "Additional Maths", "CAPE"];
 export const COLOURS = ["#F4C143", "#BFD0FF", "#C8E6C9", "#F8C9B8", "#E1C6F2", "#FFE0A3"];
@@ -31,11 +32,6 @@ function cleanColour(v) {
 }
 
 const isUnlocked = (ctx) => (ctx.session?.parentUnlockedUntil ?? 0) > ctx.deps.now();
-
-// TODO(Task 10): replace with deletion.mjs deleteAccountCascade
-async function deleteAccountCascadeStub(repo, accountId) {
-  await repo.deleteAccountRecord(accountId);
-}
 
 async function sendConsentRequest(deps, parentEmail, childFirstName) {
   const token = await deps.repo.issueToken("signin", parentEmail, CONSENT_TOKEN_SEC);
@@ -180,7 +176,7 @@ export function register(router) {
       await repo.deleteInvite(invite.id);
       const owner = await repo.getAccount(ownerId);
       if (owner?.type === "student" && (await repo.listAccessForAccount(ownerId)).length === 0) {
-        await deleteAccountCascadeStub(repo, ownerId);
+        await deleteAccountCascade(repo, ownerId);
       }
     }
     return {};

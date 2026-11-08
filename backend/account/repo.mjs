@@ -119,6 +119,12 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
     },
 
     // ---- Profiles and access ----
+    async listProfiles() {
+      const items = await table.scan("PROFILE#");
+      return items
+        .filter((i) => i.sk === "META")
+        .map((i) => ({ id: i.pk.slice("PROFILE#".length), ...strip(i) }));
+    },
     async createProfile(ownerAccountId, fields) {
       const id = randomUUID();
       const profile = { ...clean(fields), ownerAccountId, createdAt: now() };
