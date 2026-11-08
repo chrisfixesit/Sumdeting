@@ -304,20 +304,69 @@ test("decline deletes a student account that owns nothing even with a view_only 
   assert.ok(await app.repo.getProfile(op.id));
 });
 
-test("janitor deletes an old student account that owns no profiles, keeps a new one", async () => {
+async function awaitingStudent(app, email, ageDays) {
+  const s = await app.repo.createAccount(email);
+  await app.repo.updateAccount(s.id, { type: "student", setupComplete: true, holderOver13: false });
+  const p = await app.repo.createProfile(s.id, {
+    ...PROFILE, under13: true, consentStatus: "awaiting_parent", parentEmail: "par@x.com",
+  });
+  await app.table.put({ ...(await app.table.get(`PROFILE#${p.id}`, "META")), createdAt: app.clock.t - ageDays * DAY });
+  return { s, p };
+}
+
+test("student who deletes their last profile keeps the account through later janitor runs", async () => {
   const app = makeApp();
-  const mk = async (email, ageDays) => {
-    const a = await app.repo.createAccount(email);
-    await app.repo.updateAccount(a.id, {
-      type: "student", setupComplete: true, createdAt: app.clock.t - ageDays * DAY, lastActiveAt: app.clock.t,
-    });
-    return a;
+  const pid = await studentWithProfile(app);
+  const acct = await app.repo.findAccountByEmail("s@x.com");
+  await app.call("POST", "/delete/start");
+  await app.call("POST", "/profiles/delete", { profileId: pid, code: codeFrom(app.outbox.at(-1)) });
+  for (const days of [8, 60, 300]) {
+    app.clock.t += days * DAY;
+    await app.repo.touchActive(acct.id);
+    await run(app);
+    assert.ok(await app.repo.getAccount(acct.id));
+  }
+});
+
+test("flagged account whose cascade failed is cascaded on the next run", async () => {
+  const app = makeApp();
+  const { s, p } = await awaitingStudent(app, "k@x.com", 8);
+  let fail = true;
+  const repo = {
+    ...app.repo,
+    deleteAccountRecord: async (id) => {
+      if (fail) throw new Error("boom");
+      return app.repo.deleteAccountRecord(id);
+    },
   };
-  const oldA = await mk("o@x.com", 8);
-  const newA = await mk("n@x.com", 6);
+  const orig = console.error;
+  console.error = () => {};
+  let r1;
+  try {
+    r1 = await runJanitor({ repo, mailer: app.mailer, now: () => app.clock.t });
+  } finally {
+    console.error = orig;
+  }
+  assert.equal(r1.deletedAwaiting, 0);
+  assert.equal(await app.repo.getProfile(p.id), null);
+  assert.equal((await app.repo.getAccount(s.id)).pendingCascade, true);
+  fail = false;
+  const r2 = await runJanitor({ repo, mailer: app.mailer, now: () => app.clock.t });
+  assert.equal(r2.deletedAwaiting, 1);
+  assert.equal(await app.repo.getAccount(s.id), null);
+});
+
+test("pendingCascade is cleared when the account still owns profiles", async () => {
+  const app = makeApp();
+  const { s, p } = await awaitingStudent(app, "k@x.com", 8);
+  await app.repo.createProfile(s.id, { ...PROFILE, firstName: "Own", under13: false, consentStatus: "active" });
   await run(app);
-  assert.equal(await app.repo.getAccount(oldA.id), null);
-  assert.ok(await app.repo.getAccount(newA.id));
+  assert.equal(await app.repo.getProfile(p.id), null);
+  const acct = await app.repo.getAccount(s.id);
+  assert.ok(acct);
+  assert.equal(acct.pendingCascade, false);
+  await run(app);
+  assert.ok(await app.repo.getAccount(s.id));
 });
 
 test("one failing account does not stop the janitor and the failure is logged", async () => {

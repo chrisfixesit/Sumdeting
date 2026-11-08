@@ -98,6 +98,10 @@ export async function runJanitor({ repo, mailer, now = () => Date.now() }) {
         ...(await repo.listInvitesFromAccount(profile.ownerAccountId)),
         ...(profile.parentEmail ? await repo.listInvitesForEmail(profile.parentEmail) : []),
       ];
+      const owner = await repo.getAccount(profile.ownerAccountId);
+      const ownerIsStudent = owner?.type === "student";
+      // Flag first so a failed cascade is finished by the next run.
+      if (ownerIsStudent) await repo.updateAccount(owner.id, { pendingCascade: true });
       await repo.deleteProfile(profile.id);
       const seen = new Set();
       for (const i of invites) {
@@ -105,10 +109,10 @@ export async function runJanitor({ repo, mailer, now = () => Date.now() }) {
         seen.add(i.id);
         await repo.deleteInvite(i.id);
       }
-      const owner = await repo.getAccount(profile.ownerAccountId);
-      if (owner?.type === "student") {
+      if (ownerIsStudent) {
         const owned = (await repo.listAccessForAccount(owner.id)).filter((a) => a.kind === "owner");
         if (owned.length === 0) await deleteAccountCascade(repo, owner.id);
+        else await repo.updateAccount(owner.id, { pendingCascade: false });
       }
       return true;
     });
@@ -129,10 +133,10 @@ export async function runJanitor({ repo, mailer, now = () => Date.now() }) {
         result.deletedUnfinished++;
       } else if (
         account.type === "student" &&
-        t - account.createdAt > GRACE_DAYS * DAY_MS &&
+        account.pendingCascade === true &&
         !(await repo.listAccessForAccount(account.id)).some((a) => a.kind === "owner")
       ) {
-        // Left behind when an awaiting sweep removed the profile but the cascade failed.
+        // Flagged by an awaiting sweep whose cascade failed part-way.
         await deleteAccountCascade(repo, account.id);
         result.deletedAwaiting++;
       } else if (idleDays > WARN_DAYS && !account.warningSentAt) {
