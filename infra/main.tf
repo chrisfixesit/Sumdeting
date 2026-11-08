@@ -163,8 +163,8 @@ resource "aws_dynamodb_table" "accounts" {
 
 locals {
   # Falls back to no-reply@<domain> when email_from is not set explicitly.
-  # With neither set there is no valid sender; the account Lambda has a
-  # precondition that fails the plan rather than shipping a bogus address.
+  # The account Lambda has a precondition that the sender is on domain_name,
+  # the only SES-verified identity.
   email_from = var.email_from != "" ? var.email_from : "SumDeTing <no-reply@${var.domain_name}>"
 }
 
@@ -208,7 +208,7 @@ resource "aws_iam_role_policy" "account" {
         Resource = [aws_dynamodb_table.accounts.arn]
       }],
       # Only when a sender identity exists; the Lambda precondition
-      # guarantees domain_name or email_from is set.
+      # guarantees domain_name is set.
       local.use_custom_domain ? [{
         Effect   = "Allow"
         Action   = ["ses:SendEmail"]
@@ -216,6 +216,11 @@ resource "aws_iam_role_policy" "account" {
       }] : []
     )
   })
+}
+
+resource "aws_cloudwatch_log_group" "account" {
+  name              = "/aws/lambda/${var.project}-account"
+  retention_in_days = 90
 }
 
 resource "aws_lambda_function" "account" {
@@ -237,10 +242,12 @@ resource "aws_lambda_function" "account" {
     }
   }
 
+  depends_on = [aws_cloudwatch_log_group.account]
+
   lifecycle {
     precondition {
-      condition     = var.email_from != "" || var.domain_name != ""
-      error_message = "Set email_from or domain_name: the account Lambda needs a sender address for sign-in emails."
+      condition     = var.domain_name != "" && (endswith(local.email_from, "@${var.domain_name}>") || endswith(local.email_from, "@${var.domain_name}"))
+      error_message = "domain_name must be set (it owns the SES identity and ses:SendEmail grant) and the sender (email_from) must be an address on that domain."
     }
   }
 }
@@ -261,10 +268,10 @@ resource "aws_lambda_permission" "account_cloudfront_url" {
   source_arn    = aws_cloudfront_distribution.web.arn
 }
 
-# Lambda Function URLs behind OAC also need lambda:InvokeFunction on the
-# resource policy; scoped to this distribution.
+# Function URLs behind OAC also need lambda:InvokeFunction on the resource
+# policy; scoped to this distribution.
 resource "aws_lambda_permission" "account_cloudfront_invoke_function" {
-  statement_id  = "AllowCloudFrontInvokeForStreaming"
+  statement_id  = "AllowCloudFrontInvokeFunction"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.account.function_name
   principal     = "cloudfront.amazonaws.com"
@@ -338,6 +345,11 @@ resource "aws_scheduler_schedule" "janitor" {
     arn      = aws_lambda_function.account.arn
     role_arn = aws_iam_role.janitor_scheduler.arn
     input    = jsonencode({ janitor = true })
+
+    # The janitor is idempotent, so retrying is safe.
+    retry_policy {
+      maximum_retry_attempts = 2
+    }
   }
 }
 
@@ -607,6 +619,26 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs" {
   }
 }
 
+# Origin request policy for the account API: forwards cookies, query strings
+# and a small header allowlist, deliberately NOT Host (see the behavior).
+# x-amz-content-sha256 is needed for OAC-signed POST/PUT bodies on Function URLs.
+resource "aws_cloudfront_origin_request_policy" "account" {
+  name = "${var.project}-account-origin"
+
+  cookies_config {
+    cookie_behavior = "all"
+  }
+  query_strings_config {
+    query_string_behavior = "all"
+  }
+  headers_config {
+    header_behavior = "whitelist"
+    headers {
+      items = ["Content-Type", "Origin", "x-amz-content-sha256", "CloudFront-Viewer-Address"]
+    }
+  }
+}
+
 resource "aws_cloudfront_distribution" "web" {
   enabled             = true
   default_root_object = "index.html"
@@ -672,20 +704,19 @@ resource "aws_cloudfront_distribution" "web" {
     origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # Managed-AllViewerExceptHostHeader
   }
 
-  # Account API (sign-in, profiles, progress sync). Never cached. The origin
-  # request policy forwards cookies, query strings and CloudFront-Viewer-Address
-  # (used for rate limiting) but not Host, which would break the Function URL.
+  # Account API (sign-in, profiles, progress sync). Never cached. Uses a
+  # custom origin request policy rather than a managed All-Viewer one: those
+  # forward the viewer Host header, and a Lambda Function URL rejects requests
+  # whose Host is not its own domain. CloudFront-Viewer-Address carries the
+  # client IP:port, which the Lambda needs for rate limiting.
   ordered_cache_behavior {
-    path_pattern           = "/api/account/*"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "lambda-account"
-    viewer_protocol_policy = "https-only"
-    cache_policy_id        = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
-    # Managed-AllViewerAndCloudFrontHeaders-2022-06. Well-known id; verify with:
-    # aws cloudfront list-origin-request-policies --type managed \
-    #   --query "OriginRequestPolicyList.Items[?OriginRequestPolicy.OriginRequestPolicyConfig.Name=='Managed-AllViewerAndCloudFrontHeaders-2022-06'].OriginRequestPolicy.Id"
-    origin_request_policy_id = "33f36d7e-f396-46d9-90e0-52428a34d9dc"
+    path_pattern             = "/api/account/*"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods           = ["GET", "HEAD"]
+    target_origin_id         = "lambda-account"
+    viewer_protocol_policy   = "https-only"
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
+    origin_request_policy_id = aws_cloudfront_origin_request_policy.account.id
   }
 
   restrictions {
