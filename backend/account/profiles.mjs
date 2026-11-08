@@ -1,6 +1,7 @@
 import { normaliseEmail } from "./tokens.mjs";
 import { HttpError, httpError } from "./http.mjs";
 import { deleteAccountCascade } from "./deletion.mjs";
+import { limitRecipient } from "./links.mjs";
 
 export const LEVELS = ["Common Entrance", "CSEC", "Additional Maths", "CAPE"];
 export const COLOURS = ["#F4C143", "#BFD0FF", "#C8E6C9", "#F8C9B8", "#E1C6F2", "#FFE0A3"];
@@ -91,6 +92,7 @@ export function register(router) {
         }
         const existing = await repo.findAccountByEmail(parentEmail);
         if (existing?.type === "student") throw new HttpError(400, "parent_email_is_student");
+        await limitRecipient(ctx, parentEmail);
         fields = { under13: true, consentStatus: "awaiting_parent", parentEmail };
         invitee = parentEmail;
       }
@@ -199,6 +201,7 @@ export function register(router) {
     if (!(await repo.hitRate(`consent:resend:${ctx.account.id}`, HOUR_SEC, 5))) {
       throw httpError("rate_limited");
     }
+    await limitRecipient(ctx, profile.parentEmail);
     // Replace the invite so it gets a fresh 30-day ttl.
     const invites = await repo.listInvitesForEmail(profile.parentEmail);
     for (const i of invites) {

@@ -32,6 +32,13 @@ async function limitSends(ctx) {
   }
 }
 
+const DAY_SEC = 24 * 3600;
+
+/** At most 5 invitation emails a day to one address, whoever sends them. `email` is already normalised. */
+export async function limitRecipient(ctx, email) {
+  if (!(await ctx.deps.repo.hitRate(`invite:to:${email}`, DAY_SEC, 5))) throw httpError("rate_limited");
+}
+
 async function sendWithToken(ctx, template, email, vars) {
   const token = await ctx.deps.repo.issueToken("signin", email, SIGNIN_TTL_SEC);
   await ctx.deps.mailer.send(template, email, { token, ...vars });
@@ -95,6 +102,7 @@ export function register(router) {
     if (profile.consentStatus !== "active") throw httpError("awaiting_parent");
     await limitSends(ctx);
     if ((await repo.findAccountByEmail(email))?.type === "student") throw httpError("email_is_student");
+    await limitRecipient(ctx, email);
     await repo.createInvite({
       kind: "share",
       fromAccountId: ctx.account.id,
@@ -110,6 +118,7 @@ export function register(router) {
     const email = cleanTarget(ctx, ctx.req.body.childEmail);
     await limitSends(ctx);
     if ((await repo.findAccountByEmail(email))?.type === "parent") throw httpError("email_is_parent");
+    await limitRecipient(ctx, email);
     for (const i of await repo.listInvitesForEmail(email)) {
       if (i.kind === "request" && i.fromAccountId === ctx.account.id) await repo.deleteInvite(i.id);
     }
@@ -166,6 +175,7 @@ export function register(router) {
     const target = await repo.findAccountByEmail(email);
     if (target?.type === "student") throw httpError("email_is_student");
     if (target && (await repo.getAccess(target.id, profileId))) throw httpError("already_linked");
+    await limitRecipient(ctx, email);
     for (const i of await repo.listInvitesForEmail(email)) {
       if (i.kind === "guardian" && i.fromAccountId === ctx.account.id && i.profileIds?.includes(profileId)) {
         await repo.deleteInvite(i.id);

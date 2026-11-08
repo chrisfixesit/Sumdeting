@@ -369,3 +369,37 @@ test("rate limit applies before account-type probing", async () => {
   const r = await mum.call("/links/request", { childEmail: "dad@x.com" });
   assert.equal(r.status, 429);
 });
+
+test("one recipient gets at most 5 invites a day, whoever sends them", async () => {
+  const app = makeApp();
+  const a = await parent(app, "pa@x.com");
+  const b = await parent(app, "pb@x.com");
+  await a.unlock();
+  await b.unlock();
+  for (let i = 0; i < 3; i++) assert.equal((await a.call("/links/request", { childEmail: "target@x.com" })).status, 200);
+  for (let i = 0; i < 2; i++) assert.equal((await b.call("/links/request", { childEmail: "Target@X.com" })).status, 200);
+  const n = app.outbox.length;
+  const blocked = await b.call("/links/request", { childEmail: "target@x.com" });
+  assert.deepEqual([blocked.status, blocked.body], [429, { error: "rate_limited" }]);
+  assert.equal(app.outbox.length, n);
+  // Other recipients are unaffected, and the limit resets the next day.
+  assert.equal((await b.call("/links/request", { childEmail: "else@x.com" })).status, 200);
+  app.clock.t += DAY;
+  await a.unlock();
+  assert.equal((await a.call("/links/request", { childEmail: "target@x.com" })).status, 200);
+});
+
+test("share and invite-guardian count toward the same per-recipient limit", async () => {
+  const app = makeApp();
+  const s1 = await student(app, "s1@x.com");
+  const s2 = await student(app, "s2@x.com");
+  for (let i = 0; i < 3; i++) assert.equal((await s1.c.call("/links/share", { profileId: s1.pid, parentEmail: "mum@x.com" })).status, 200);
+  for (let i = 0; i < 2; i++) assert.equal((await s2.c.call("/links/share", { profileId: s2.pid, parentEmail: "mum@x.com" })).status, 200);
+  const share = await s2.c.call("/links/share", { profileId: s2.pid, parentEmail: "mum@x.com" });
+  assert.deepEqual([share.status, share.body], [429, { error: "rate_limited" }]);
+  const owner = await parent(app, "own@x.com");
+  await owner.unlock();
+  const made = await owner.call("/profiles/create", { firstName: "C", lastName: "D", level: "CSEC", colour: "#F4C143", consent: true });
+  const g = await owner.call("/links/invite-guardian", { profileId: made.body.profile.id, email: "mum@x.com" });
+  assert.deepEqual([g.status, g.body], [429, { error: "rate_limited" }]);
+});

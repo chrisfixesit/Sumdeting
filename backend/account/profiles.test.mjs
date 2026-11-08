@@ -305,16 +305,17 @@ test("consent/respond by an unrelated account -> forbidden", async () => {
   assert.equal((await app.call("POST", "/consent/respond", { profileId, approve: "yes" }, { cookie: pc })).status, 400);
 });
 
-test("consent/resend: owner only, awaiting_parent only, rate limited 5/hour, new token", async () => {
+test("consent/resend: owner only, awaiting_parent only, rate limited, new token", async () => {
   const app = makeApp();
   const created = await under13(app, "mum@x.com");
   const profileId = created.body.profile.id;
   const before = app.outbox.length;
-  for (let i = 0; i < 5; i++) {
+  // The first email plus 4 resends reach the per-recipient limit (5 a day) before the 5-an-hour resend limit.
+  for (let i = 0; i < 4; i++) {
     const r = await app.call("POST", "/consent/resend", { profileId });
     assert.equal(r.status, 200);
   }
-  assert.equal(app.outbox.length, before + 5);
+  assert.equal(app.outbox.length, before + 4);
   assert.equal(app.outbox.at(-1).kind, "consent_request");
   assert.notEqual(tokenFrom(app.outbox.at(-1)), tokenFrom(app.outbox.at(-2)));
   const limited = await app.call("POST", "/consent/resend", { profileId });
@@ -410,4 +411,23 @@ test("setup as student still waits for the first profile", async () => {
   await signIn(app, "st@x.com");
   await app.call("POST", "/setup", { type: "student", holderOver13: true });
   assert.equal((await app.repo.findAccountByEmail("st@x.com")).setupComplete, false);
+});
+
+test("consent emails to one parent address are limited to 5 a day across students", async () => {
+  const app = makeApp();
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await under13(app, "busy@x.com", `kid${i}@x.com`)).status, 200);
+  }
+  const res = await under13(app, "busy@x.com", "kid9@x.com");
+  assert.deepEqual([res.status, res.body], [429, { error: "rate_limited" }]);
+  assert.equal(app.outbox.filter((m) => m.to === "busy@x.com" && m.kind === "consent_request").length, 5);
+});
+
+test("consent resend counts toward the per-recipient limit", async () => {
+  const app = makeApp();
+  const made = await under13(app, "mum@x.com");
+  const pid = made.body.profile.id;
+  for (let i = 0; i < 4; i++) assert.equal((await app.call("POST", "/consent/resend", { profileId: pid })).status, 200);
+  const res = await app.call("POST", "/consent/resend", { profileId: pid });
+  assert.deepEqual([res.status, res.body], [429, { error: "rate_limited" }]);
 });
