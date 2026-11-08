@@ -111,6 +111,20 @@ const LABELS = { hard: "Finding it hard", confident: "Confident", getting_there:
 /** Human label for a topic status. */
 export const statusLabel = (status) => LABELS[status] ?? "";
 
+/** The UTC day ('YYYY-MM-DD') `offsetDays` before `now`. Progress events carry UTC days. */
+export const isoDay = (offsetDays = 0, now = Date.now()) => new Date(now - offsetDays * 86400e3).toISOString().slice(0, 10);
+
+/** "last practised today" / "yesterday" / "<date>", or "not practised yet" for anything that isn't a day. */
+export function lastPractisedText(day, now = Date.now()) {
+  if (typeof day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return "not practised yet";
+  if (day === isoDay(0, now)) return "last practised today";
+  if (day === isoDay(1, now)) return "last practised yesterday";
+  const when = new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
+    day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+  });
+  return `last practised ${when}`;
+}
+
 /** Two upper-case initials from first and last name. */
 export const initials = (first, last) =>
   ((first ?? "").trim()[0] ?? "").toUpperCase() + ((last ?? "").trim()[0] ?? "").toUpperCase();

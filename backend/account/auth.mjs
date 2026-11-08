@@ -10,7 +10,8 @@ export function register(router) {
     const { repo, mailer } = ctx.deps;
     const email = normaliseEmail(ctx.req.body.email);
     if (!email) throw httpError("bad_request");
-    if (!(await repo.hitRate(`signin:ip:${ctx.req.ip}`, HOUR_SEC, 30))) throw httpError("rate_limited");
+    const ipLimit = ctx.deps.signinIpLimit ?? 30;
+    if (!(await repo.hitRate(`signin:ip:${ctx.req.ip}`, HOUR_SEC, ipLimit))) throw httpError("rate_limited");
     if (!(await repo.hitRate(`signin:email:${email}`, HOUR_SEC, 5))) throw httpError("rate_limited");
     const token = await repo.issueToken("signin", email, SIGNIN_TTL_SEC);
     const code = await repo.issueCode("signin", email, SIGNIN_TTL_SEC);

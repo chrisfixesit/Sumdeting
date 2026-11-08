@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { makeApp } from "./testkit.mjs";
-import { makeHandler, lambdaDepsFromEnv } from "./index.mjs";
+import { makeHandler, lambdaDepsFromEnv, depsFromEnv } from "./index.mjs";
 import { createAppServer } from "../../server.mjs";
 
 const DAY = 24 * 3600 * 1000;
@@ -56,6 +56,16 @@ test("verify with token sets session cookie and returns me", async () => {
   const me = await app.call("POST", "/me");
   assert.equal(me.status, 200);
   assert.equal(me.body.account.email, "a@x.com");
+});
+
+test("me includes the caller's own account id (for removing their own links)", async () => {
+  const app = makeApp();
+  const mail = await start(app);
+  const res = await app.call("POST", "/signin/verify", { token: tokenFrom(mail) });
+  assert.equal(typeof res.body.account.id, "string");
+  assert.ok(res.body.account.id.length > 0);
+  const me = await app.call("POST", "/me");
+  assert.equal(me.body.account.id, res.body.account.id);
 });
 
 test("verify with email+code works; wrong code is invalid_code; 5th wrong try is too_many_attempts and burns the code", async () => {
@@ -280,6 +290,23 @@ test("lambda deps throw when required env is missing", () => {
     const env = { ...full };
     delete env[name];
     assert.throws(() => lambdaDepsFromEnv(env), new RegExp(name));
+  }
+});
+
+test("sign-in IP limit is 30 unless a dev server raises it (e2e only)", () => {
+  assert.equal(depsFromEnv({}).signinIpLimit, 30);
+  assert.equal(depsFromEnv({ SIGNIN_IP_LIMIT: "1000" }).signinIpLimit, 30); // ignored outside dev
+  assert.equal(depsFromEnv({ ACCOUNT_DEV: "1", SIGNIN_IP_LIMIT: "1000" }).signinIpLimit, 1000);
+  assert.equal(depsFromEnv({ ACCOUNT_DEV: "1", SIGNIN_IP_LIMIT: "nope" }).signinIpLimit, 30);
+  const full = { TABLE_NAME: "t", SITE_URL: "https://x.test", EMAIL_FROM: "a@x.test", EMAIL_MODE: "ses" };
+  assert.equal(lambdaDepsFromEnv({ ...full, ACCOUNT_DEV: "1", SIGNIN_IP_LIMIT: "1000" }).signinIpLimit, 30);
+});
+
+test("signin/start honours a raised dev IP limit", async () => {
+  const app = makeApp({ signinIpLimit: 40 });
+  for (let i = 0; i < 35; i++) {
+    const res = await app.call("POST", "/signin/start", { email: `u${i}@x.com` });
+    assert.equal(res.status, 200, `start ${i}`);
   }
 });
 

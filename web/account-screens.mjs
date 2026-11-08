@@ -154,7 +154,7 @@ export function createScreens(ctx) {
           const r = await api("/setup", { type: "parent" });
           if (!r.ok && errorCode(r) !== "bad_request") return err.show(messageFor(r));
           state.me.account.type = "parent";
-          state.me.parentUnlocked = true; // setup opens the parent section for a short while
+          ctx.markUnlocked(); // setup opens the parent section for a short while
         }
         d.close();
         openProfileForm(type === "parent" ? "parent" : "student-self");
@@ -390,7 +390,7 @@ export function createScreens(ctx) {
           if (!/^\d{6}$/.test(value)) return err.show("Enter the 6 numbers from the email.");
           const r = await api("/parent/unlock/verify", { code: value });
           if (!r.ok) return err.show(messageFor(r));
-          state.me.parentUnlocked = true;
+          ctx.markUnlocked();
           done = true;
           d.close();
           resolve(true);

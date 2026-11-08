@@ -21,6 +21,8 @@ export function createAppRouter(deps) {
   return router;
 }
 
+const SIGNIN_IP_LIMIT = 30;
+
 export function depsFromEnv(env = process.env) {
   const now = () => Date.now();
   const table = env.TABLE_NAME
@@ -33,7 +35,10 @@ export function depsFromEnv(env = process.env) {
     from: env.EMAIL_FROM,
     siteUrl,
   });
-  return { repo: createRepo(table, { now }), mailer, now, siteUrl, secureCookies: !dev, dev };
+  // The e2e dev server signs in more than 30 times an hour from one address.
+  const raised = Number.parseInt(env.SIGNIN_IP_LIMIT ?? "", 10);
+  const signinIpLimit = dev && raised > 0 ? raised : SIGNIN_IP_LIMIT;
+  return { repo: createRepo(table, { now }), mailer, now, siteUrl, secureCookies: !dev, dev, signinIpLimit };
 }
 
 /** Client IP from CloudFront's viewer address (ip:port, IPv6 allowed), else the Function URL source IP. */
@@ -87,6 +92,7 @@ export function lambdaDepsFromEnv(env = process.env) {
   if (env.EMAIL_MODE !== "ses") throw new Error("EMAIL_MODE must be 'ses' in Lambda");
   const deps = depsFromEnv({ ...env, ACCOUNT_DEV: "0" });
   deps.dev = false;
+  deps.signinIpLimit = SIGNIN_IP_LIMIT;
   deps.secureCookies = true;
   return deps;
 }

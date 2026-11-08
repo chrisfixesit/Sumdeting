@@ -15,7 +15,7 @@ export default defineConfig({
     ...devices["Pixel 7"],
   },
   webServer: {
-    command: "ACCOUNT_DEV=1 PORT=8099 node ../server.mjs",
+    command: "ACCOUNT_DEV=1 SIGNIN_IP_LIMIT=1000 PORT=8099 node ../server.mjs",
     cwd: ".",
     url: "http://localhost:8099/healthz",
     reuseExistingServer: false,

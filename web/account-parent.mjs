@@ -1,26 +1,14 @@
 // Parent section (behind the emailed parent code) and account/profile deletion.
 // Stateful work (caches, sign-out cleanup) stays in account-ui.mjs and arrives
 // through `ctx`. Every user-controlled string is set as text, never as HTML.
-import { initials, statusLabel } from "./account-core.mjs";
+import { initials, statusLabel, lastPractisedText } from "./account-core.mjs";
 import { nextId } from "./account-dom.mjs";
 import { COLOURS, levelLabel, accessLabel } from "./account-screens.mjs";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PILL = { hard: "acct-pill-hard", confident: "acct-pill-ok", getting_there: "acct-pill-mid" };
 export const DELETED_MSG = "Your account has been deleted.";
-
-const isoDay = (offsetDays = 0) => new Date(Date.now() - offsetDays * 86400e3).toISOString().slice(0, 10);
-
-/** "last practised today" / "yesterday" / "<date>", or "not practised yet". Dates are UTC days, like the events. */
-export function lastPractisedText(day) {
-  if (typeof day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return "not practised yet";
-  if (day === isoDay(0)) return "last practised today";
-  if (day === isoDay(1)) return "last practised yesterday";
-  const when = new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
-    day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
-  });
-  return `last practised ${when}`;
-}
+export const LOCKED_MSG = "The parent section locked.";
 
 const fullName = (c) => `${c.firstName} ${c.lastName}`;
 const canManage = (c) => c.access === "owner" || c.access === "guardian";
@@ -47,13 +35,39 @@ export function createParentSection(ctx) {
 
   function showOverview(initial) {
     let children = initial?.children ?? [];
-    const d = openDialog();
+    let timer = null;
+    const d = openDialog({ onClose: () => clearTimeout(timer) });
     const find = (pid) => children.find((c) => c.profileId === pid);
+    const drop = (pid) => { children = children.filter((c) => c.profileId !== pid); };
+
+    /** Close the section (and anything stacked on it) so no progress stays on screen once locked. */
+    function lock() {
+      clearTimeout(timer);
+      if (!d.open) return;
+      ctx.markLocked();
+      ctx.closeFrom(d);
+      showNotice(LOCKED_MSG);
+    }
+
+    /** Re-lock when the unlock window ends; a fresh unlock meanwhile pushes it back. */
+    function schedule() {
+      clearTimeout(timer);
+      const left = ctx.unlockedUntil() - Date.now();
+      if (left <= 0) return lock();
+      timer = setTimeout(() => (ctx.unlockedUntil() > Date.now() ? schedule() : lock()), left);
+      return undefined;
+    }
+
+    /** Like failure(), but a parent_locked that the person didn't unlock closes the section. */
+    function fail(r, pid = null) {
+      if (errorCode(r) === "parent_locked") { lock(); return null; }
+      return failure(r, pid);
+    }
 
     async function reload() {
       const r = await ctx.withParentUnlock(() => api("/parent/overview"));
       if (!r.ok) {
-        const msg = failure(r);
+        const msg = fail(r);
         if (msg) showNotice(msg);
         return false;
       }
@@ -114,6 +128,11 @@ export function createParentSection(ctx) {
           remove.addEventListener("click", () => busy(remove, () => removeChild(pid, status)));
           actions.push(remove);
         }
+      }
+      if (c.access !== "owner") {
+        const stop = h("button", { type: "button", class: "acct-secondary acct-secondary-danger" }, `Stop seeing ${c.firstName}'s progress`);
+        stop.addEventListener("click", () => busy(stop, () => stopSeeing(pid, status)));
+        actions.push(stop);
       }
       d.render(
         backButton("All students", () => list()),
@@ -181,13 +200,21 @@ export function createParentSection(ctx) {
           if (colour.value()) body.colour = colour.value();
           const r = await ctx.withParentUnlock(() => api("/profiles/update", body));
           if (!r.ok) {
-            const msg = failure(r);
+            const msg = fail(r);
             if (msg) err.show(msg);
             return undefined;
           }
           ctx.profileChanged(r.data.profile);
+          const saved = r.data?.profile ?? {};
+          children = children.map((x) => (x.profileId === pid ? {
+            ...x,
+            firstName: saved.firstName ?? body.firstName,
+            lastName: saved.lastName ?? body.lastName,
+            level: saved.level ?? body.level,
+            colour: saved.colour ?? body.colour ?? x.colour,
+          } : x));
           await reload();
-          return child(pid, "Saved.");
+          return d.open ? child(pid, "Saved.") : undefined;
         });
       });
       d.render(backButton("Back", () => child(pid)), heading(`Edit ${c.firstName}`), form);
@@ -221,7 +248,7 @@ export function createParentSection(ctx) {
           const code = errorCode(r);
           if (code === "already_linked") return err.show(`That person can already see ${c.firstName}'s progress.`);
           if (code === "bad_request") return err.show("Check the email and try again.");
-          const msg = failure(r);
+          const msg = fail(r);
           if (msg) err.show(msg);
           return undefined;
         });
@@ -241,7 +268,7 @@ export function createParentSection(ctx) {
       if (!c) return list();
       const r = await ctx.withParentUnlock(() => api("/links/list", { profileId: pid }));
       if (!r.ok) {
-        const msg = failure(r);
+        const msg = fail(r);
         if (msg) showNotice(msg);
         return undefined;
       }
@@ -265,7 +292,7 @@ export function createParentSection(ctx) {
             if (!sure) return;
             const out = await ctx.withParentUnlock(() => api("/links/remove", { profileId: pid, accountId: person.accountId }));
             if (!out.ok) {
-              const msg = failure(out);
+              const msg = fail(out);
               if (msg) err.show(msg);
               return;
             }
@@ -296,17 +323,44 @@ export function createParentSection(ctx) {
           `Anyone else who can see ${c.firstName}'s progress loses access too.`,
         ],
         action: "Remove child",
+        irreversible: true,
       });
       if (!sure) return;
       const r = await ctx.withParentUnlock(() => api("/profiles/delete", { profileId: pid }));
       if (!r.ok) {
-        const msg = failure(r);
+        const msg = fail(r);
         if (msg) status.show(msg);
         return;
       }
       ctx.profileRemoved(pid);
+      drop(pid);
       await reload();
-      list(`${fullName(c)} has been removed.`);
+      if (d.open) list(`${fullName(c)} has been removed.`);
+    }
+
+    /** A guardian or view-only parent ends their own access to this child. */
+    async function stopSeeing(pid, status) {
+      const c = find(pid);
+      const self = state.me?.account?.id;
+      if (!c || !self) return;
+      const sure = await confirmDanger({
+        title: `Stop seeing ${c.firstName}'s progress?`,
+        lines: [c.access === "guardian"
+          ? `You will no longer be able to practise as ${c.firstName} or see ${c.firstName}'s progress. Another parent or guardian can invite you again.`
+          : `You will no longer see ${c.firstName}'s progress. ${c.firstName} can share it with you again.`],
+        action: "Stop seeing",
+      });
+      if (!sure) return;
+      const r = await ctx.withParentUnlock(() => api("/links/remove", { profileId: pid, accountId: self }));
+      if (!r.ok) {
+        const msg = fail(r);
+        if (msg) status.show(msg);
+        return;
+      }
+      ctx.profileRemoved(pid);
+      drop(pid);
+      await reload();
+      if (d.open) list(`You no longer see ${c.firstName}'s progress.`);
     }
 
     // ---- A child who has their own account ----
@@ -334,7 +388,7 @@ export function createParentSection(ctx) {
             return status.show(`We've emailed ${value}. Their progress appears here once they allow it.`);
           }
           if (errorCode(r) === "bad_request") return err.show("Check the email and try again.");
-          const msg = failure(r);
+          const msg = fail(r);
           if (msg) err.show(msg);
           return undefined;
         });
@@ -348,6 +402,7 @@ export function createParentSection(ctx) {
     }
 
     list();
+    schedule();
     return d;
   }
 
@@ -376,6 +431,7 @@ export function createParentSection(ctx) {
       items: names,
       after,
       action: "Delete account",
+      irreversible: true,
     });
     if (!sure) return;
     if (parent || me.account.type === null) {
@@ -399,6 +455,7 @@ export function createParentSection(ctx) {
       title: `Remove ${fullName(p)}?`,
       lines: [`This deletes ${p.firstName}'s profile and all of ${p.firstName}'s practice progress, on every device.`],
       action: "Remove profile",
+      irreversible: true,
     });
     if (!sure) return;
     await codeThenDelete({

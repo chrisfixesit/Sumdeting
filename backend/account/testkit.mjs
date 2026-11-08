@@ -3,7 +3,7 @@ import { createRepo } from "./repo.mjs";
 import { createMailer } from "./email.mjs";
 import { createAppRouter } from "./index.mjs";
 
-export function makeApp({ now, dev = false, start = Date.UTC(2026, 0, 1, 12) } = {}) {
+export function makeApp({ now, dev = false, start = Date.UTC(2026, 0, 1, 12), signinIpLimit } = {}) {
   const clock = { t: start };
   const clockNow = now ?? (() => clock.t);
   const table = createMemoryTable({ now: clockNow });
@@ -16,6 +16,7 @@ export function makeApp({ now, dev = false, start = Date.UTC(2026, 0, 1, 12) } =
     siteUrl: "https://sumdeting.test",
     secureCookies: true,
     dev,
+    ...(signinIpLimit ? { signinIpLimit } : {}),
   });
   const jar = {};
   async function call(method, path, body = {}, { cookie, ip = "203.0.113.1" } = {}) {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createApi, createQueue, hasAnonymousProgress, readAnonymous, clearAnonymous,
   clearProfileCaches, statusLabel, initials, parseSigninFragment, newMergeId, clampCount,
+  isoDay, lastPractisedText,
 } from "./account-core.mjs";
 
 function fakeStorage(seed = {}) {
@@ -202,4 +203,24 @@ test("clampCount caps at 99 and floors at 0", () => {
   assert.equal(clampCount(-2), 0);
   assert.equal(clampCount(NaN), 0);
   assert.equal(clampCount(2.9), 2);
+});
+
+test("isoDay gives the UTC day, optionally days earlier", () => {
+  const now = Date.parse("2026-03-01T01:00:00Z");
+  assert.equal(isoDay(0, now), "2026-03-01");
+  assert.equal(isoDay(1, now), "2026-02-28");
+});
+
+test("lastPractisedText: today, yesterday, a date, and invalid values", () => {
+  const now = Date.parse("2026-11-08T12:00:00Z");
+  assert.equal(lastPractisedText("2026-11-08", now), "last practised today");
+  assert.equal(lastPractisedText("2026-11-07", now), "last practised yesterday");
+  const older = lastPractisedText("2026-10-03", now);
+  assert.match(older, /^last practised /);
+  assert.match(older, /2026/);
+  assert.match(older, /3/);
+  assert.doesNotMatch(older, /today|yesterday/);
+  for (const bad of [null, undefined, "", "yesterday", "2026-1-3", 20261108, {}]) {
+    assert.equal(lastPractisedText(bad, now), "not practised yet");
+  }
 });

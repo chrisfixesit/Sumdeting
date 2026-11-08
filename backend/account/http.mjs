@@ -95,6 +95,7 @@ export async function buildMe(ctx) {
   return {
     signedIn: true,
     account: {
+      id: account.id,
       email: account.email,
       type: account.type,
       setupComplete: account.setupComplete,

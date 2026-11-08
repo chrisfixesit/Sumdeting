@@ -155,6 +155,11 @@ export function openDialog({ dismissible = true, onClose } = {}) {
   return handle;
 }
 
+/** Close `handle` and every dialog stacked above it. */
+export function closeFrom(handle) {
+  while (handle.open && stack.includes(handle)) stack.at(-1).close(undefined);
+}
+
 /** Close every open dialog (for sign-out and forced sign-out). */
 export function closeAllDialogs() {
   while (stack.length) stack.at(-1).close(undefined);
@@ -183,9 +188,9 @@ export function showNotice(text, { timeout = 0 } = {}) {
 /**
  * Ask before something destructive. `lines` are paragraphs; `items` (optional)
  * is a list of exactly what will be deleted; `after` are paragraphs below it. Resolves true only on the
- * destructive button. Cancel gets focus first.
+ * destructive button. Cancel gets focus first. `irreversible` adds "This can't be undone."
  */
-export function confirmDanger({ title, lines = [], items = [], after = [], action, kicker }) {
+export function confirmDanger({ title, lines = [], items = [], after = [], action, kicker, irreversible = false }) {
   const d = openDialog();
   const go = h("button", { type: "button", class: "acct-primary acct-danger", on: { click: () => d.close(true) } }, action);
   const cancel = h("button", { type: "button", class: "acct-secondary", "data-autofocus": true, on: { click: () => d.close(false) } }, "Cancel");
@@ -195,7 +200,7 @@ export function confirmDanger({ title, lines = [], items = [], after = [], actio
     ...lines.map((t) => h("p", { class: "acct-sub" }, t)),
     items.length ? h("ul", { class: "acct-doomed" }, ...items.map((t) => h("li", {}, t))) : null,
     ...after.map((t) => h("p", { class: "acct-sub" }, t)),
-    h("p", { class: "acct-sub acct-warn" }, "This can't be undone."),
+    irreversible ? h("p", { class: "acct-sub acct-warn" }, "This can't be undone.") : null,
     h("div", { class: "acct-actions" }, go, cancel),
   );
   return d.closed.then((v) => v === true);

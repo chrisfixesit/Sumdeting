@@ -612,7 +612,6 @@ test("guardian invite: second email signs in, practises as the child, progress v
   await expect(dialog(pb).locator(".acct-stat", { hasText: "problems solved" })).toContainText("1");
   await expect(dialog(pb).getByRole("button", { name: "Edit" })).toBeVisible();
   await expect(dialog(pb).getByRole("button", { name: "Remove child" })).toHaveCount(0);
-  await other.close();
 
   // The first parent sees the same progress and the second guardian in the list.
   await page.keyboard.press("Escape");
@@ -626,6 +625,21 @@ test("guardian invite: second email signs in, practises as the child, progress v
   const people = dialog(page).getByRole("listitem").filter({ hasText: second });
   await expect(people).toContainText("Guardian");
   await expect(people.getByRole("button", { name: /Remove/ })).toBeVisible();
+
+  // The second guardian removes themselves.
+  await dialog(pb).getByRole("button", { name: "Stop seeing Omar's progress" }).click();
+  const sure = dialog(pb);
+  await expect(sure.getByRole("heading", { name: "Stop seeing Omar's progress?" })).toBeVisible();
+  await expect(sure).not.toContainText("can't be undone");
+  await sure.getByRole("button", { name: "Stop seeing", exact: true }).click();
+  await expect(overviewHeading(pb)).toBeVisible();
+  await expect(dialog(pb).getByRole("status")).toContainText("You no longer see Omar's progress.");
+  await expect(childRow(pb, "Omar Gill")).toHaveCount(0);
+  await expect(accountBtn(pb)).not.toHaveText("OG");
+  await other.close();
+  await dialog(page).getByRole("button", { name: "Back" }).click();
+  await dialog(page).getByRole("button", { name: "Who can see this child's progress" }).click();
+  await expect(dialog(page).getByText("Only you can see Omar's progress.")).toBeVisible();
 });
 
 test("parent requests access to a student account; student allows; child appears as View only", async ({ browser, page, request }) => {
@@ -672,6 +686,39 @@ test("parent requests access to a student account; student allows; child appears
   await expect(dialog(page).getByText("No practice yet.")).toBeVisible();
   await expect(dialog(page).getByRole("button", { name: "Edit" })).toHaveCount(0);
   await expect(dialog(page).getByRole("button", { name: "Remove child" })).toHaveCount(0);
+  // A view-only parent can end the link themselves.
+  await dialog(page).getByRole("button", { name: "Stop seeing Jaden's progress" }).click();
+  await dialog(page).getByRole("button", { name: "Stop seeing", exact: true }).click();
+  await expect(dialog(page).getByRole("status")).toContainText("You no longer see Jaden's progress.");
+  await expect(childRow(page, "Jaden Clarke")).toHaveCount(0);
+});
+
+test("open parent section re-locks when the unlock window ends", async ({ page, request }) => {
+  await page.clock.install();
+  await setUpParent(page, request, uniqueEmail("relock"), [{ first: "Ivy", last: "Lane" }]);
+  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await childRow(page, "Ivy Lane").click();
+  await dialog(page).getByRole("button", { name: "Remove child" }).click();
+  await expect(dialog(page).getByRole("heading", { name: "Remove Ivy Lane?" })).toBeVisible();
+  await page.clock.fastForward("16:00");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByText("The parent section locked.")).toBeVisible();
+  await expect(page.getByText("Ivy Lane")).toHaveCount(0);
+});
+
+test("parent section closes when a call comes back locked and the unlock is cancelled", async ({ page, request }) => {
+  await setUpParent(page, request, uniqueEmail("locked-call"), [{ first: "Remy", last: "Vale" }]);
+  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await childRow(page, "Remy Vale").click();
+  // The server's window ended early (another device, clock skew): it answers parent_locked.
+  await page.route("**/api/account/links/list", (route) => route.fulfill({
+    status: 403, contentType: "application/json", body: JSON.stringify({ error: "parent_locked" }),
+  }));
+  await dialog(page).getByRole("button", { name: "Who can see this child's progress" }).click();
+  await expect(dialog(page).getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
+  await dialog(page).getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByText("The parent section locked.")).toBeVisible();
 });
 
 test("student cannot remove under-13 consent-giver parent (no Remove button)", async ({ browser, page, request }) => {

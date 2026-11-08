@@ -6,7 +6,7 @@ import {
   createApi, createQueue, hasAnonymousProgress, readAnonymous, clearAnonymous,
   clearProfileCaches, initials, parseSigninFragment, newMergeId,
 } from "./account-core.mjs";
-import { h, personIcon, openDialog, closeAllDialogs, showNotice, busy, errorLine, statusLine, confirmDanger } from "./account-dom.mjs";
+import { h, personIcon, openDialog, closeAllDialogs, closeFrom, showNotice, busy, errorLine, statusLine, confirmDanger } from "./account-dom.mjs";
 import { createScreens } from "./account-screens.mjs";
 import { createParentSection, DELETED_MSG } from "./account-parent.mjs";
 
@@ -20,6 +20,7 @@ const DECLINED_PREFIX = "sumdeting.mergeDeclined.";
 const LAST_ACCOUNT = "sumdeting.lastAccount";
 const AWAITING = "sumdeting.awaitingProfile";
 const FLUSH_GAP_MS = 5000;
+const UNLOCK_MS = 15 * 60 * 1000; // the server's parent unlock window
 const RETRY_MS = 15000;
 
 export const SIGNED_OUT_MSG = "You've been signed out. Your practice still works on this device.";
@@ -68,7 +69,29 @@ const state = {
   me: null, // /me response while signed in
   profile: null, // the active profile on this device (may be awaiting_parent)
   syncPid: null, // the profile whose progress is synced (null when signed-out storage)
+  unlockedUntil: 0, // our estimate of when the parent unlock ends (ms); 0 = locked
 };
+
+/** A parent code was accepted (or setup unlocked the session): the window runs from now. */
+function markUnlocked() {
+  state.unlockedUntil = Date.now() + UNLOCK_MS;
+  if (state.me) state.me.parentUnlocked = true;
+}
+
+/** The window ended, or the server said parent_locked. */
+function markLocked() {
+  state.unlockedUntil = 0;
+  if (state.me) state.me.parentUnlocked = false;
+}
+
+/**
+ * /me says the session is unlocked but we never saw the unlock (page reload):
+ * assume at most a full window from now. Only a real unlock refreshes the estimate.
+ */
+function adoptUnlock(me) {
+  if (!me?.parentUnlocked) { state.unlockedUntil = 0; return; }
+  if (state.unlockedUntil <= Date.now()) state.unlockedUntil = Date.now() + UNLOCK_MS;
+}
 
 const usable = (p) => p.access === "owner" || p.access === "guardian";
 const selectable = () => (state.me?.profiles ?? []).filter(usable);
@@ -413,7 +436,7 @@ function profileGone(pid) {
 
 async function refreshMe() {
   const r = await api("/me");
-  if (r.ok) state.me = r.data;
+  if (r.ok) { state.me = r.data; adoptUnlock(r.data); }
   else if (r.status === 401) state.me = null;
   return r;
 }
@@ -437,6 +460,8 @@ async function afterSignIn(me) {
     SD.reloadLocalState();
   }
   state.me = me;
+  state.unlockedUntil = 0;
+  adoptUnlock(me);
   await rememberAccount(me);
   render();
   await route({ showPicker: true });
@@ -491,6 +516,7 @@ async function signOut() {
 /** The local half of an explicit sign-out: drop every cache this account left and close the UI. */
 function endSessionLocally() {
   wipeAccountData();
+  state.unlockedUntil = 0;
   state.me = null;
   state.profile = null;
   state.syncPid = null;
@@ -521,6 +547,7 @@ async function openParentSection() {
     if (errorCode(r) !== "parent_locked" && !handleAuthFailure(r, null)) showNotice(messageFor(r));
     return undefined;
   }
+  if (state.unlockedUntil <= Date.now()) state.unlockedUntil = Date.now() + UNLOCK_MS;
   return parent.showOverview(r.data);
 }
 
@@ -551,13 +578,14 @@ const screens = createScreens({
   messageFor, errorCode, maskEmail, selectable, isParent,
   h, openDialog, showNotice, busy, errorLine, statusLine,
   afterSignIn, refreshMe, route, chooseProfile, mergeInto, signOut,
-  withParentUnlock, openParentSection, handleAuthFailure, confirmDanger,
+  withParentUnlock, openParentSection, handleAuthFailure, confirmDanger, markUnlocked,
   openDeleteAccount: () => parent.openDeleteAccount(),
   openRemoveProfile: (p) => parent.openRemoveProfile(p),
 });
 
 const parent = createParentSection({
-  api, state, SD, h, openDialog, showNotice, busy, errorLine, statusLine, confirmDanger,
+  api, state, SD, h, openDialog, closeFrom, showNotice, busy, errorLine, statusLine, confirmDanger,
+  markLocked, unlockedUntil: () => state.unlockedUntil,
   messageFor, errorCode, maskEmail, withParentUnlock, handleAuthFailure,
   forms: () => screens.forms, profileChanged, profileRemoved, accountDeleted,
 });
@@ -571,6 +599,7 @@ async function init() {
   const r = await api("/me");
   if (r.ok && r.data?.signedIn) {
     state.me = r.data;
+    adoptUnlock(r.data);
     await rememberAccount(r.data);
     await route({ showPicker: false });
   } else if (r.status === 401 && store.getItem(ACTIVE)) {
