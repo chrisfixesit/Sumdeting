@@ -1,10 +1,5 @@
 <!doctype html>
-<!--
-  DRAFT — for owner review against the Barbados Data Protection Act 2019 before launch.
-  The sentence about the tutor sending chats to Claude via Amazon Bedrock needs the owner's confirmation.
-  The contact address below is a placeholder and must be filled in.
-  Keep the retention list in sync with docs/launch-runbook.md section 4.
--->
+<!-- Draft: see docs/launch-runbook.md section 4 before launch -->
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -65,7 +60,7 @@
         <li>dates: when the account was created, when consent was given, and when it was last used;</li>
         <li>for a student who makes their own account, whether they said they are 13 or older;</li>
         <li>the email addresses in any invites you send (for example to add a guardian), kept until the invite is used or expires, and for no more than 30 days;</li>
-        <li>a sign-in cookie on your device that keeps you signed in for up to 90 days of use.</li>
+        <li>a sign-in cookie on your device that keeps you signed in until 90 days after you last use it.</li>
       </ul>
       <p>For each student profile:</p>
       <ul>
@@ -76,6 +71,16 @@
         <li>consent details: who approved and when;</li>
         <li>practice progress: topics practised, problems solved and attempted, the number of hints and turns on recent problems, the daily streak, and practice preferences.</li>
       </ul>
+
+      <h2>To keep the service safe</h2>
+      <ul>
+        <li>When you sign in or use your account, we use your device's IP address briefly to stop abuse, such as too many sign-in attempts. We keep it for that purpose for up to an hour.</li>
+        <li>For the same reason we count how many sign-in and invite emails go to each email address, for up to a day.</li>
+        <li>Our standard service logs, which can include IP addresses, are kept for up to 90 days.</li>
+      </ul>
+
+      <h2>What is kept on your device</h2>
+      <p>Practice progress, updates that have not been sent to your account yet, and a marker that you are signed in are kept in the browser on that device. Signing out clears them from the device.</p>
 
       <h2>What we never store on our servers</h2>
       <ul>
@@ -107,7 +112,8 @@
         <li>Pending invites are removed after 30 days.</li>
         <li>Unfinished sign-ups are deleted after 7 days.</li>
         <li>Under-13 profiles still waiting for a parent are deleted after 7 days.</li>
-        <li>Inactive accounts: we send a warning email after about 23 months without use. An account is deleted only after more than 2 years without use and at least 30 days after that warning. Using SumDeTing again at any point restarts the clock.</li>
+        <li>Inactive accounts: we send a warning email after about 23 months without use. The sign-in link in that email works for 30 days. An account is deleted only after more than 2 years without use and at least 30 days after that warning. Using SumDeTing again at any point restarts the clock.</li>
+        <li>If a guardian who still uses SumDeTing was added to a child's profile, and the account that owns the profile stops using SumDeTing, the profile moves to that guardian instead of being deleted.</li>
       </ul>
 
       <h2>Deleting information</h2>

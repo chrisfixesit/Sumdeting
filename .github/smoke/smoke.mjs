@@ -102,6 +102,10 @@ try {
   // 6b. Accounts: privacy page, account endpoint, account UI module
   const priv = await page.request.get(BASE_URL + "/privacy.html");
   check("privacy page loads (200)", priv.status() === 200, `status ${priv.status()}`);
+  // The draft notice must never be live (tofu also refuses it unless allow_draft_privacy is set).
+  const privHtml = await priv.text();
+  const draftMarks = ["DRAFT", "owner to fill in"].filter((m) => privHtml.includes(m));
+  check("privacy page is the reviewed notice, not the draft", draftMarks.length === 0, draftMarks.join(", "));
 
   const acctBody = "{}";
   const acctRes = await page.request.post(BASE_URL + "/api/account/me", {
