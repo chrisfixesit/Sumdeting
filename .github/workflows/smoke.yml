@@ -16,7 +16,9 @@ on:
     - cron: "23 9 * * *" # daily, 09:23 UTC (~05:23 in Barbados)
 
 concurrency:
-  group: smoke-${{ github.ref }}
+  # In a workflow_call run, github.workflow is the caller's name ("Deploy"), so deploy smoke runs
+  # and scheduled/manual runs get separate groups and can't cancel each other.
+  group: smoke-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
