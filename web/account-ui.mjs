@@ -6,8 +6,9 @@ import {
   createApi, createQueue, hasAnonymousProgress, readAnonymous, clearAnonymous,
   clearProfileCaches, initials, parseSigninFragment, newMergeId,
 } from "./account-core.mjs";
-import { h, personIcon, openDialog, closeAllDialogs, showNotice, busy, errorLine, statusLine } from "./account-dom.mjs";
+import { h, personIcon, openDialog, closeAllDialogs, showNotice, busy, errorLine, statusLine, confirmDanger } from "./account-dom.mjs";
 import { createScreens } from "./account-screens.mjs";
+import { createParentSection, DELETED_MSG } from "./account-parent.mjs";
 
 const SD = window.SumDeTing;
 const MASTERY = "mathmentor.mastery.v1";
@@ -484,6 +485,11 @@ async function signInWithFragment() {
 async function signOut() {
   if (state.syncPid) await Promise.race([flushNow(), new Promise((r) => setTimeout(r, 3000))]);
   await api("/signout");
+  endSessionLocally();
+}
+
+/** The local half of an explicit sign-out: drop every cache this account left and close the UI. */
+function endSessionLocally() {
   wipeAccountData();
   state.me = null;
   state.profile = null;
@@ -509,24 +515,35 @@ export async function withParentUnlock(action) {
   return action();
 }
 
-// Task 15 plugs the parent section in here; until then a placeholder is shown.
-let parentSectionHandler = null;
-export function setParentSectionHandler(fn) { parentSectionHandler = fn; }
-
 async function openParentSection() {
   const r = await withParentUnlock(() => api("/parent/overview"));
   if (!r.ok) {
     if (errorCode(r) !== "parent_locked" && !handleAuthFailure(r, null)) showNotice(messageFor(r));
-    return;
+    return undefined;
   }
-  if (parentSectionHandler) return parentSectionHandler(r.data);
-  const d = openDialog();
-  d.render(
-    h("h2", {}, "See how everyone is doing"),
-    h("p", { class: "acct-sub" }, "The parent section is coming soon."),
-    h("div", { class: "acct-actions" },
-      h("button", { type: "button", class: "acct-primary", "data-autofocus": true, on: { click: () => d.close() } }, "Close")),
-  );
+  return parent.showOverview(r.data);
+}
+
+/** A profile's name, level or colour changed (parent section edit). */
+function profileChanged(updated) {
+  if (!updated?.id || !state.me) return;
+  state.me.profiles = state.me.profiles.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
+  if (state.profile?.id === updated.id) state.profile = { ...state.profile, ...updated };
+  render();
+}
+
+/** A profile was deleted on purpose from this device: forget it quietly. */
+function profileRemoved(pid) {
+  forgetProfile(pid);
+  if (state.me) state.me.profiles = state.me.profiles.filter((p) => p.id !== pid);
+  if (state.profile?.id === pid || store.getItem(ACTIVE) === pid) deactivate();
+  render();
+}
+
+/** The server deleted the account and cleared the cookie: same cleanup as signing out. */
+function accountDeleted() {
+  endSessionLocally();
+  showNotice(DELETED_MSG);
 }
 
 const screens = createScreens({
@@ -534,7 +551,15 @@ const screens = createScreens({
   messageFor, errorCode, maskEmail, selectable, isParent,
   h, openDialog, showNotice, busy, errorLine, statusLine,
   afterSignIn, refreshMe, route, chooseProfile, mergeInto, signOut,
-  withParentUnlock, openParentSection, handleAuthFailure,
+  withParentUnlock, openParentSection, handleAuthFailure, confirmDanger,
+  openDeleteAccount: () => parent.openDeleteAccount(),
+  openRemoveProfile: (p) => parent.openRemoveProfile(p),
+});
+
+const parent = createParentSection({
+  api, state, SD, h, openDialog, showNotice, busy, errorLine, statusLine, confirmDanger,
+  messageFor, errorCode, maskEmail, withParentUnlock, handleAuthFailure,
+  forms: () => screens.forms, profileChanged, profileRemoved, accountDeleted,
 });
 
 // ---- Start-up: never blocks practice ----
@@ -554,7 +579,7 @@ async function init() {
 }
 
 window.SumDeTingAccount = {
-  api, withParentUnlock, setParentSectionHandler, refreshMe,
+  api, withParentUnlock, refreshMe,
   get me() { return state.me; },
   get profile() { return state.profile; },
 };

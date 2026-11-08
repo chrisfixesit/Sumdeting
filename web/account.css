@@ -169,3 +169,73 @@
   .acct-sheet { animation: acct-up 0.18s ease-out; }
   @keyframes acct-up { from { transform: translateY(24px); opacity: 0.6; } to { transform: none; opacity: 1; } }
 }
+
+/* ---- Parent section and destructive actions ---- */
+:root { --acct-ok: #2E7D4F; --acct-ok-wash: #E3F2E8; --acct-hard-wash: #FBE7E1; --acct-on-danger: #ffffff; }
+:root[data-theme="dark"] { --acct-ok: #8FD1A6; --acct-ok-wash: #1F3326; --acct-hard-wash: #3A241D; --acct-on-danger: #211D16; }
+
+.acct-primary.acct-danger { background: var(--danger); color: var(--acct-on-danger); }
+.acct-secondary.acct-secondary-danger { color: var(--danger); border-color: var(--danger-line); }
+.acct-link.acct-link-danger { color: var(--danger); }
+.acct-warn { color: var(--danger); font-weight: 600; }
+.acct-doomed { margin: 0 0 0.9rem 1.2rem; padding: 0; font-size: 0.9rem; line-height: 1.5; color: var(--ink); }
+.acct-doomed li { word-break: break-word; }
+
+.acct-back {
+  min-height: 44px; padding: 0 0.2rem; margin: -0.4rem 0 0.4rem; border: 0; background: none; cursor: pointer;
+  color: var(--primary); font: 600 0.88rem 'Space Grotesk', system-ui, sans-serif;
+}
+.acct-back::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px;
+  border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-1px) rotate(45deg); }
+.acct-sheet h2[tabindex="-1"]:focus { outline: none; }
+
+.acct-kids { list-style: none; padding: 0; margin: 0 0 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.acct-kid {
+  width: 100%; min-height: 60px; display: flex; align-items: center; gap: 0.75rem; text-align: left; cursor: pointer;
+  padding: 0.6rem 0.75rem; border: 1px solid var(--card-border); border-radius: 14px; background: var(--bg); color: var(--ink);
+  font: 500 0.95rem 'Space Grotesk', system-ui, sans-serif;
+}
+.acct-kid:hover { border-color: var(--primary); }
+.acct-kid-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.acct-kid-text b { overflow-wrap: anywhere; }
+.acct-kid-text small { color: var(--muted); font-size: 0.78rem; }
+.acct-row-av, .acct-who-av {
+  flex: none; width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--acct-colour, var(--wash)); color: #15181E; font-weight: 700; font-size: 0.9rem;
+}
+.acct-tag {
+  flex: none; padding: 2px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 600;
+  border: 1px solid var(--line); background: var(--wash); color: var(--muted);
+}
+.acct-tag-owner { color: var(--primary); }
+.acct-tag-guardian { color: var(--ink); }
+
+.acct-who { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.9rem; }
+.acct-who h2 { margin: 0; overflow-wrap: anywhere; }
+.acct-who-av { width: 46px; height: 46px; font-size: 1rem; }
+.acct-who-meta { font-size: 0.84rem; color: var(--muted); }
+
+.acct-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 0.9rem; }
+.acct-stat {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 0.6rem 0.25rem; border: 1px solid var(--card-border); border-radius: 12px; background: var(--bg);
+}
+.acct-stat b { font: 600 1.35rem/1.2 'Fraunces', Georgia, serif; color: var(--ink); }
+.acct-stat span { font-size: 0.74rem; color: var(--muted); }
+
+.acct-group { margin-bottom: 0.75rem; }
+.acct-group h3 {
+  font: 700 0.72rem 'Space Grotesk', system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 0.4rem;
+}
+.acct-topic { padding: 0.6rem 0.75rem; margin-bottom: 0.4rem; border: 1px solid var(--card-border); border-radius: 12px; background: var(--bg); font-size: 0.9rem; }
+.acct-topic-top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.acct-topic-top b { overflow-wrap: anywhere; }
+.acct-pill { flex: none; padding: 2px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; background: var(--wash); color: var(--muted); }
+.acct-pill-ok { background: var(--acct-ok-wash); color: var(--acct-ok); }
+.acct-pill-hard { background: var(--acct-hard-wash); color: var(--danger); }
+.acct-bar { height: 6px; margin-top: 0.45rem; border-radius: 3px; background: var(--wash); overflow: hidden; }
+.acct-bar i { display: block; height: 100%; border-radius: 3px; background: var(--primary); }
+.acct-topic-meta { margin-top: 0.3rem; font-size: 0.76rem; color: var(--muted); }
+.acct-child-actions { margin-top: 0.75rem; }

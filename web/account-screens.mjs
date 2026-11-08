@@ -9,6 +9,9 @@ export const COLOURS = [
 ];
 const LEVEL_LABEL = { "Additional Maths": "Add Maths" };
 export const levelLabel = (level) => LEVEL_LABEL[level] ?? level;
+const ACCESS_LABEL = { owner: "Owner", guardian: "Guardian", view_only: "View only" };
+/** "Owner", "Guardian" or "View only". */
+export const accessLabel = (kind) => ACCESS_LABEL[kind] ?? "View only";
 
 const PARENT_CONSENT = "I'm this child's parent or guardian, and I agree to SumDeTing saving their practice progress.";
 const STUDENT_CONSENT = "I agree to SumDeTing saving my practice progress.";
@@ -532,7 +535,13 @@ export function createScreens(ctx) {
       items.push(item("Who can see my progress", () => { d.close(); openWhoCanSee(p); }));
     }
     if (ctx.isParent()) items.push(item("See how everyone is doing", () => { d.close(); ctx.openParentSection(); }));
-    items.push(item("Sign out", () => busy(items.at(-1), async () => { await ctx.signOut(); })));
+    const owned = (me.profiles ?? []).filter((x) => x.access === "owner");
+    if (me.account.type === "student" && p?.access === "owner" && owned.length > 1) {
+      items.push(item(`Remove ${p.firstName}'s profile`, () => { d.close(); ctx.openRemoveProfile(p); }));
+    }
+    items.push(item("Delete account", () => { d.close(); ctx.openDeleteAccount(); }));
+    const out = item("Sign out", () => busy(out, async () => { await ctx.signOut(); }));
+    items.push(out);
     d.render(
       h("h2", {}, p ? `${p.firstName} ${p.lastName}` : "Your account"),
       h("p", { class: "acct-sub" }, `Signed in as ${me.account.email}`),
@@ -579,11 +588,17 @@ export function createScreens(ctx) {
     const list = h("ul", { class: "acct-people" });
     const people = r.data?.people ?? [];
     for (const person of people) {
-      const label = person.kind === "guardian" ? "Guardian" : person.kind === "owner" ? "Owner" : "View only";
-      const row = h("li", {}, h("span", {}, h("b", {}, person.email), h("small", {}, label)));
+      const row = h("li", {}, h("span", {}, h("b", {}, person.email), h("small", {}, accessLabel(person.kind))));
       if (person.removable) {
-        const stop = h("button", { type: "button", class: "acct-secondary" }, "Stop sharing");
+        const stop = h("button", { type: "button", class: "acct-secondary", "aria-label": `Stop sharing with ${person.email}` }, "Stop sharing");
         stop.addEventListener("click", () => busy(stop, async () => {
+          err.show("");
+          const sure = await ctx.confirmDanger({
+            title: `Stop sharing with ${person.email}?`,
+            lines: [`They will no longer see ${p.firstName}'s practice progress.`],
+            action: "Stop sharing",
+          });
+          if (!sure) return;
           const out = await ctx.withParentUnlock(() => api("/links/remove", { profileId: p.id, accountId: person.accountId }));
           if (out.ok) row.remove();
           else err.show(messageFor(out));
@@ -604,5 +619,6 @@ export function createScreens(ctx) {
   return {
     openSignin: () => openSignin(), checkSignedInElsewhere, showSetup, openProfileForm, openPicker,
     runParentUnlock, offerMerge, showConsent, showRequest, openProfileMenu,
+    forms: { textField, radioGroup, primary, secondary, link },
   };
 }

@@ -416,7 +416,7 @@ resource "aws_s3_object" "account_ui" {
 }
 
 resource "aws_s3_object" "account_ui_modules" {
-  for_each      = toset(["account-dom.mjs", "account-screens.mjs"])
+  for_each      = toset(["account-dom.mjs", "account-screens.mjs", "account-parent.mjs"])
   bucket        = aws_s3_bucket.web.id
   key           = each.value
   content_type  = "text/javascript"

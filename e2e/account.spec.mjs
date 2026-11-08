@@ -416,3 +416,337 @@ test("existing parent approves a consent after the parent code unlock", async ({
   await expect(page.getByText("Waiting for your parent to approve.", { exact: false })).toBeHidden();
   await expect(accountBtn(page)).toHaveText("LG");
 });
+
+// ---- Parent section (Task 15) ----
+
+const PARENT_CONSENT = "I'm this child's parent or guardian, and I agree to SumDeTing saving their practice progress.";
+
+/** Wait for a mail newer than the `before` count for this address and kind. */
+async function nextMail(request, to, kind, before) {
+  let mail;
+  await expect.poll(async () => {
+    const list = (await outbox(request)).filter((m) => m.to === to && m.kind === kind);
+    mail = list.length > before ? list.at(-1) : null;
+    return Boolean(mail);
+  }).toBe(true);
+  return mail;
+}
+const mailCount = async (request, to, kind) =>
+  (await outbox(request)).filter((m) => m.to === to && m.kind === kind).length;
+
+/** Parent setup with the given children; ends on "Who's practising?" (this session is unlocked). */
+async function setUpParent(page, request, email, children) {
+  await signIn(page, request, email);
+  await dialog(page).getByRole("button", { name: /I'm a parent or guardian/ }).click();
+  for (const [i, child] of children.entries()) {
+    const d = dialog(page);
+    await expect(d.getByRole("heading", { name: "Add your child" })).toBeVisible();
+    await fillProfile(d, child);
+    await d.getByLabel(PARENT_CONSENT).check();
+    if (i < children.length - 1) {
+      await d.getByRole("button", { name: "Save and add another" }).click();
+      await expect(d.getByLabel(/first name/i)).toHaveValue("");
+    } else {
+      await d.getByRole("button", { name: "Done, start practising" }).click();
+    }
+  }
+  await expect(dialog(page).getByRole("heading", { name: "Who's practising?" })).toBeVisible();
+}
+
+/** A new browser context signed in as `email` (a fresh, locked session). Ends on whatever route shows. */
+async function freshSession(browser, request, email) {
+  const ctx = await browser.newContext();
+  const p = await ctx.newPage();
+  await signIn(p, request, email);
+  return { ctx, page: p };
+}
+
+/** Answer the parent unlock screen with the newest code emailed after `before`. */
+async function unlock(page, request, email, before) {
+  const d = dialog(page);
+  await expect(d.getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
+  const mail = await nextMail(request, email, "parent_code", before);
+  await d.getByLabel("6-digit code").fill(codeOf(mail));
+  await d.getByRole("button", { name: "Unlock" }).click();
+}
+
+const overviewHeading = (page) => dialog(page).getByRole("heading", { name: "See how everyone is doing" });
+const childRow = (page, name) => dialog(page).getByRole("button", { name: new RegExp(name) });
+
+/** Dispatch progress events and wait until the server has them. */
+async function practise(page, events) {
+  const synced = page.waitForResponse((r) => r.url().endsWith("/api/account/progress/sync") && r.ok());
+  await page.evaluate(({ events, d }) => {
+    for (const e of events) window.dispatchEvent(new CustomEvent("sumdeting:progress", { detail: { id: crypto.randomUUID(), d, ...e } }));
+  }, { events, d: today() });
+  await synced;
+}
+
+test("parent section asks for emailed code; wrong code shows error; right code opens overview", async ({ browser, page, request }) => {
+  const email = uniqueEmail("lock");
+  await setUpParent(page, request, email, [{ first: "Aaliyah", last: "Best", level: "Common Entrance" }]);
+  const { ctx, page: p } = await freshSession(browser, request, email);
+  await expect(dialog(p).getByRole("heading", { name: "Who's practising?" })).toBeVisible();
+  const before = await mailCount(request, email, "parent_code");
+  await dialog(p).getByRole("button", { name: "See how everyone is doing" }).click();
+  const d = dialog(p);
+  await expect(d.getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
+  await nextMail(request, email, "parent_code", before);
+  await d.getByLabel("6-digit code").fill("000000");
+  await d.getByRole("button", { name: "Unlock" }).click();
+  await expect(d.getByRole("alert")).toContainText(/didn't work/);
+  await expect(overviewHeading(p)).toHaveCount(0);
+  await unlock(p, request, email, before);
+  await expect(overviewHeading(p)).toBeVisible();
+  await expect(childRow(p, "Aaliyah Best")).toContainText("Owner");
+  await expect(childRow(p, "Aaliyah Best")).toContainText("Common Entrance");
+  await ctx.close();
+});
+
+test("child on parent's login cannot open parent section without code", async ({ browser, page, request }) => {
+  const email = uniqueEmail("shared-login");
+  await setUpParent(page, request, email, [{ first: "Noah", last: "Reid" }]);
+  const { ctx, page: p } = await freshSession(browser, request, email);
+  // The child picks themselves and practises on the parent's login.
+  await dialog(p).getByRole("button", { name: /Noah Reid/ }).click();
+  await expect(accountBtn(p)).toHaveText("NR");
+  const direct = await p.evaluate(async () => {
+    const r = await window.SumDeTingAccount.api("/parent/overview");
+    return { status: r.status, error: r.data?.error };
+  });
+  expect(direct).toEqual({ status: 403, error: "parent_locked" });
+  await accountBtn(p).click();
+  await dialog(p).getByRole("button", { name: "See how everyone is doing" }).click();
+  await expect(dialog(p).getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
+  await dialog(p).getByRole("button", { name: "Cancel" }).click();
+  await expect(overviewHeading(p)).toHaveCount(0);
+  // Deleting the account is behind the same lock.
+  await accountBtn(p).click();
+  await dialog(p).getByRole("button", { name: "Delete account" }).click();
+  await dialog(p).getByRole("button", { name: "Delete account" }).click();
+  await expect(dialog(p).getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
+  await dialog(p).getByRole("button", { name: "Cancel" }).click();
+  await expect(p.getByText("Your account has been deleted.")).toHaveCount(0);
+  await expect(accountBtn(p)).toHaveText("NR");
+  await ctx.close();
+});
+
+test("overview shows Needs practice / Going well with correct labels", async ({ page, request }) => {
+  const email = uniqueEmail("overview");
+  await setUpParent(page, request, email, [{ first: "Jaden", last: "Best" }]);
+  await dialog(page).getByRole("button", { name: /Jaden Best/ }).click();
+  await expect(accountBtn(page)).toHaveText("JB");
+  await practise(page, [
+    { type: "activity", topic: "Matrices", solved: false },
+    { type: "activity", topic: "Matrices", solved: false },
+    { type: "activity", topic: "Matrices", solved: false },
+    { type: "activity", topic: "Matrices", solved: true },
+    { type: "outcome", topic: "Matrices", ok: false, hints: 2, turns: 6 },
+    { type: "outcome", topic: "Matrices", ok: false, hints: 1, turns: 5 },
+    { type: "activity", topic: "Quadratics", solved: false },
+    { type: "activity", topic: "Quadratics", solved: false },
+    { type: "activity", topic: "Quadratics", solved: true },
+    { type: "activity", topic: "Quadratics", solved: true },
+    { type: "outcome", topic: "Quadratics", ok: true, hints: 0, turns: 2 },
+    { type: "outcome", topic: "Quadratics", ok: true, hints: 0, turns: 3 },
+  ]);
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await expect(overviewHeading(page)).toBeVisible();
+  await childRow(page, "Jaden Best").click();
+  const d = dialog(page);
+  await expect(d.getByRole("heading", { name: "Jaden Best" })).toBeVisible();
+  await expect(d.getByText("last practised today")).toBeVisible();
+  await expect(d.locator(".acct-stat", { hasText: "day streak" })).toContainText("1");
+  await expect(d.locator(".acct-stat", { hasText: "problems solved" })).toContainText("3");
+  await expect(d.locator(".acct-stat", { hasText: "topics tried" })).toContainText("2");
+  const needs = d.getByRole("region", { name: "Needs practice" });
+  const going = d.getByRole("region", { name: "Going well" });
+  await expect(needs).toContainText("Matrices");
+  await expect(needs).toContainText("Finding it hard");
+  await expect(needs).toContainText("1 of 3 solved");
+  await expect(needs).toContainText("often needed hints");
+  await expect(needs).not.toContainText("Quadratics");
+  await expect(going).toContainText("Quadratics");
+  await expect(going).toContainText("Confident");
+  await expect(going).toContainText("2 of 2 solved");
+  await expect(going).not.toContainText("often needed hints");
+  for (const name of ["Edit", "Add another parent or guardian", "Who can see this child's progress", "Remove child"]) {
+    await expect(d.getByRole("button", { name })).toBeVisible();
+  }
+  const text = await page.evaluate(() => document.body.innerText);
+  expect(text.match(EMOJI)).toBeNull();
+  // Back to the list.
+  await d.getByRole("button", { name: "All students" }).click();
+  await expect(overviewHeading(page)).toBeVisible();
+});
+
+test("guardian invite: second email signs in, practises as the child, progress visible to both", async ({ browser, page, request }) => {
+  const first = uniqueEmail("mum");
+  const second = uniqueEmail("dad");
+  await setUpParent(page, request, first, [{ first: "Omar", last: "Gill" }]);
+  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await childRow(page, "Omar Gill").click();
+  await dialog(page).getByRole("button", { name: "Add another parent or guardian" }).click();
+  await dialog(page).getByLabel("Email").fill(second);
+  await dialog(page).getByRole("button", { name: "Send invite" }).click();
+  await expect(dialog(page).getByRole("status")).toContainText(second);
+  const invite = await lastMail(request, second, "guardian_invite");
+
+  const other = await browser.newContext();
+  const pb = await other.newPage();
+  await pb.goto(`/#signin=${tokenOf(invite)}`);
+  await expect(dialog(pb).getByRole("heading", { name: "Who's practising?" })).toBeVisible();
+  await dialog(pb).getByRole("button", { name: /Omar Gill/ }).click();
+  await expect(accountBtn(pb)).toHaveText("OG");
+  await practise(pb, [
+    { type: "activity", topic: "Fractions", solved: false },
+    { type: "activity", topic: "Fractions", solved: true },
+  ]);
+  const before = await mailCount(request, second, "parent_code");
+  await accountBtn(pb).click();
+  await dialog(pb).getByRole("button", { name: "See how everyone is doing" }).click();
+  await unlock(pb, request, second, before);
+  await expect(childRow(pb, "Omar Gill")).toContainText("Guardian");
+  await childRow(pb, "Omar Gill").click();
+  await expect(dialog(pb).locator(".acct-stat", { hasText: "problems solved" })).toContainText("1");
+  await expect(dialog(pb).getByRole("button", { name: "Edit" })).toBeVisible();
+  await expect(dialog(pb).getByRole("button", { name: "Remove child" })).toHaveCount(0);
+  await other.close();
+
+  // The first parent sees the same progress and the second guardian in the list.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await expect(childRow(page, "Omar Gill")).toContainText("Owner");
+  await childRow(page, "Omar Gill").click();
+  await expect(dialog(page).locator(".acct-stat", { hasText: "problems solved" })).toContainText("1");
+  await dialog(page).getByRole("button", { name: "Who can see this child's progress" }).click();
+  const people = dialog(page).getByRole("listitem").filter({ hasText: second });
+  await expect(people).toContainText("Guardian");
+  await expect(people.getByRole("button", { name: /Remove/ })).toBeVisible();
+});
+
+test("parent requests access to a student account; student allows; child appears as View only", async ({ browser, page, request }) => {
+  const parentEmail = uniqueEmail("asker");
+  const otherParent = uniqueEmail("other-parent");
+  const studentEmail = uniqueEmail("own-account");
+  // Another parent account exists, to show the parent-email message.
+  const op = await browser.newContext();
+  await setUpParent(await op.newPage(), request, otherParent, [{ first: "Mia", last: "Cox" }]);
+  await op.close();
+  const sc = await browser.newContext();
+  const sp = await sc.newPage();
+  await signUpStudent(sp, request, studentEmail, { first: "Jaden", last: "Clarke" });
+  await expect(accountBtn(sp)).toHaveText("JC");
+
+  await setUpParent(page, request, parentEmail, [{ first: "Ella", last: "Ross" }]);
+  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await dialog(page).getByRole("button", { name: "Add a child who has their own account" }).click();
+  const d = dialog(page);
+  await d.getByLabel("Child's email").fill(otherParent);
+  await d.getByRole("button", { name: "Send request" }).click();
+  await expect(d.getByRole("alert")).toHaveText("That email is set up as a parent account.");
+  await d.getByLabel("Child's email").fill(studentEmail);
+  await d.getByRole("button", { name: "Send request" }).click();
+  await expect(d.getByRole("status")).toContainText(studentEmail);
+
+  await sp.reload();
+  const req = dialog(sp);
+  await expect(req.getByRole("heading", { name: `${parentEmail} wants to see your progress` })).toBeVisible();
+  await req.getByRole("button", { name: "Allow" }).click();
+  await expect(sp.getByText(`${parentEmail} can now see your progress.`)).toBeVisible();
+  await sc.close();
+
+  await dialog(page).getByRole("button", { name: "Back" }).click();
+  await expect(overviewHeading(page)).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: "See how everyone is doing" }).click();
+  await expect(overviewHeading(page)).toBeVisible();
+  await expect(childRow(page, "Jaden Clarke")).toContainText("View only");
+  await childRow(page, "Jaden Clarke").click();
+  await expect(dialog(page).getByRole("heading", { name: "Jaden Clarke" })).toBeVisible();
+  await expect(dialog(page).getByText("No practice yet.")).toBeVisible();
+  await expect(dialog(page).getByRole("button", { name: "Edit" })).toHaveCount(0);
+  await expect(dialog(page).getByRole("button", { name: "Remove child" })).toHaveCount(0);
+});
+
+test("student cannot remove under-13 consent-giver parent (no Remove button)", async ({ browser, page, request }) => {
+  const parentEmail = uniqueEmail("consent-giver");
+  await signIn(page, request, uniqueEmail("under13"));
+  await dialog(page).getByRole("button", { name: /I'm a student/ }).click();
+  await fillProfile(dialog(page), { first: "Zoe", last: "Hall", level: "Common Entrance" });
+  await dialog(page).getByRole("radio", { name: "No" }).check();
+  await dialog(page).getByLabel(/parent's or guardian's email/i).fill(parentEmail);
+  await dialog(page).getByRole("button", { name: "Start practising" }).click();
+  const mail = await lastMail(request, parentEmail, "consent_request");
+  const pc = await browser.newContext();
+  const pp = await pc.newPage();
+  await pp.goto(`/#signin=${tokenOf(mail)}`);
+  await dialog(pp).getByLabel(PARENT_CONSENT).check();
+  await dialog(pp).getByRole("button", { name: "Approve" }).click();
+  await expect(pp.getByText("You approved Zoe. Their practice progress will be saved.")).toBeVisible();
+  await pc.close();
+
+  await page.reload();
+  await expect(accountBtn(page)).toHaveText("ZH");
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: "Who can see my progress" }).click();
+  const row = dialog(page).getByRole("listitem").filter({ hasText: parentEmail });
+  await expect(row).toContainText("View only");
+  await expect(row.getByRole("button")).toHaveCount(0);
+});
+
+test("delete account behind lock removes everything; signing in again starts setup", async ({ browser, page, request }) => {
+  const email = uniqueEmail("delete-me");
+  await setUpParent(page, request, email, [{ first: "Ella", last: "Ross" }, { first: "Finn", last: "Ross" }]);
+  const { ctx, page: p } = await freshSession(browser, request, email);
+  await dialog(p).getByRole("button", { name: /Ella Ross/ }).click();
+  await expect(accountBtn(p)).toHaveText("ER");
+  await practise(p, [{ type: "activity", topic: "Algebra", solved: true }]);
+  const pid = await activePid(p);
+  await accountBtn(p).click();
+  await dialog(p).getByRole("button", { name: "Delete account" }).click();
+  const confirm = dialog(p);
+  await expect(confirm.getByRole("heading", { name: "Delete your account?" })).toBeVisible();
+  await expect(confirm).toContainText("Ella Ross");
+  await expect(confirm).toContainText("Finn Ross");
+  const before = await mailCount(request, email, "parent_code");
+  await confirm.getByRole("button", { name: "Delete account" }).click();
+  await unlock(p, request, email, before);
+  await expect(p.getByText("Your account has been deleted.")).toBeVisible();
+  await expect(accountBtn(p)).toHaveAttribute("aria-label", /sign in/i);
+  const keys = await p.evaluate(() => Object.keys(localStorage));
+  expect(keys.filter((k) => k.includes(pid))).toEqual([]);
+  expect(keys).not.toContain("sumdeting.activeProfile");
+  const me = await p.evaluate(async () => (await window.SumDeTingAccount.api("/me")).status);
+  expect(me).toBe(401);
+  await ctx.close();
+
+  // The same email starts over from setup.
+  await signIn(page, request, email);
+  await expect(dialog(page).getByRole("heading", { name: "Who's setting this up?" })).toBeVisible();
+});
+
+test("student deletes their account with an emailed code", async ({ page, request }) => {
+  const email = uniqueEmail("student-delete");
+  await signUpStudent(page, request, email, { first: "Kemar", last: "Lowe" });
+  await expect(accountBtn(page)).toHaveText("KL");
+  await accountBtn(page).click();
+  await dialog(page).getByRole("button", { name: "Delete account" }).click();
+  await expect(dialog(page)).toContainText("Kemar Lowe");
+  await dialog(page).getByRole("button", { name: "Delete account" }).click();
+  const d = dialog(page);
+  await expect(d.getByRole("heading", { name: "We've emailed you a code" })).toBeVisible();
+  const mail = await lastMail(request, email, "confirm_delete");
+  await d.getByLabel("6-digit code").fill("000000");
+  await d.getByRole("button", { name: "Delete account" }).click();
+  await expect(d.getByRole("alert")).toContainText(/didn't work/);
+  await d.getByLabel("6-digit code").fill(codeOf(mail));
+  await d.getByRole("button", { name: "Delete account" }).click();
+  await expect(page.getByText("Your account has been deleted.")).toBeVisible();
+  await expect(accountBtn(page)).toHaveAttribute("aria-label", /sign in/i);
+});

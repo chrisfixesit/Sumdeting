@@ -179,3 +179,24 @@ export function showNotice(text, { timeout = 0 } = {}) {
   noticeEl.hidden = false;
   if (timeout) noticeTimer = setTimeout(() => { noticeEl.hidden = true; }, timeout);
 }
+
+/**
+ * Ask before something destructive. `lines` are paragraphs; `items` (optional)
+ * is a list of exactly what will be deleted; `after` are paragraphs below it. Resolves true only on the
+ * destructive button. Cancel gets focus first.
+ */
+export function confirmDanger({ title, lines = [], items = [], after = [], action, kicker }) {
+  const d = openDialog();
+  const go = h("button", { type: "button", class: "acct-primary acct-danger", on: { click: () => d.close(true) } }, action);
+  const cancel = h("button", { type: "button", class: "acct-secondary", "data-autofocus": true, on: { click: () => d.close(false) } }, "Cancel");
+  d.render(
+    kicker ? h("p", { class: "acct-kicker" }, kicker) : null,
+    h("h2", {}, title),
+    ...lines.map((t) => h("p", { class: "acct-sub" }, t)),
+    items.length ? h("ul", { class: "acct-doomed" }, ...items.map((t) => h("li", {}, t))) : null,
+    ...after.map((t) => h("p", { class: "acct-sub" }, t)),
+    h("p", { class: "acct-sub acct-warn" }, "This can't be undone."),
+    h("div", { class: "acct-actions" }, go, cancel),
+  );
+  return d.closed.then((v) => v === true);
+}
