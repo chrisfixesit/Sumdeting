@@ -340,6 +340,7 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
       await table.transact([
         { put: { pk: `INVITE#${id}`, sk: "I", ...invite } },
         { put: { pk: emailKey(toEmail), sk: `INVITE#${id}`, kind, ttl } },
+        { put: { pk: accountKey(fromAccountId), sk: `INVITE#${id}`, kind, ttl } },
       ]);
       return { id, ...invite };
     },
@@ -355,17 +356,24 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
       const nowSec = now() / 1000;
       return invites.filter((i) => i && !(typeof i.ttl === "number" && i.ttl <= nowSec));
     },
-    /** Invites created by one account (scan; used only on rare removals). */
+    /** Invites created by one account, via the sender's INVITE# link rows (no scan). */
     async listInvitesFromAccount(accountId) {
-      const items = await table.scan("INVITE#");
-      return items
-        .filter((i) => i.sk === "I" && i.fromAccountId === accountId)
-        .map((i) => ({ id: i.pk.slice("INVITE#".length), ...strip(i), ttl: i.ttl }));
+      const links = await table.query(accountKey(accountId), "INVITE#");
+      const invites = await Promise.all(
+        links.map((l) => repo.getInvite(l.sk.slice("INVITE#".length)))
+      );
+      const nowSec = now() / 1000;
+      return invites.filter(
+        (i) => i && i.fromAccountId === accountId && !(typeof i.ttl === "number" && i.ttl <= nowSec)
+      );
     },
     async deleteInvite(id) {
       const invite = await table.get(`INVITE#${id}`, "I");
       const ops = [{ delete: { pk: `INVITE#${id}`, sk: "I" } }];
-      if (invite) ops.push({ delete: { pk: emailKey(invite.toEmail), sk: `INVITE#${id}` } });
+      if (invite) {
+        ops.push({ delete: { pk: emailKey(invite.toEmail), sk: `INVITE#${id}` } });
+        ops.push({ delete: { pk: accountKey(invite.fromAccountId), sk: `INVITE#${id}` } });
+      }
       await table.transact(ops);
     },
 

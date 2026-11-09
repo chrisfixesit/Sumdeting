@@ -117,6 +117,28 @@ test("400 drops the sent batch; retry only if items remain", async () => {
   } finally { console.warn = warn; }
 });
 
+test("events pushed while a sync is in flight survive a 200", async () => {
+  const q = createQueue(fakeStorage(), "p1");
+  q.push(ev(1));
+  const api = async () => { q.push(ev(2)); return { ok: true, status: 200, data: {} }; };
+  assert.equal(await q.flush(api), "ok");
+  assert.equal(q.size(), 1);
+  let body;
+  await q.flush(async (_p, b) => { body = b; return { ok: true, status: 200, data: {} }; });
+  assert.deepEqual(body.events.map((e) => e.id), ["e2"]);
+});
+
+test("events pushed while a sync is in flight survive a 400", async () => {
+  const q = createQueue(fakeStorage(), "p1");
+  q.push(ev(1));
+  const warn = console.warn; console.warn = () => {};
+  try {
+    const bad = async () => { q.push(ev(2)); return { ok: false, status: 400, data: null }; };
+    assert.equal(await q.flush(bad), "retry");
+    assert.equal(q.size(), 1);
+  } finally { console.warn = warn; }
+});
+
 test("flush sends at most 100 per call", async () => {
   const q = createQueue(fakeStorage(), "p1");
   for (let i = 0; i < 250; i++) q.push(ev(i));

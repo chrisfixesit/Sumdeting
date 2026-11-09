@@ -53,6 +53,8 @@ The image follows container-hardening practice: multi-stage build, non-root `nod
 
 ```bash
 ACCOUNT_DEV=1 node server.mjs
+# or, in the container:
+ACCOUNT_DEV=1 docker compose up --build
 ```
 
 `ACCOUNT_DEV=1` swaps DynamoDB and SES for an in-memory store and a dev outbox. Emails the app would send (sign-in links, codes, consent requests) are readable at `http://localhost:8080/api/account/_dev/outbox`. Data is lost on restart.

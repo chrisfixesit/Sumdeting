@@ -16,8 +16,8 @@ services:
       # instead of sending them, and drops the Secure flag from the session
       # cookie so it works over http://localhost. NEVER set it in production:
       # the outbox hands out sign-in links to anyone who can reach the port.
-      # Set ACCOUNT_DEV=0 to run without the dev outbox.
-      ACCOUNT_DEV: ${ACCOUNT_DEV:-1}
+      # Off unless you opt in: `ACCOUNT_DEV=1 docker compose up --build`.
+      ACCOUNT_DEV: ${ACCOUNT_DEV:-0}
       # Credentials come from the ~/.aws mount below by default.
       # To use static/session creds or a named profile instead, export them
       # in your shell before `docker compose up`; compose passes them through:

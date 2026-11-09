@@ -71,21 +71,26 @@ export function createQueue(storage, pid) {
      * Send up to 100 events. 200 -> 'ok' (sent events removed); 401 -> 'signedOut'
      * (kept); 404/403 -> 'gone' (dropped); 0/429/5xx -> 'retry' (kept). A 400 means
      * the batch itself is bad: drop the sent batch, warn, and return 'retry' only
-     * if items remain, else 'ok'.
+     * if items remain, else 'ok'. Practice keeps pushing while the request is in
+     * flight, so removal re-reads the queue and drops only the sent ids.
      */
     async flush(api) {
       const items = read();
       if (!items.length) return "ok";
       const sent = items.slice(0, BATCH);
       const { ok, status } = await api("/progress/sync", { profileId: pid, events: sent });
-      if (ok) { write(items.slice(sent.length)); return "ok"; }
+      const dropSent = () => {
+        const ids = new Set(sent.map((e) => e?.id));
+        const rest = read().filter((e) => !ids.has(e?.id));
+        write(rest);
+        return rest;
+      };
+      if (ok) { dropSent(); return "ok"; }
       if (status === 401) return "signedOut";
       if (status === 404 || status === 403) { write([]); return "gone"; }
       if (status === 400) {
         console.warn("progress sync: dropping rejected batch of", sent.length);
-        const rest = items.slice(sent.length);
-        write(rest);
-        return rest.length ? "retry" : "ok";
+        return dropSent().length ? "retry" : "ok";
       }
       return "retry";
     },

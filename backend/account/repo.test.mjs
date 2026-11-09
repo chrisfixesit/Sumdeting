@@ -193,6 +193,21 @@ test("invites: create, list by email, delete", async () => {
   assert.deepEqual(await repo.listInvitesForEmail("b@x.com"), []);
 });
 
+test("listInvitesFromAccount uses a keyed lookup, not a table scan", async () => {
+  const { repo, table, clock } = setup();
+  const mine = await repo.createInvite({ kind: "share", fromAccountId: "acc1", toEmail: "b@x.com", profileIds: ["p1"] });
+  await repo.createInvite({ kind: "request", fromAccountId: "acc2", toEmail: "c@x.com", profileIds: [] });
+  table.scan = async () => { throw new Error("scan on a request path"); };
+  assert.deepEqual((await repo.listInvitesFromAccount("acc1")).map((i) => i.id), [mine.id]);
+  assert.deepEqual((await repo.listInvitesFromAccount("acc1"))[0].profileIds, ["p1"]);
+  await repo.deleteInvite(mine.id);
+  assert.deepEqual(await repo.listInvitesFromAccount("acc1"), []);
+  assert.deepEqual(await table.query("ACCOUNT#acc1", "INVITE#"), []);
+  await repo.createInvite({ kind: "share", fromAccountId: "acc1", toEmail: "d@x.com", profileIds: [] });
+  clock.t += 31 * 86400e3;
+  assert.deepEqual(await repo.listInvitesFromAccount("acc1"), []);
+});
+
 test("hitRate allows limit then blocks within window, resets next window", async () => {
   const { repo, clock } = setup(Date.UTC(2026, 0, 1, 12, 0, 0));
   assert.equal(await repo.hitRate("k", 60, 2), true);
