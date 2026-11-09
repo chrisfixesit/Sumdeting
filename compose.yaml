@@ -20,8 +20,8 @@ services:
       ACCOUNT_DEV: ${ACCOUNT_DEV:-0}
       # Real sign-in email without dev mode: EMAIL_MODE=ses with EMAIL_FROM on a
       # verified SES identity, SITE_URL for the links (http://localhost:8080) and
-      # credentials allowed ses:SendEmail. TABLE_NAME uses DynamoDB; unset keeps
-      # accounts in memory. With neither dev mode nor SES, sign-in answers
+      # credentials allowed ses:SendEmail. TABLE_NAME uses DynamoDB (never with
+      # ACCOUNT_DEV=1, which refuses to start); unset keeps accounts in memory. With neither dev mode nor SES, sign-in answers
       # "email_unavailable" instead of pretending to send.
       EMAIL_MODE: ${EMAIL_MODE:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
@@ -29,8 +29,12 @@ services:
       TABLE_NAME: ${TABLE_NAME:-}
       # Credentials come from the ~/.aws mount below by default.
       # To use static/session creds or a named profile instead, export them
-      # in your shell before `docker compose up`; compose passes them through:
-      # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_PROFILE
+      # in your shell before `docker compose up`; compose passes them through
+      # (unset ones stay unset, so the ~/.aws mount still applies).
+      AWS_ACCESS_KEY_ID:
+      AWS_SECRET_ACCESS_KEY:
+      AWS_SESSION_TOKEN:
+      AWS_PROFILE:
     volumes:
       # Read-only AWS config/credentials for local development
       - ~/.aws:/home/node/.aws:ro

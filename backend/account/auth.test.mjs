@@ -310,6 +310,16 @@ test("local server without dev mode or SES refuses sign-in instead of pretending
   assert.equal(deps.mailer.outbox.length, 1);
 });
 
+test("dev mode refuses a persistent table (the outbox would hand out real accounts)", () => {
+  assert.throws(() => depsFromEnv({ ACCOUNT_DEV: "1", TABLE_NAME: "sumdeting-accounts" }), /ACCOUNT_DEV/);
+  assert.throws(
+    () => depsFromEnv({ ACCOUNT_DEV: "1", TABLE_NAME: "t", EMAIL_MODE: "ses", EMAIL_FROM: "a@x.test" }),
+    /ACCOUNT_DEV/
+  );
+  assert.ok(depsFromEnv({ ACCOUNT_DEV: "1", TABLE_NAME: "" }).repo);
+  assert.ok(depsFromEnv({ TABLE_NAME: "t", EMAIL_MODE: "ses", EMAIL_FROM: "a@x.test" }).repo);
+});
+
 test("sign-in IP limit is 300 unless a dev server raises it (e2e only)", () => {
   assert.equal(depsFromEnv({}).signinIpLimit, 300);
   assert.equal(depsFromEnv({ SIGNIN_IP_LIMIT: "1000" }).signinIpLimit, 300); // ignored outside dev

@@ -176,6 +176,8 @@ export function register(router) {
       applied = kept.length;
       return capProgress(p, applyEvents(p, kept));
     });
+    // skipped = events refused (malformed, or over the topic cap). A replayed id that was already
+    // applied is not refused, so it doesn't count: the server holds it either way.
     return { progress: publicProgress(next), skipped: events.length - applied };
   });
 

@@ -26,11 +26,14 @@ const SIGNIN_IP_LIMIT = 300;
 
 export function depsFromEnv(env = process.env) {
   const now = () => Date.now();
+  const dev = env.ACCOUNT_DEV === "1";
+  // Dev mode drops the Secure cookie flag and serves a readable outbox, so pointed at a real table
+  // anyone who can reach the port could sign in as any account. It only ever gets the memory table.
+  if (dev && env.TABLE_NAME) throw new Error("ACCOUNT_DEV=1 cannot be combined with TABLE_NAME");
   const table = env.TABLE_NAME
     ? createDynamoTable({ tableName: env.TABLE_NAME, now })
     : createMemoryTable({ now });
   const siteUrl = env.SITE_URL ?? "";
-  const dev = env.ACCOUNT_DEV === "1";
   // Without SES, only dev mode may "send" (to the readable outbox). Otherwise mail is off and
   // sign-in says so (503 email_unavailable) rather than claiming an email went out.
   const mailer = createMailer({
