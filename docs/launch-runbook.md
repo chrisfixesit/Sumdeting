@@ -4,25 +4,18 @@ For the owner. This covers turning on the cross-device accounts feature (sign-in
 
 Every command below changes or reads a live AWS account. Always pass an explicit `--profile <sumdeting account profile>`. If the target is a production account, confirm with yourself (or the account owner) before each change. Names are fixed by the tofu stack: functions `sumdeting-account` and `sumdeting-janitor`, table `sumdeting-accounts`, domain `sumdeting.246labs.cloud`. If your SSO session has expired, run `aws sso login --sso-session <session>` first.
 
-## 1. Lead-time requests (do these first)
+## 1. Lead-time request (do this first)
 
-Both take days to be approved, so file them before anything else.
+SES approval takes days, so file it before anything else.
 
-1. Ask SES for production access. Until it is granted, SES only delivers to verified addresses, so real families will not receive sign-in or consent emails.
+Ask SES for production access. Until it is granted, SES only delivers to verified addresses, so real families will not receive sign-in or consent emails.
 
-   ```
-   aws sesv2 put-account-details --production-access-enabled --mail-type TRANSACTIONAL \
-     --website-url https://sumdeting.246labs.cloud \
-     --use-case-description "Magic-link sign-in and parent consent emails for a children's maths tutor. Low volume, transactional only." \
-     --profile <sumdeting account profile>
-   ```
-
-2. Ask for a higher Lambda concurrency quota (10 to 100).
-
-   ```
-   aws service-quotas request-service-quota-increase --service-code lambda \
-     --quota-code L-B99A9384 --desired-value 100 --profile <sumdeting account profile>
-   ```
+```
+aws sesv2 put-account-details --production-access-enabled --mail-type TRANSACTIONAL \
+  --website-url https://sumdeting.246labs.cloud \
+  --use-case-description "Magic-link sign-in and parent consent emails for a children's maths tutor. Low volume, transactional only." \
+  --profile <sumdeting account profile>
+```
 
 Check status:
 
@@ -31,15 +24,9 @@ aws sesv2 get-account --profile <sumdeting account profile>
 ```
 Look for `ProductionAccessEnabled: true`.
 
-```
-aws service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384 \
-  --profile <sumdeting account profile>
-aws service-quotas get-requested-service-quota-change-history-by-quota \
-  --service-code lambda --quota-code L-B99A9384 --profile <sumdeting account profile>
-```
-The first shows the current value. The second shows the request status (`PENDING`, `APPROVED`, `DENIED`).
+**Optional: a higher Lambda concurrency limit.** The account allows 10 Lambda runs at once, shared by the tutor and the account functions. As of 2026-11-08 this is not needed: over the previous 30 days the account peaked at 1 concurrent run, with 0 throttles (CloudWatch `ConcurrentExecutions` and `Throttles`). It would only matter when more than about 10 tutor replies stream at the same moment, such as a whole class asking together. The `math-mentor-lambda-throttles` alarm emails on the first refused request, so wait for that signal or for planned whole-class use. Then open an AWS Support case (category *General*; Lambda isn't listed as a service there) asking for 100. The Service Quotas API won't take it, because it only accepts values above 1000.
 
-You do not have to wait for approval to deploy. While SES is in sandbox, test only with a verified inbox: `aws sesv2 create-email-identity --email-identity you@example.com --profile <...>`, then click the link AWS emails you. Leave function concurrency settings in the tofu stack at their defaults until the quota increase is granted.
+You do not have to wait for approval to deploy. While SES is in sandbox, test only with a verified inbox: `aws sesv2 create-email-identity --email-identity you@example.com --profile <...>`, then click the link AWS emails you. Leave function concurrency settings in the tofu stack at their defaults; with a limit of 10, reserved concurrency would starve the tutor.
 
 ## 2. Deploy
 
