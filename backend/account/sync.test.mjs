@@ -178,7 +178,7 @@ test("more than 100 events, zero events, non-array -> 400", async () => {
   assert.equal(hundred.status, 200);
 });
 
-test("malformed events -> 400", async () => {
+test("malformed events are skipped; valid events in the same batch are kept", async () => {
   const { app, pid } = await setup();
   const cases = [
     { ...outcome("e"), type: "bogus" },
@@ -202,10 +202,13 @@ test("malformed events -> 400", async () => {
     null,
     "str",
   ];
-  for (const ev of cases) {
-    const res = await app.call("POST", "/progress/sync", { profileId: pid, events: [ev] });
-    assert.deepEqual([res.status, res.body], [400, { error: "bad_request" }], JSON.stringify(ev));
+  for (const [i, ev] of cases.entries()) {
+    const res = await app.call("POST", "/progress/sync", { profileId: pid, events: [ev, activity(`keep${i}`, { topic: "K" })] });
+    assert.equal(res.status, 200, JSON.stringify(ev));
+    assert.equal(res.body.skipped, 1, JSON.stringify(ev));
   }
+  const got = await app.call("POST", "/progress/get", { profileId: pid });
+  assert.equal(got.body.progress.topics.K.solved, cases.length);
   const ok = await app.call("POST", "/progress/sync", {
     profileId: pid,
     events: [activity("a", { topic: null }), { id: "p", type: "prefs", level: "", topic: "", duration: "" }],
@@ -241,12 +244,12 @@ test("replayed merge with same mergeId is not double-counted; mergeId required",
   }
 });
 
-test("reserved topic names -> 400 and Object.prototype untouched", async () => {
+test("reserved topic names: sync skips the event, merge -> 400, Object.prototype untouched", async () => {
   const { app, pid } = await setup();
   for (const topic of ["__proto__", "constructor", "prototype"]) {
     for (const ev of [activity("e", { topic }), outcome("e", { topic })]) {
       const res = await app.call("POST", "/progress/sync", { profileId: pid, events: [ev] });
-      assert.deepEqual([res.status, res.body], [400, { error: "bad_request" }]);
+      assert.deepEqual([res.status, res.body.skipped, Object.keys(res.body.progress.topics)], [200, 1, []]);
     }
     const mastery = { topics: JSON.parse(`{"${topic}":{"attempted":1,"solved":1}}`), streak: { count: 0, last: "" }, days: {} };
     const res = await app.call("POST", "/progress/merge", { profileId: pid, mergeId: "mr", local: { mastery, prefs: null } });
@@ -271,27 +274,31 @@ test("topics named toString/hasOwnProperty work through the endpoints", async ()
 
 const dayAfter = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400e3).toISOString().slice(0, 10);
 
-test("sync accepts tomorrow (time zones) but rejects events dated later", async () => {
+test("sync accepts tomorrow (time zones) and clamps later dates to tomorrow (clock ahead)", async () => {
   const { app, pid } = await setup();
   assert.equal((await app.call("POST", "/progress/sync", { profileId: pid, events: [activity("t1", { d: "2026-01-02" })] })).status, 200);
-  for (const ev of [activity("t2", { d: "2026-01-03" }), outcome("t3", { d: "2027-06-01" })]) {
-    const res = await app.call("POST", "/progress/sync", { profileId: pid, events: [ev] });
-    assert.deepEqual([res.status, res.body], [400, { error: "bad_request" }]);
-  }
-  const got = await app.call("POST", "/progress/get", { profileId: pid });
-  assert.deepEqual(Object.keys(got.body.progress.days), ["2026-01-02"]);
+  const res = await app.call("POST", "/progress/sync", {
+    profileId: pid,
+    events: [activity("t2", { d: "2026-01-03" }), outcome("t3", { d: "2027-06-01" }), activity("t4", { d: "2026-01-01" })],
+  });
+  assert.deepEqual([res.status, res.body.skipped], [200, 0]);
+  assert.deepEqual(Object.keys(res.body.progress.days).sort(), ["2026-01-01", "2026-01-02"]);
+  assert.equal(res.body.progress.days["2026-01-02"], 2);
+  assert.equal(res.body.progress.topics.Fractions.hist[0].d, "2026-01-02");
 });
 
-test("sync rejects a batch that would take a profile past 100 topics; existing topics still work", async () => {
+test("sync skips events that would take a profile past 100 topics; the rest of the batch applies", async () => {
   const { app, pid } = await setup();
   const fill = Array.from({ length: 100 }, (_, i) => activity(`f${i}`, { topic: `T${i}` }));
   assert.equal((await app.call("POST", "/progress/sync", { profileId: pid, events: fill })).status, 200);
-  const extra = await app.call("POST", "/progress/sync", { profileId: pid, events: [activity("x1", { topic: "New" })] });
-  assert.deepEqual([extra.status, extra.body], [400, { error: "bad_request" }]);
+  const extra = await app.call("POST", "/progress/sync", { profileId: pid, events: [activity("x1", { topic: "New" }), activity("x0", { topic: "T1" })] });
+  assert.deepEqual([extra.status, extra.body.skipped, "New" in extra.body.progress.topics], [200, 1, false]);
+  assert.equal(extra.body.progress.topics.T1.solved, 2);
   const same = await app.call("POST", "/progress/sync", { profileId: pid, events: [activity("x2", { topic: "T5" })] });
   assert.equal(same.status, 200);
   assert.equal(Object.keys(same.body.progress.topics).length, 100);
   assert.equal(same.body.progress.topics.T5.solved, 2);
+  assert.equal(same.body.skipped, 0);
 });
 
 test("sync keeps at most 800 days, dropping the oldest", async () => {

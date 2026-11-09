@@ -45,18 +45,33 @@ export function capProgress(prev, next) {
   return next;
 }
 
+/**
+ * One sync event, cleaned, or null when it is malformed (the caller skips it, so
+ * one bad event never costs the rest of the batch). A date later than tomorrow
+ * means the device clock is ahead: it is clamped to tomorrow rather than lost.
+ */
 function cleanEvent(ev, latest) {
+  try {
+    return cleanEventStrict(ev, latest);
+  } catch {
+    return null;
+  }
+}
+
+const clampDay = (d, latest) => (d > latest ? latest : d);
+
+function cleanEventStrict(ev, latest) {
   if (!isObject(ev) || !isStr(ev.id, 64) || ev.id.length < 1) throw bad();
   const { id, type } = ev;
   if (type === "outcome") {
     if (!isNameStr(ev.topic) || typeof ev.ok !== "boolean") throw bad();
-    if (!isSmall(ev.hints) || !isSmall(ev.turns) || !isDate(ev.d) || ev.d > latest) throw bad();
-    return { id, type, topic: ev.topic, ok: ev.ok, hints: ev.hints, turns: ev.turns, d: ev.d };
+    if (!isSmall(ev.hints) || !isSmall(ev.turns) || !isDate(ev.d)) throw bad();
+    return { id, type, topic: ev.topic, ok: ev.ok, hints: ev.hints, turns: ev.turns, d: clampDay(ev.d, latest) };
   }
   if (type === "activity") {
     if (ev.topic !== null && !isNameStr(ev.topic)) throw bad();
-    if (typeof ev.solved !== "boolean" || !isDate(ev.d) || ev.d > latest) throw bad();
-    return { id, type, topic: ev.topic, solved: ev.solved, d: ev.d };
+    if (typeof ev.solved !== "boolean" || !isDate(ev.d)) throw bad();
+    return { id, type, topic: ev.topic, solved: ev.solved, d: clampDay(ev.d, latest) };
   }
   if (type === "prefs") {
     if (!isStr(ev.level, MAX_STR) || !isStr(ev.topic, MAX_STR) || !isStr(ev.duration, MAX_STR)) throw bad();
@@ -115,6 +130,17 @@ function cleanPrefs(p) {
   return { level: p.level, topic: p.topic, duration: p.duration };
 }
 
+/** Drop events that would add a topic once the profile already has 100 (sync skips them). */
+function withinTopicCap(prev, events) {
+  const known = new Set(Object.keys(prev?.topics ?? {}));
+  return events.filter((e) => {
+    if (e.type === "prefs" || e.topic === null || known.has(e.topic)) return true;
+    if (known.size >= MAX_TOPICS) return false;
+    known.add(e.topic);
+    return true;
+  });
+}
+
 const publicProgress = ({ appliedEventIds, ...rest }) => rest; // eslint-disable-line no-unused-vars
 
 // Access check order is deliberate: strangers always see 404 so existence never leaks.
@@ -142,10 +168,15 @@ export function register(router) {
     const { events } = ctx.req.body;
     if (!Array.isArray(events) || events.length < 1 || events.length > MAX_EVENTS) throw bad();
     const latest = latestDay(ctx.deps.now());
-    const clean = events.map((ev) => cleanEvent(ev, latest));
+    const clean = events.map((ev) => cleanEvent(ev, latest)).filter(Boolean);
     const pid = await authorise(ctx);
-    const next = await ctx.deps.repo.updateProgress(pid, (p) => capProgress(p, applyEvents(p, clean)));
-    return { progress: publicProgress(next) };
+    let applied = 0;
+    const next = await ctx.deps.repo.updateProgress(pid, (p) => {
+      const kept = withinTopicCap(p, clean);
+      applied = kept.length;
+      return capProgress(p, applyEvents(p, kept));
+    });
+    return { progress: publicProgress(next), skipped: events.length - applied };
   });
 
   router.route("POST", "/progress/merge", async (ctx) => {
