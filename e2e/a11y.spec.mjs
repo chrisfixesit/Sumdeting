@@ -37,7 +37,11 @@ for (const viewport of VIEWPORTS) {
         await seed(page, theme);
         await page.goto("/");
         await expect(page.locator("#topic-list .beads i.on").first()).toBeVisible();
-        await page.waitForTimeout(1200); // let the bead fill settle
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        // Wait for the bead fill to finish so axe reads settled colours.
+        await expect.poll(() => page.evaluate(() =>
+          [...document.querySelectorAll("#topic-list .beads i.on")]
+            .reduce((n, el) => n + el.getAnimations().filter((a) => a.playState === "running" || a.pending).length, 0))).toBe(0);
         expect(await scan(page)).toEqual([]);
       });
 
@@ -47,7 +51,11 @@ for (const viewport of VIEWPORTS) {
         await page.locator("#nav-chat").click();
         await page.locator("#pad-toggle").click();
         await page.locator("#attach-btn").click();
-        await page.waitForTimeout(500);
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        await expect(page.locator("#pad-toggle")).toHaveAttribute("aria-expanded", "true");
+        await expect(page.locator("#mathpad")).toBeVisible();
+        await expect(page.locator("#attach-btn")).toHaveAttribute("aria-expanded", "true");
+        await expect(page.locator("#attach-menu")).toBeVisible();
         expect(await scan(page)).toEqual([]);
       });
     });
