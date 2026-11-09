@@ -130,3 +130,12 @@ test("composer fits a phone", async ({ page }) => {
   const box = await page.locator("#input").boundingBox();
   expect(box.width).toBeGreaterThanOrEqual(180);
 });
+
+test("composer field and buttons have a 3:1 border in light theme", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("sumdeting.theme", "light"));
+  await openChat(page);
+  for (const id of ["#input", "#attach-btn", "#pad-toggle"]) {
+    const color = await page.locator(id).evaluate((el) => getComputedStyle(el).borderTopColor);
+    expect(color, id).toBe("rgb(133, 126, 108)"); // #857E6C
+  }
+});

@@ -64,7 +64,7 @@
       --primary: var(--blue);
       --text: var(--ink);
       --border: var(--line);
-      --input-border: var(--line);
+      --input-border: #857E6C;   /* 3.5:1 on --card, 3:1+ on --bg/--wash/--strip */
       --tutor-bubble: var(--card);
       --tutor-border: var(--card-border);
       --radius: 15px;
@@ -714,7 +714,7 @@
     textarea {
       flex: 1; min-width: 0; resize: none;
       min-height: 44px; max-height: 160px;
-      border: 1px solid var(--line); border-radius: 12px;
+      border: 1px solid var(--input-border); border-radius: 12px;
       padding: 0.65rem 0.9rem;
       font: 400 0.86rem 'Space Grotesk';
       background: var(--card); color: var(--ink);
