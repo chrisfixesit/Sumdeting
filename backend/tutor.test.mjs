@@ -79,6 +79,7 @@ test("a reply cut off before any text is asked again without thinking", async ()
   assert.equal(requests.length, 2);
   assert.ok(requests[0].additionalModelRequestFields?.thinking);
   assert.equal(requests[1].additionalModelRequestFields, undefined);
+  assert.equal(requests[1].inferenceConfig.maxTokens, 4000, "the retry has the whole cap for its reply");
 });
 
 test("a streamed reply cut off before any text is streamed again without thinking", async () => {
@@ -88,6 +89,7 @@ test("a streamed reply cut off before any text is streamed again without thinkin
   await askTutorStream(asked("Practice mode: one please"), "model-id", (t) => chunks.push(t), send);
   assert.deepEqual(chunks, ["Solve 2x + 3 = 11."]);
   assert.equal(requests[1].additionalModelRequestFields, undefined);
+  assert.equal(requests[1].inferenceConfig.maxTokens, 4000, "the retry has the whole cap for its reply");
 });
 
 test("complete replies, and replies that already have text, are not asked again", async () => {
