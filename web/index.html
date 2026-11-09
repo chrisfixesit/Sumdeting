@@ -624,18 +624,6 @@
       padding: 0.55rem 0.8rem 0.7rem;
     }
 
-    .mathbar { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
-    .mathbar::-webkit-scrollbar { display: none; }
-    .mathbar .mathbar-label { display: none; }
-    .mathbar button {
-      flex: none; min-width: 38px; text-align: center;
-      padding: 0.5rem 0;
-      background: var(--card); border: 1px solid var(--line); border-radius: 9px;
-      font: 500 0.9rem 'Newsreader', serif; color: var(--ink);
-      cursor: pointer; line-height: 1.2;
-    }
-    .mathbar button:hover { border-color: var(--primary); color: var(--primary); }
-
     .attachment-preview {
       display: none; align-items: center; gap: 0.6rem;
       background: var(--card); border: 1px solid var(--line); border-radius: 10px;
@@ -650,20 +638,81 @@
     }
 
     .composer-row { display: flex; gap: 9px; align-items: flex-end; }
-    .photo-btn {
-      width: 40px; height: 44px; flex: none;
+    /* Square icon buttons either side of the text box: + (attach) and the maths pad toggle */
+    .ib-btn {
+      width: 44px; height: 44px; flex: none;
       border-radius: 12px;
-      background: var(--card); border: 1px solid var(--line);
+      background: var(--card); border: 1px solid var(--input-border);
       display: flex; align-items: center; justify-content: center;
-      font-size: 1rem; color: var(--primary);
-      cursor: pointer; line-height: 1;
+      color: var(--primary); cursor: pointer; line-height: 1; padding: 0;
     }
-    .photo-btn:hover { border-color: var(--primary); }
-    .photo-btn.rec { color: #dc2626; border-color: #dc2626; animation: rec-pulse 1.2s ease-in-out infinite; }
-    @keyframes rec-pulse { 50% { opacity: 0.55; } }
+    .ib-btn:hover { border-color: var(--primary); }
+    .ib-btn .icon { width: 20px; height: 20px; }
+    .attach-btn[aria-expanded="true"] .icon { transform: rotate(45deg); }
+    .attach-btn.rec { color: #dc2626; border-color: #dc2626; }
+    [data-theme="dark"] .attach-btn.rec { color: var(--danger); border-color: var(--danger); }
+    .pad-toggle { font: 600 1.25rem/1 'Newsreader', serif; font-optical-sizing: none; font-variation-settings: 'opsz' 24; }
+    .pad-toggle[aria-expanded="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+    #composer button:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+
+    /* + menu: photo, draw, voice. It opens upwards from the + button. */
+    .attach-wrap { position: relative; flex: none; }
+    .attach-menu {
+      position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 20;
+      min-width: 15.5rem; padding: 6px;
+      background: var(--card); border: 1px solid var(--input-border); border-radius: 14px;
+      box-shadow: 0 14px 34px -12px rgba(10, 26, 61, 0.35);
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .attach-menu[hidden] { display: none; }
+    .attach-menu button {
+      display: flex; align-items: center; gap: 0.75rem;
+      min-height: 46px; padding: 0 0.85rem; border: 0; border-radius: 10px;
+      background: none; color: var(--ink); text-align: left; cursor: pointer;
+      font: 500 0.92rem 'Space Grotesk', system-ui, sans-serif;
+    }
+    .attach-menu button[hidden] { display: none; }
+    .attach-menu button .icon { width: 20px; height: 20px; color: var(--primary); }
+    .attach-menu button:hover { background: var(--wash); }
+    .attach-menu button:focus-visible { outline-offset: -3px; }
+    #mic.rec, #mic.rec .icon { color: #b91c1c; }
+    [data-theme="dark"] #mic.rec, [data-theme="dark"] #mic.rec .icon { color: var(--danger); }
+
+    /* Maths pad: keys chosen by level and topic, all one size */
+    .mathpad {
+      margin-top: 8px; padding: 8px;
+      background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    }
+    .mathpad[hidden] { display: none; }
+    .pad-keys {
+      display: grid; gap: 6px;
+      grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+      max-height: 46vh; overflow-y: auto;
+      padding: 3px; margin: -3px; /* room for the focus ring inside the scroll box */
+    }
+    .pad-keys button {
+      height: 44px; min-width: 0; padding: 0;
+      background: var(--wash); border: 1px solid transparent; border-radius: 10px;
+      color: var(--ink); cursor: pointer;
+      font: 500 1.2rem/1 'Newsreader', serif;
+      font-optical-sizing: none; font-variation-settings: 'opsz' 24;
+    }
+    .pad-keys button.w { font-size: 1.02rem; }
+    .pad-keys button.op { color: var(--primary); font-weight: 600; font-size: 1.5rem; }
+    .pad-keys button.big { font-size: 1.45rem; } /* glyphs Newsreader draws small: ∞ ∈ ∪ ∩ ∫ → : */
+    .pad-keys button:hover { border-color: var(--primary); }
+    .pad-keys button:focus-visible { outline-offset: -3px; }
+    .pad-keys .pad-more {
+      grid-column: span 2;
+      background: none; border: 1px dashed var(--input-border); color: var(--muted);
+      font: 500 0.82rem 'Space Grotesk', system-ui, sans-serif;
+      display: flex; align-items: center; justify-content: center; gap: 0.35rem;
+    }
+    .pad-more .chev { display: inline-block; font-size: 0.7rem; }
+    .pad-more[aria-expanded="true"] .chev { transform: rotate(180deg); }
 
     textarea {
-      flex: 1; resize: none;
+      flex: 1; min-width: 0; resize: none;
       min-height: 44px; max-height: 160px;
       border: 1px solid var(--line); border-radius: 12px;
       padding: 0.65rem 0.9rem;
@@ -842,6 +891,7 @@
     <symbol id="i-clipboard" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
     <symbol id="i-beads" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
     <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></symbol>
     <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
@@ -992,18 +1042,6 @@
 
       <form id="composer">
         <div id="chips" class="chips" hidden></div>
-        <div id="mathbar" class="mathbar" aria-label="Insert a math symbol">
-          <span class="mathbar-label" aria-hidden="true">Symbols</span>
-          <button type="button" data-ins="²" title="Squared">x²</button>
-          <button type="button" data-ins="³" title="Cubed">x³</button>
-          <button type="button" data-ins="√" title="Square root">√</button>
-          <button type="button" data-ins="÷" title="Divided by">÷</button>
-          <button type="button" data-ins="×" title="Times">×</button>
-          <button type="button" data-ins="π" title="Pi">π</button>
-          <button type="button" data-ins="°" title="Degrees">°</button>
-          <button type="button" data-ins="≤" title="Less than or equal">≤</button>
-          <button type="button" data-ins="≥" title="Greater than or equal">≥</button>
-        </div>
         <div id="attachment" class="attachment-preview">
           <img id="attachment-img" alt="Attached problem photo" />
           <span>Photo attached</span>
@@ -1011,11 +1049,20 @@
         </div>
         <div class="composer-row">
           <input id="file" type="file" accept="image/*" hidden />
-          <button id="photo" class="photo-btn" type="button" aria-label="Attach a photo of your problem" title="Attach a photo"><svg class="icon"><use href="#i-camera"/></svg></button>
-          <button id="sketch" class="photo-btn" type="button" aria-label="Draw your working by hand" title="Draw your working"><svg class="icon"><use href="#i-pencil"/></svg></button>
-          <button id="mic" class="photo-btn" type="button" aria-label="Speak your problem" title="Speak your problem"><svg class="icon"><use href="#i-mic"/></svg></button>
+          <div class="attach-wrap">
+            <button id="attach-btn" class="ib-btn attach-btn" type="button" aria-label="Add a photo, drawing or voice" aria-expanded="false" aria-controls="attach-menu"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+            <div id="attach-menu" class="attach-menu" hidden>
+              <button id="photo" type="button"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg><span>Photo of your problem</span></button>
+              <button id="sketch" type="button"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg><span>Draw your working</span></button>
+              <button id="mic" type="button"><svg class="icon" aria-hidden="true"><use href="#i-mic"/></svg><span id="mic-label">Speak your problem</span></button>
+            </div>
+          </div>
           <textarea id="input" aria-label="Type your maths problem" placeholder="Type your working…"></textarea>
+          <button id="pad-toggle" class="ib-btn pad-toggle" type="button" aria-label="Maths keys" aria-expanded="false" aria-controls="mathpad">∑</button>
           <button id="send" class="send-btn" type="submit" aria-label="Send"><svg class="icon"><use href="#i-send"/></svg></button>
+        </div>
+        <div id="mathpad" class="mathpad" hidden>
+          <div id="pad-keys" class="pad-keys"></div>
         </div>
       </form>
     </section>
@@ -1413,15 +1460,6 @@
         setBusy(false);
       }
     }
-
-    // ---- Math symbol toolbar (insert at cursor) ----
-
-    document.getElementById("mathbar").addEventListener("click", (e) => {
-      const ch = e.target.dataset?.ins;
-      if (!ch) return;
-      input.setRangeText(ch, input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length, "end");
-      input.focus();
-    });
 
     // ---- Remember practice level / topic / exam length ----
 
@@ -1831,7 +1869,7 @@
         recognizer.interimResults = true;
         recognizer.continuous = false;
         const base = input.value ? input.value.trimEnd() + " " : "";
-        micBtn.classList.add("rec");
+        setRecording(true);
         recognizer.onresult = (e) => {
           input.value = base + Array.from(e.results).map((r) => r[0].transcript).join("");
         };
@@ -1846,11 +1884,116 @@
         };
         recognizer.onend = () => {
           recognizer = null;
-          micBtn.classList.remove("rec");
+          setRecording(false);
           input.focus();
         };
         recognizer.start();
       });
+    }
+
+    // ---- + menu: photo, draw and voice live behind the + button ----
+
+    const attachBtn = document.getElementById("attach-btn");
+    const attachMenu = document.getElementById("attach-menu");
+
+    /** Show listening on the mic item and on + (the menu is closed while it listens). */
+    function setRecording(on) {
+      micBtn.classList.toggle("rec", on);
+      attachBtn.classList.toggle("rec", on);
+      document.getElementById("mic-label").textContent = on ? "Stop listening" : "Speak your problem";
+      attachBtn.setAttribute("aria-label", on ? "Add a photo, drawing or voice (listening)" : "Add a photo, drawing or voice");
+    }
+
+    function openAttach() {
+      attachMenu.hidden = false;
+      attachBtn.setAttribute("aria-expanded", "true");
+      attachMenu.querySelector("button:not([hidden])")?.focus();
+    }
+    function closeAttach(refocus = true) {
+      if (attachMenu.hidden) return;
+      attachMenu.hidden = true;
+      attachBtn.setAttribute("aria-expanded", "false");
+      if (refocus) attachBtn.focus();
+    }
+    attachBtn.addEventListener("click", () => (attachMenu.hidden ? openAttach() : closeAttach()));
+    // Each item's own handler runs first (photo, sketch, mic), then the menu closes.
+    // A choice that opens something of its own (the sketch pad) keeps focus there.
+    attachMenu.addEventListener("click", (e) => {
+      const item = e.target.closest("button");
+      if (item) closeAttach(item.id !== "sketch");
+    });
+    attachMenu.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeAttach(); return; }
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      const items = [...attachMenu.querySelectorAll("button:not([hidden])")];
+      const i = items.indexOf(document.activeElement);
+      items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+    });
+    attachBtn.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeAttach();
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (!attachMenu.hidden && !e.target.closest(".attach-wrap")) closeAttach(false);
+    });
+
+    // ---- Maths pad: keys chosen by the level and the topic in progress ----
+
+    const padToggle = document.getElementById("pad-toggle");
+    const mathpad = document.getElementById("mathpad");
+    const padKeysEl = document.getElementById("pad-keys");
+    const PAD_OPS = new Set(["+", "−", "×", "÷", "=", "±", "≤", "≥", "≠"]);
+    const PAD_BIG = new Set(["∞", "∈", "∪", "∩", "∫", "→", ":", "Σ"]);
+    let padAll = false;
+
+    function renderPad() {
+      const { padKeys, ALL_PAD_KEYS, keyInsert } = window.SumHome;
+      const mine = padKeys(levelSel.value, currentTopic || topicSel.value);
+      const keys = padAll ? [...new Set([...mine, ...ALL_PAD_KEYS])] : mine;
+      const buttons = keys.map((label) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = label;
+        b.dataset.ins = keyInsert(label);
+        if (/^[a-z/]{2,}$/i.test(label)) b.className = "w";
+        else if (PAD_OPS.has(label)) b.className = "op";
+        else if (PAD_BIG.has(label)) b.className = "big";
+        return b;
+      });
+      const more = document.createElement("button");
+      more.type = "button";
+      more.id = "pad-more";
+      more.className = "pad-more";
+      more.setAttribute("aria-expanded", String(padAll));
+      more.innerHTML = 'More <span class="chev" aria-hidden="true">▾</span>';
+      padKeysEl.replaceChildren(...buttons, more);
+    }
+
+    padToggle.addEventListener("click", () => {
+      const open = mathpad.hidden;
+      if (open) { padAll = false; renderPad(); }
+      mathpad.hidden = !open;
+      padToggle.setAttribute("aria-expanded", String(open));
+    });
+    // Keep the cursor (and the phone keyboard) in the text box while tapping keys.
+    padKeysEl.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("button[data-ins]") && document.activeElement === input) e.preventDefault();
+    });
+    padKeysEl.addEventListener("click", (e) => {
+      const key = e.target.closest("button");
+      if (!key) return;
+      if (key.id === "pad-more") {
+        padAll = !padAll;
+        renderPad();
+        document.getElementById("pad-more").focus();
+        return;
+      }
+      const ins = key.dataset.ins;
+      input.setRangeText(ins, input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length, "end");
+      input.focus();
+    });
+    for (const sel of [levelSel, topicSel]) {
+      sel.addEventListener("change", () => { if (!mathpad.hidden) renderPad(); });
     }
 
     // ---- Read aloud (speech synthesis, LaTeX stripped) ----
