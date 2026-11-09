@@ -163,7 +163,10 @@ function toConverseMessages(messages) {
 // Without it, Haiku 4.5 either leaked the solution while checking or, told to
 // keep the working private, stopped checking and called correct answers wrong.
 // Thinking needs the default temperature and room for the reply after its budget.
+// maxTokens caps thinking and reply together, and thinking can overrun its budget:
+// CSEC Section II questions used up to ~2 500 tokens, so the cap leaves about twice that.
 const THINKING_BUDGET = 1024;
+const REPLY_ROOM = 4000;
 
 // Models checked on Bedrock to accept thinking: { type: "enabled", budget_tokens }.
 // Others may reject it (or not be enabled), which would fail every tutor reply,
@@ -176,31 +179,68 @@ export function assertThinkingModel(modelId) {
   }
 }
 
-export const requestFor = (messages, modelId) => ({
-  modelId,
-  system: [{ text: systemPromptFor(messages) }],
-  messages: toConverseMessages(messages),
-  inferenceConfig: { maxTokens: THINKING_BUDGET + 1500 },
-  additionalModelRequestFields: { thinking: { type: "enabled", budget_tokens: THINKING_BUDGET } },
-});
+/** Without thinking (the retry below), the whole cap goes to the reply. */
+export function requestFor(messages, modelId, { thinking = true } = {}) {
+  const request = {
+    modelId,
+    system: [{ text: systemPromptFor(messages) }],
+    messages: toConverseMessages(messages),
+    inferenceConfig: { maxTokens: REPLY_ROOM },
+  };
+  if (!thinking) return request;
+  return {
+    ...request,
+    inferenceConfig: { maxTokens: THINKING_BUDGET + REPLY_ROOM },
+    additionalModelRequestFields: { thinking: { type: "enabled", budget_tokens: THINKING_BUDGET } },
+  };
+}
+
+// Even with that room, thinking now and then uses the whole cap on a long
+// practice question and stops before writing any reply (1 in 12 CSEC Section II
+// requests). Rather than send the student a blank reply, ask once more without
+// thinking. Only an empty reply is retried: a partly written one is kept.
+const cutOffBlank = (wroteText, stopReason) => !wroteText && stopReason === "max_tokens";
+
+// If the retry is blank too, say so: an empty assistant turn would fail
+// validation ("Empty message") on every later request in the conversation.
+export const BLANK_REPLY = "Sorry, I couldn't write a reply that time. Please send your message again.";
+
+const bedrock = (command) => client.send(command);
 
 /**
  * Buffered: returns the tutor's full reply as a string.
  */
-export async function askTutor(messages, modelId) {
-  const result = await client.send(new ConverseCommand(requestFor(messages, modelId)));
-  return result.output?.message?.content?.map((c) => c.text ?? "").join("") ?? "";
+export async function askTutor(messages, modelId, send = bedrock) {
+  const once = async (options) => {
+    const result = await send(new ConverseCommand(requestFor(messages, modelId, options)));
+    const reply = result.output?.message?.content?.map((c) => c.text ?? "").join("") ?? "";
+    return { reply, stopReason: result.stopReason };
+  };
+  const first = await once();
+  if (!cutOffBlank(first.reply, first.stopReason)) return first.reply;
+  return (await once({ thinking: false })).reply || BLANK_REPLY;
 }
 
 /**
  * Streaming: invokes onText(textChunk) as tokens arrive. Resolves when done.
  */
-export async function askTutorStream(messages, modelId, onText) {
-  const result = await client.send(
-    new ConverseStreamCommand(requestFor(messages, modelId))
-  );
-  for await (const event of result.stream) {
-    const text = event.contentBlockDelta?.delta?.text;
-    if (text) onText(text);
-  }
+export async function askTutorStream(messages, modelId, onText, send = bedrock) {
+  const once = async (options) => {
+    const result = await send(new ConverseStreamCommand(requestFor(messages, modelId, options)));
+    let wroteText = false;
+    let stopReason;
+    for await (const event of result.stream) {
+      const text = event.contentBlockDelta?.delta?.text;
+      if (text) {
+        wroteText = true;
+        onText(text);
+      }
+      stopReason = event.messageStop?.stopReason ?? stopReason;
+    }
+    return { wroteText, stopReason };
+  };
+  const first = await once();
+  if (!cutOffBlank(first.wroteText, first.stopReason)) return;
+  const retry = await once({ thinking: false });
+  if (!retry.wroteText) onText(BLANK_REPLY);
 }
