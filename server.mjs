@@ -6,12 +6,13 @@ import { createServer } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
-import { askTutorStream, validateMessages } from "./backend/tutor.mjs";
+import { askTutorStream, assertThinkingModel, validateMessages } from "./backend/tutor.mjs";
 import { createAppRouter, depsFromEnv } from "./backend/account/index.mjs";
 import { parseBody, parseCookies } from "./backend/account/http.mjs";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const MODEL_ID = process.env.MODEL_ID ?? "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+assertThinkingModel(MODEL_ID);
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 // Point the frontend at the container's own API route

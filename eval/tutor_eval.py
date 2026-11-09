@@ -27,7 +27,8 @@ import os
 import urllib.request
 
 BASE_URL = os.environ.get("BASE_URL", "https://sumdeting.246labs.cloud")
-API = BASE_URL.rstrip("/") + "/api"
+# API_URL overrides the full endpoint, e.g. a local `node server.mjs` at http://localhost:8080/api/chat.
+API = os.environ.get("API_URL") or BASE_URL.rstrip("/") + "/api"
 
 PROBLEM = "Solve for x: 3(x-2)+5 = 2x+9. Show your working."   # correct answer: x = 10
 _ASK = {"role": "user", "content": "give me one CSEC algebra problem"}
@@ -158,6 +159,60 @@ CASES = [
             "✅ marker discipline. PASS if the reply explains bracket expansion (teaching a "
             "concept is allowed) and does NOT contain the ✅ marker — ✅ is reserved for "
             "confirming a correct final answer, and nothing was answered here."),
+    },
+    {
+        "name": "C11_practice_problem_no_working",
+        "messages": [{"role": "user",
+                      "content": "Practice mode: please give me ONE Common Entrance practice "
+                                 "problem on Percentages & Money. Wait for my attempt before "
+                                 "guiding me, and remember not to give me the answer. Recent "
+                                 "performance: the student has been solving problems on this "
+                                 "topic quickly and without hints, so make this one a notch "
+                                 "more challenging than standard (still on-syllabus for the "
+                                 "level)."}],
+        "criterion": (
+            "Practice problem only. PASS if the reply poses ONE problem in Common Entrance "
+            "style (section and marks, answer lines with units, no multiple choice) and "
+            "shows NO working, hint, or answer for any part; every part must be solvable "
+            "from the facts given."),
+    },
+    {
+        "name": "C13_correct_then_next_problem",
+        "messages": [_ASK, _POSED,
+                     {"role": "user",
+                      "content": "3x-6+5=2x+9 -> 3x-1=2x+9 -> 3x-2x=9+1 -> x=10. "
+                                 "Give me the next one."}],
+        "criterion": (
+            "Transition. PASS if the reply confirms x=10 with ✅ and a short recap, THEN "
+            "poses one new problem that shows NO working, hint, or answer for the new "
+            "problem."),
+    },
+    {
+        "name": "C14_wrong_then_next_problem",
+        "messages": [_ASK, _POSED,
+                     {"role": "user", "content": "3x-6+5=2x+9, so x=7. Give me the next one."}],
+        "criterion": (
+            "x=7 is wrong. PASS if the reply has NO ✅, does not confirm x=7, does NOT state "
+            "the answer x=10, points to where "
+            "the error is with ONE hint and a guiding question (not a run of worked steps), "
+            "and does NOT move on to a new problem."),
+    },
+    {
+        "name": "C15_bare_correct_answer",
+        "messages": [_ASK, _POSED, {"role": "user", "content": "x = 10"}],
+        "criterion": (
+            "Correct answer with no working. PASS only if the reply confirms it with ✅ "
+            "and does NOT call it wrong."),
+    },
+    {
+        "name": "C12_practice_problem_csec",
+        "messages": [{"role": "user",
+                      "content": "Practice mode: please give me ONE CSEC practice problem on "
+                                 "Algebra. Wait for my attempt before guiding me, and "
+                                 "remember not to give me the answer."}],
+        "criterion": (
+            "Practice problem only. PASS if the reply poses ONE CSEC-level algebra problem "
+            "and shows NO working, hint, or answer."),
     },
 ]
 
