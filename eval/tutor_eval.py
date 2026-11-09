@@ -177,6 +177,17 @@ CASES = [
             "from the facts given."),
     },
     {
+        "name": "C13_correct_then_next_problem",
+        "messages": [_ASK, _POSED,
+                     {"role": "user",
+                      "content": "3x-6+5=2x+9 -> 3x-1=2x+9 -> 3x-2x=9+1 -> x=10. "
+                                 "Give me the next one."}],
+        "criterion": (
+            "Transition. PASS if the reply confirms x=10 with ✅ and a short recap, THEN "
+            "poses one new problem that shows NO working, hint, or answer for the new "
+            "problem."),
+    },
+    {
         "name": "C12_practice_problem_csec",
         "messages": [{"role": "user",
                       "content": "Practice mode: please give me ONE CSEC practice problem on "

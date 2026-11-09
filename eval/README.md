@@ -14,9 +14,15 @@ python3 eval/tutor_eval.py
 # or against another environment
 BASE_URL=https://staging.example.com python3 eval/tutor_eval.py
 
-# or a prompt change before deploying: a local server on Bedrock credentials
-PORT=8080 node server.mjs &
-API_URL=http://localhost:8080/api/chat python3 eval/tutor_eval.py
+# or a prompt change before deploying: the local container, which listens on
+# 127.0.0.1 only and uses your own AWS credentials (see compose.yaml)
+docker compose up -d --build
+if curl -sf --retry 30 --retry-delay 2 --retry-all-errors http://localhost:8080/healthz >/dev/null; then
+  API_URL=http://localhost:8080/api/chat python3 eval/tutor_eval.py
+else
+  echo "Server not ready; see docker compose logs" >&2
+fi
+docker compose down
 ```
 
 It prints each reply next to its pass-criteria. Judging is by reading —
