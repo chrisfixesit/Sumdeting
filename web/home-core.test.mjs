@@ -50,6 +50,15 @@ test("nextStep and nextStepLine", () => {
   assert.equal(nextStepLine({ kind: "done" }), "Every topic mastered at this level. Try a timed exam?");
 });
 
+test("mastered topic with others untouched falls back to first unmastered", () => {
+  const topics = ["Algebra", "Trigonometry"];
+  const m = { Algebra: { solved: 5, attempted: 5 } };
+  assert.equal(upNext(topics, m), "Trigonometry");
+  const step = nextStep(topics, m);
+  assert.deepEqual(step, { kind: "pickup", topic: "Trigonometry", remaining: 5 });
+  assert.equal(nextStepLine(step), "Five more beads and Trigonometry is mastered.");
+});
+
 test("liveStreak and showStreak", () => {
   assert.equal(liveStreak({ count: 4, last: "2026-11-09" }, "2026-11-09"), 4);
   assert.equal(liveStreak({ count: 4, last: "2026-11-08" }, "2026-11-09"), 4);

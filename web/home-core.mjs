@@ -24,16 +24,23 @@ const stat = (m, t) => m?.[t] ?? {};
 const solvedOf = (m, t) => Number(stat(m, t).solved) || 0;
 const startedOf = (m, t) => solvedOf(m, t) > 0 || (Number(stat(m, t).attempted) || 0) > 0;
 
-/** Started topic with the most solved that is still under 5; ties to topic order. */
+/**
+ * In-progress topic with the most solved (ties to topic order). If none is in
+ * progress but something has activity, the first topic still under 5. Null when
+ * nothing has activity or every topic is mastered.
+ */
 export function upNext(topics, masteryTopics) {
+  const list = topics ?? [];
+  if (!list.some((t) => startedOf(masteryTopics, t))) return null;
   let best = null, bestSolved = -1;
-  for (const t of topics ?? []) {
+  for (const t of list) {
     if (!startedOf(masteryTopics, t)) continue;
     const s = solvedOf(masteryTopics, t);
     if (s >= MAX_BEADS) continue;
     if (s > bestSolved) { best = t; bestSolved = s; }
   }
-  return best;
+  if (best !== null) return best;
+  return list.find((t) => solvedOf(masteryTopics, t) < MAX_BEADS) ?? null;
 }
 
 export function nextStep(topics, masteryTopics) {
