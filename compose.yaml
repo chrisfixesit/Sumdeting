@@ -18,7 +18,8 @@ services:
       # the outbox hands out sign-in links to anyone who can reach the port.
       # Off unless you opt in: `ACCOUNT_DEV=1 docker compose up --build`.
       ACCOUNT_DEV: ${ACCOUNT_DEV:-0}
-      # Real sign-in email without dev mode: EMAIL_MODE=ses with EMAIL_FROM on a
+      # Real sign-in email (never with ACCOUNT_DEV=1, which only uses the outbox and
+      # refuses to start with EMAIL_MODE=ses): EMAIL_MODE=ses with EMAIL_FROM on a
       # verified SES identity, SITE_URL for the links (http://localhost:8080) and
       # credentials allowed ses:SendEmail. TABLE_NAME uses DynamoDB (never with
       # ACCOUNT_DEV=1, which refuses to start); unset keeps accounts in memory. With neither dev mode nor SES, sign-in answers

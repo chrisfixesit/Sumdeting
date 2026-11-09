@@ -320,6 +320,16 @@ test("dev mode refuses a persistent table (the outbox would hand out real accoun
   assert.ok(depsFromEnv({ TABLE_NAME: "t", EMAIL_MODE: "ses", EMAIL_FROM: "a@x.test" }).repo);
 });
 
+test("mail mode follows dev mode: dev is memory only, SES never with dev, memory never without", () => {
+  const ses = { EMAIL_MODE: "ses", EMAIL_FROM: "a@x.test" };
+  assert.throws(() => depsFromEnv({ ACCOUNT_DEV: "1", ...ses }), /ACCOUNT_DEV/);
+  assert.throws(() => depsFromEnv({ EMAIL_MODE: "memory" }), /EMAIL_MODE/);
+  assert.throws(() => depsFromEnv({ EMAIL_MODE: "smtp" }), /EMAIL_MODE/);
+  assert.ok(depsFromEnv({ ACCOUNT_DEV: "1", EMAIL_MODE: "memory" }).mailer.outbox);
+  assert.ok(depsFromEnv({ ACCOUNT_DEV: "1" }).mailer.outbox);
+  assert.equal(depsFromEnv(ses).mailer.outbox, undefined);
+});
+
 test("sign-in IP limit is 300 unless a dev server raises it (e2e only)", () => {
   assert.equal(depsFromEnv({}).signinIpLimit, 300);
   assert.equal(depsFromEnv({ SIGNIN_IP_LIMIT: "1000" }).signinIpLimit, 300); // ignored outside dev

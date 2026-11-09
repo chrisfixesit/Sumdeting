@@ -34,10 +34,18 @@ export function depsFromEnv(env = process.env) {
     ? createDynamoTable({ tableName: env.TABLE_NAME, now })
     : createMemoryTable({ now });
   const siteUrl = env.SITE_URL ?? "";
-  // Without SES, only dev mode may "send" (to the readable outbox). Otherwise mail is off and
-  // sign-in says so (503 email_unavailable) rather than claiming an email went out.
+  // Mail follows dev mode. Dev "sends" only to the readable outbox (never real email); outside dev
+  // it is SES or off, and off makes sign-in say so (503 email_unavailable) rather than claim an
+  // email went out. Any other combination is a misconfiguration and refuses to start.
+  const requested = env.EMAIL_MODE || "";
+  if (dev && requested !== "" && requested !== "memory") {
+    throw new Error("ACCOUNT_DEV=1 uses the dev outbox; unset EMAIL_MODE");
+  }
+  if (!dev && requested !== "" && requested !== "ses") {
+    throw new Error("EMAIL_MODE must be 'ses' (or unset) outside ACCOUNT_DEV=1");
+  }
   const mailer = createMailer({
-    mode: env.EMAIL_MODE || (dev ? "memory" : "off"),
+    mode: dev ? "memory" : requested || "off",
     from: env.EMAIL_FROM,
     siteUrl,
   });
