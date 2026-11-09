@@ -1,7 +1,7 @@
 # SumDeTing home redesign and level-aware maths pad: design
 
 Date: 2026-11-09
-Status: awaiting owner approval
+Status: approved by the owner on 2026-11-09
 Reference mockups (open in a browser): `docs/design/home-3a-string.html` (home page, dark theme), `docs/design/home-3a-string-light.html` (the same page, light theme) and `docs/design/maths-pad-by-level.html` (maths pad key sets). Both home mockups are responsive. Screenshots: `docs/design/3a-string-{phone,landscape}.png` and `docs/design/3a-string-light-{phone,landscape}.png`.
 
 ## Why
