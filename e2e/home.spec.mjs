@@ -209,3 +209,45 @@ test("String view uses the four mastery words", async ({ page }) => {
   await expect(row("Algebra").locator("b")).toHaveText("Familiar");
   await expect(row("Trigonometry").locator("b")).toHaveText("Attempted");
 });
+
+test("a topic tried but never solved reads Attempted on home and String", async ({ page }) => {
+  await page.addInitScript(([key]) => {
+    localStorage.setItem(key, JSON.stringify({
+      topics: { Trigonometry: { solved: 0, attempted: 2 } }, streak: { count: 0, last: "" }, days: {},
+    }));
+  }, [MASTERY]);
+  await page.goto("/");
+  await levelTab(page, "CSEC").click();
+  const trig = topicRow(page, "Trigonometry");
+  await expect(trig.locator(".mastery-word")).toHaveText("Attempted");
+  await expect(topicRow(page, "Algebra").locator(".mastery-word")).toHaveText("Not started");
+  await page.locator("#nav-string").click();
+  const row = (name) => page.locator("#string-topics .trow", { hasText: name }).first();
+  await expect(row("Trigonometry").locator("b")).toHaveText("Attempted");
+  await expect(row("Algebra").locator("b")).toHaveText("Not started");
+});
+
+test("a home question typed while a reply streams is kept, not lost", async ({ page }) => {
+  const sent = [];
+  let release;
+  const held = new Promise((r) => { release = r; });
+  await page.route("**/api/chat", async (route) => {
+    sent.push(route.request().postDataJSON().messages.at(-1).content);
+    await held; // the first reply stays in flight until the test lets it go
+    await route.fulfill({ json: { reply: "Here is a problem for you." } });
+  });
+  await page.goto("/");
+  await levelTab(page, "CSEC").click();
+  await topicRow(page, "Algebra").click();
+  await expect.poll(() => sent.length).toBe(1);
+  await page.locator("#nav-home").click();
+  await page.locator("#home-ask-input").fill("solve 2x=8");
+  await page.locator("#home-ask-input").press("Enter");
+  await page.waitForTimeout(300);
+  await expect(page.locator("#home-ask-input")).toHaveValue("solve 2x=8");
+  await expect(page.locator("#view-home")).toBeVisible();
+  release();
+  await expect(page.locator("#chat .msg.tutor").last()).toContainText("Here is a problem");
+  await page.waitForTimeout(300);
+  expect(sent.length).toBe(1);
+});

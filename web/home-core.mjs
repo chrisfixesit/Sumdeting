@@ -3,12 +3,13 @@
 
 const MAX_BEADS = 5;
 
-export function masteryState(solved) {
+/** Mastery from problems solved; a topic tried but never solved is "attempted". */
+export function masteryState(solved, attempted = 0) {
   const n = beadCount(solved);
   if (n >= 5) return "mastered";
   if (n >= 3) return "familiar";
   if (n >= 1) return "attempted";
-  return "not-started";
+  return (Number(attempted) || 0) > 0 ? "attempted" : "not-started";
 }
 
 const WORDS = { "not-started": "Not started", attempted: "Attempted", familiar: "Familiar", mastered: "Mastered" };

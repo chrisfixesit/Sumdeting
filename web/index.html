@@ -2237,6 +2237,7 @@
       );
       if (ok) {
         currentTopic = topic;
+        if (!mathpad.hidden) renderPad(); // the #topic change above ran while currentTopic was the old one
         activeProblem = { topic, level, userTurns: 0, hints: 0 };
         recordActivity(topic, false); // counts as attempted
       }
@@ -2373,7 +2374,7 @@
     document.getElementById("home-ask").addEventListener("submit", (e) => {
       e.preventDefault();
       const text = homeAskInput.value.trim();
-      if (!text) return;
+      if (!text || busy) return; // mid-reply: keep the question in the box rather than drop it
       homeAskInput.value = "";
       input.value = text;
       goView("chat");
@@ -2474,7 +2475,7 @@
       topicList.textContent = "";
       levelSetup().topics.forEach((topic, row) => {
         const solved = H.beadCount(m.topics?.[topic]?.solved);
-        const word = H.masteryWord(H.masteryState(solved));
+        const word = H.masteryWord(H.masteryState(solved, m.topics?.[topic]?.attempted));
         const li = document.createElement("li");
         const b = document.createElement("button");
         b.type = "button";
@@ -2653,7 +2654,7 @@
         const name = document.createElement("span");
         name.textContent = opt.value;
         const status = document.createElement("b");
-        const state = H ? H.masteryState(t?.solved ?? 0) : "not-started";
+        const state = H ? H.masteryState(t?.solved ?? 0, t?.attempted ?? 0) : "not-started";
         status.textContent = H ? H.masteryWord(state) : "Not started";
         status.className = state === "mastered" ? "s-done" : state === "not-started" ? "s-new" : "s-mid";
         row.append(name, status);

@@ -139,3 +139,20 @@ test("composer field and buttons have a 3:1 border in light theme", async ({ pag
     expect(color, id).toBe("rgb(133, 126, 108)"); // #857E6C
   }
 });
+
+test("an open pad follows a new practice topic", async ({ page }) => {
+  await page.route("**/api/chat", (route) => route.fulfill({ json: { reply: "Here is a problem for you." } }));
+  const practise = async (topic) => {
+    await page.locator("#nav-home").click();
+    await page.locator(`#topic-list .trow-home[data-topic="${topic}"]`).click();
+    await expect(page.locator("#chat .msg.tutor").last()).toContainText("Here is a problem");
+    await expect(page.locator("#send")).toBeEnabled();
+  };
+  await openChat(page, "CSEC", "Algebra");
+  await practise("Algebra");
+  await page.locator("#pad-toggle").click();
+  expect((await keyLabels(page))[0]).toBe("x");
+  await practise("Trigonometry");
+  await expect(page.locator("#mathpad")).toBeVisible();
+  await expect.poll(async () => (await keyLabels(page))[0]).toBe("sin");
+});

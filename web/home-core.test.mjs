@@ -15,6 +15,15 @@ test("masteryState thresholds", () => {
   assert.equal(masteryState(9), "mastered");
 });
 
+test("masteryState: attempted-only topics read attempted", () => {
+  assert.equal(masteryState(0, 2), "attempted");
+  assert.equal(masteryState(0, 0), "not-started");
+  assert.equal(masteryState(0), "not-started");
+  assert.equal(masteryState(0, undefined), "not-started");
+  assert.equal(masteryState(3, 6), "familiar");
+  assert.equal(masteryState(5, 9), "mastered");
+});
+
 test("masteryWord", () => {
   assert.equal(masteryWord("not-started"), "Not started");
   assert.equal(masteryWord("attempted"), "Attempted");
