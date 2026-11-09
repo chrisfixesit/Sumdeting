@@ -72,7 +72,7 @@ The end-to-end suite starts its own server with `ACCOUNT_DEV=1` on port 8099. Be
 
 ## Deploy to AWS
 
-Infrastructure no longer lives in this repo. It is managed in [chrisfixesit/tofu-or-not-tofu](https://github.com/chrisfixesit/tofu-or-not-tofu) under `accounts/eportfolio-prod/sumdeting` (the accounts feature arrives with tofu PR #40: the `sumdeting-account` and `sumdeting-janitor` Lambdas, the `sumdeting-accounts` table, SES, and the CloudFront `/api/account/*` behaviour). DKIM records are a separate PR in that repo's `management/dns`, and the `sumdeting-github-deploy` role's access to the new functions is a separate github-deploy PR. The old `infra/` folder is retired: do not apply it.
+Infrastructure isn't in this repo. It's managed in [chrisfixesit/tofu-or-not-tofu](https://github.com/chrisfixesit/tofu-or-not-tofu) under `accounts/eportfolio-prod/sumdeting`: the three Lambdas' configuration, the `sumdeting-accounts` table, SES, the buckets, CloudFront, the WAF, alarms and the budget. The DNS records live in that repo's `management/dns`. Infrastructure changes are PRs there; merging applies them.
 
 Code and site files ship through `.github/workflows/deploy.yml` on merge to `main` (behind the `production` environment approval). It updates the three Lambdas from one zip, uploads the site, and invalidates CloudFront. It refuses to deploy while `web/privacy.html` is still a draft (see the launch runbook).
 

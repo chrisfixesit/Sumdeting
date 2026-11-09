@@ -1,9 +1,0 @@
-# Copy to terraform.tfvars (gitignored) and fill in your own values.
-alert_email     = "you@example.com"
-dns_role_arn    = "arn:aws:iam::111111111111:role/Route53RecordWriter"
-dns_zone_id     = "Z0000000000000000000"
-dns_external_id = "your-external-id"
-
-# Your own domain, or "" to serve from the CloudFront domain. The default is
-# this project's domain, which only works with its DNS zone.
-domain_name = "tutor.example.com"

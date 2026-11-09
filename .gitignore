@@ -9,7 +9,7 @@ node_modules/
 # FUSE deleted-but-open tempfiles
 .fuse_hidden*
 
-# Operator-specific Terraform values (see infra/terraform.tfvars.example)
+# Terraform values and state: never commit them (infra now lives in tofu-or-not-tofu)
 *.tfvars
 !*.tfvars.example
 
