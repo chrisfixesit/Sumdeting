@@ -703,6 +703,77 @@
     .appnav button .icon { width: 18px; height: 18px; }
     .appnav button.on { color: var(--primary); }
     .appnav button.on .bar { background: var(--primary); }
+    .appnav .rail-mark { display: none; }
+
+    /* ===== Tablet and up: the nav becomes a left rail, views sit beside it ===== */
+    @media (min-width: 768px) {
+      body { padding-bottom: 0; padding-left: 92px; }
+      header, main { max-width: 720px; }
+      header { padding: 1.4rem 2.5rem 0.9rem; }
+      main { padding: 0 2.5rem; }
+      #composer { bottom: 0; margin: 0 -2.5rem; }
+
+      .appnav {
+        top: 0; right: auto; width: 92px;
+        flex-direction: column; align-items: stretch;
+        padding: 20px 8px;
+        border-top: 0; border-right: 1px solid var(--line);
+      }
+      [data-theme="dark"] .appnav { background: var(--strip); }
+      .appnav .rail-mark { display: block; align-self: center; flex: none; margin: 0 0 18px; }
+      .appnav .inner { flex-direction: column; gap: 6px; max-width: none; margin: 0; }
+      .appnav button {
+        flex: none; position: relative; justify-content: center; gap: 6px;
+        min-height: 68px; border-radius: 12px;
+        font: 500 13px 'Space Grotesk', system-ui, sans-serif; color: var(--muted);
+      }
+      .appnav button:hover { color: var(--ink); }
+      .appnav button .icon { width: 22px; height: 22px; stroke-width: 1.7; }
+      /* The current page wears a small gold bead instead of the phone's underline. */
+      .appnav button .bar {
+        position: absolute; top: 10px; left: calc(50% + 10px);
+        width: 8px; height: 10px; border-radius: 45% / 50%;
+      }
+      .appnav button.on { background: var(--wash); color: var(--ink); }
+      [data-theme="dark"] .appnav button.on { background: var(--card); }
+      .appnav button.on .bar { background: var(--h-bead); }
+      .appnav button:focus-visible { outline: 3px solid var(--primary); outline-offset: -3px; }
+
+      /* Topic rows go to one line: name, thread, mastery word, count. */
+      .trow-home {
+        grid-template-columns: minmax(0, 1fr) auto 6.5rem 3rem;
+        grid-template-areas: "nm thr st num";
+        column-gap: 10px; min-height: 56px; padding: 8px 8px 8px 16px;
+      }
+      .mastery-word { padding-left: 6px; }
+    }
+
+    /* ===== Wide: home in two columns; other views keep a readable column ===== */
+    @media (min-width: 1024px) {
+      header, main { max-width: 1240px; }
+      header { padding-inline: 48px; }
+      main { padding: 0 48px; }
+      main > .view:not(#view-home), .exam-bar { width: 100%; max-width: 640px; margin-inline: auto; }
+
+      #view-home.active {
+        display: grid;
+        grid-template-columns: minmax(300px, 0.82fr) minmax(0, 1.18fr);
+        grid-template-areas: "stats stats" "ask practise" "foot foot";
+        column-gap: clamp(40px, 5vw, 88px);
+      }
+      #home-stats { grid-area: stats; justify-content: flex-end; }
+      .ask { grid-area: ask; align-self: center; padding-bottom: 40px; }
+      .ask h1 { font-size: 62px; margin-top: 8px; }
+      .practise-sec { grid-area: practise; margin-top: 0; }
+      .home-foot { grid-area: foot; }
+      .acts button { flex: 0 0 auto; padding: 0 20px; white-space: nowrap; }
+      /* Keep the thread near the name, as in the reference, instead of pinned right. */
+      .trow-home { grid-template-columns: minmax(12rem, 16rem) auto minmax(6.5rem, 1fr) 3rem; }
+    }
+    @media (min-width: 1360px) {
+      .ask h1 { font-size: 76px; }
+      .snap { min-height: 76px; font-size: 19px; }
+    }
 
     /* ===== Icons / helpers ===== */
     .icon {
@@ -979,6 +1050,11 @@
   </div>
 
   <nav class="appnav" aria-label="Main navigation">
+    <svg class="rail-mark" width="40" height="28" viewBox="0 0 40 28" aria-hidden="true">
+      <defs><radialGradient id="rail-mark-g" cx="42%" cy="34%" r="70%"><stop offset="0" stop-color="#FFE59E"/><stop offset=".5" stop-color="#F4C143"/><stop offset="1" stop-color="#A57411"/></radialGradient></defs>
+      <rect x="0" y="12.5" width="40" height="3" rx="1.5" fill="#9EA6B8"/>
+      <ellipse cx="20" cy="14" rx="9" ry="12.5" fill="url(#rail-mark-g)"/>
+    </svg>
     <div class="inner">
       <button id="nav-home" class="on" type="button"><span class="bar"></span><svg class="icon"><use href="#i-home"/></svg><span>Home</span></button>
       <button id="nav-chat" type="button"><span class="bar"></span><svg class="icon"><use href="#i-pencil"/></svg><span>Tutor</span></button>
