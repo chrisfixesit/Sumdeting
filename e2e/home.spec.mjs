@@ -185,3 +185,27 @@ test("earned beads fill once on load, and not at all under reduced motion", asyn
   await expect(topicRow(page, "Algebra").locator(".beads i.on")).toHaveCount(3);
   await expect(page.locator("#topic-list .beads i.anim")).toHaveCount(0);
 });
+
+test("a stale streak is hidden on home and String", async ({ page }) => {
+  await page.addInitScript(([key]) => {
+    localStorage.setItem(key, JSON.stringify({ topics: {}, streak: { count: 9, last: "2026-01-01" }, days: {} }));
+  }, [MASTERY]);
+  await page.goto("/");
+  await expect(page.locator("#stat-streak")).toBeHidden();
+  await page.locator("#nav-string").click();
+  await expect(page.locator("#string-streak")).toHaveText("0");
+});
+
+test("String view uses the four mastery words", async ({ page }) => {
+  await page.addInitScript(([key]) => {
+    localStorage.setItem(key, JSON.stringify({
+      topics: { Algebra: { solved: 3, attempted: 3 }, Trigonometry: { solved: 1, attempted: 2 } },
+      streak: { count: 0, last: "" }, days: {},
+    }));
+  }, [MASTERY]);
+  await page.goto("/");
+  await page.locator("#nav-string").click();
+  const row = (name) => page.locator("#string-topics .trow", { hasText: name }).first();
+  await expect(row("Algebra").locator("b")).toHaveText("Familiar");
+  await expect(row("Trigonometry").locator("b")).toHaveText("Attempted");
+});

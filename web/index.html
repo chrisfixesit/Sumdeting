@@ -1683,7 +1683,11 @@
       const m = loadMastery();
       masteryEl.textContent = "";
       const bits = [];
-      if (m.streak.count > 1) bits.push(`${m.streak.count}-day streak`);
+      const H = window.SumHome;
+      if (H) {
+        const live = H.liveStreak(m.streak, new Date().toISOString().slice(0, 10));
+        if (H.showStreak(live)) bits.push(`${live}-day streak`);
+      }
       const t = currentTopic && m.topics[currentTopic];
       if (t && t.attempted) bits.push(`${currentTopic}: ${t.solved} solved of ${t.attempted} tried`);
       masteryEl.textContent = bits.join(" · ");
@@ -2487,7 +2491,8 @@
       const m = loadMastery();
       const weekly = beadsThisWeek(m);
       document.getElementById("string-count").textContent = weekly;
-      document.getElementById("string-streak").textContent = m.streak.count;
+      const H = window.SumHome;
+      document.getElementById("string-streak").textContent = H ? H.liveStreak(m.streak, new Date().toISOString().slice(0, 10)) : 0;
       const grid = document.getElementById("string-beads");
       grid.textContent = "";
       const slots = Math.min(Math.max(weekly, 21), 42);
@@ -2505,9 +2510,9 @@
         const name = document.createElement("span");
         name.textContent = opt.value;
         const status = document.createElement("b");
-        if ((t?.solved ?? 0) >= 5) { status.textContent = "mastered"; status.className = "s-done"; }
-        else if (t?.solved || t?.attempted) { status.textContent = "in progress"; status.className = "s-mid"; }
-        else { status.textContent = "not started"; status.className = "s-new"; }
+        const state = H ? H.masteryState(t?.solved ?? 0) : "not-started";
+        status.textContent = H ? H.masteryWord(state) : "Not started";
+        status.className = state === "mastered" ? "s-done" : state === "not-started" ? "s-new" : "s-mid";
         row.append(name, status);
         list.appendChild(row);
       }
