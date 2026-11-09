@@ -1,6 +1,8 @@
-import { askTutor, askTutorStream, validateMessages } from "./tutor.mjs";
+import { askTutor, askTutorStream, assertThinkingModel, validateMessages } from "./tutor.mjs";
 
 const MODEL_ID = process.env.MODEL_ID;
+// Fail at cold start, not on every request, if the model cannot think.
+assertThinkingModel(MODEL_ID);
 
 const parseEvent = (event) => {
   if (event.requestContext?.http?.method !== "POST") {

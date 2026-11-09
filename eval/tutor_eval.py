@@ -201,8 +201,8 @@ CASES = [
         "name": "C15_bare_correct_answer",
         "messages": [_ASK, _POSED, {"role": "user", "content": "x = 10"}],
         "criterion": (
-            "Correct answer with no working. PASS if the reply does NOT call it wrong. "
-            "Confirming it (✅) or neutrally asking to see the working are both fine."),
+            "Correct answer with no working. PASS only if the reply confirms it with ✅ "
+            "and does NOT call it wrong."),
     },
     {
         "name": "C12_practice_problem_csec",

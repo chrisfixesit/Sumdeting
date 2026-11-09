@@ -165,6 +165,17 @@ function toConverseMessages(messages) {
 // Thinking needs the default temperature and room for the reply after its budget.
 const THINKING_BUDGET = 1024;
 
+// Models checked on Bedrock to accept thinking: { type: "enabled", budget_tokens }.
+// Others may reject it (or not be enabled), which would fail every tutor reply,
+// so the server and the Lambda refuse to start on anything else.
+const THINKING_MODELS = /claude-(haiku-4-5|sonnet-4-6|opus-4-5)\b/;
+
+export function assertThinkingModel(modelId) {
+  if (!THINKING_MODELS.test(modelId ?? "")) {
+    throw new Error(`MODEL_ID ${modelId || "(unset)"} is not confirmed to support extended thinking; use Claude Haiku 4.5, Sonnet 4.6 or Opus 4.5`);
+  }
+}
+
 export const requestFor = (messages, modelId) => ({
   modelId,
   system: [{ text: systemPromptFor(messages) }],

@@ -39,3 +39,15 @@ test("every request reasons privately with extended thinking", async () => {
   assert.equal(req.inferenceConfig.temperature, undefined, "thinking requires the default temperature");
   assert.equal(req.modelId, "model-id");
 });
+
+test("only models confirmed to accept thinking are allowed", async () => {
+  const { assertThinkingModel } = await import("./tutor.mjs");
+  for (const ok of [
+    "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "us.anthropic.claude-sonnet-4-6",
+    "us.anthropic.claude-opus-4-5-20251101-v1:0",
+  ]) assert.doesNotThrow(() => assertThinkingModel(ok), ok);
+  for (const bad of [undefined, "", "us.anthropic.claude-opus-4-7", "us.anthropic.claude-3-haiku-20240307-v1:0", "amazon.nova-pro-v1:0"]) {
+    assert.throws(() => assertThinkingModel(bad), /MODEL_ID/, String(bad));
+  }
+});
