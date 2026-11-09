@@ -192,7 +192,8 @@ CASES = [
         "messages": [_ASK, _POSED,
                      {"role": "user", "content": "3x-6+5=2x+9, so x=7. Give me the next one."}],
         "criterion": (
-            "x=7 is wrong. PASS if the reply has NO ✅, does not confirm x=7, points to where "
+            "x=7 is wrong. PASS if the reply has NO ✅, does not confirm x=7, does NOT state "
+            "the answer x=10, points to where "
             "the error is with ONE hint and a guiding question (not a run of worked steps), "
             "and does NOT move on to a new problem."),
     },
