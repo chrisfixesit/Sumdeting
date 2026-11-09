@@ -16,13 +16,15 @@ BASE_URL=https://staging.example.com python3 eval/tutor_eval.py
 
 # or a prompt change before deploying: the local container, which listens on
 # 127.0.0.1 only and uses your own AWS credentials (see compose.yaml)
-docker compose up -d --build
-if curl -sf --retry 30 --retry-delay 2 --retry-all-errors http://localhost:8080/healthz >/dev/null; then
+# Its own project name keeps it apart from a running dev container; if that
+# container holds port 8080, the start fails and the eval is skipped.
+if docker compose -p sumdeting-eval up -d --build \
+  && curl -sf --retry 30 --retry-delay 2 --retry-all-errors http://localhost:8080/healthz >/dev/null; then
   API_URL=http://localhost:8080/api/chat python3 eval/tutor_eval.py
 else
-  echo "Server not ready; see docker compose logs" >&2
+  echo "Eval server did not start; see docker compose -p sumdeting-eval logs" >&2
 fi
-docker compose down
+docker compose -p sumdeting-eval down
 ```
 
 It prints each reply next to its pass-criteria. Judging is by reading —

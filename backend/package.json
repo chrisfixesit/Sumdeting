@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test account/*.test.mjs ../web/*.test.mjs"
+    "test": "node --test tutor.test.mjs account/*.test.mjs ../web/*.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.0.0",

@@ -188,6 +188,14 @@ CASES = [
             "problem."),
     },
     {
+        "name": "C14_wrong_then_next_problem",
+        "messages": [_ASK, _POSED,
+                     {"role": "user", "content": "3x-6+5=2x+9, so x=7. Give me the next one."}],
+        "criterion": (
+            "x=7 is wrong. PASS if the reply has NO ✅, does not confirm x=7, points toward "
+            "the error, and does NOT move on to a new problem."),
+    },
+    {
         "name": "C12_practice_problem_csec",
         "messages": [{"role": "user",
                       "content": "Practice mode: please give me ONE CSEC practice problem on "
