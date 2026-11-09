@@ -21,14 +21,15 @@ async function stubTutor(page) {
 }
 
 const levelTab = (page, name) => page.locator("#level-tabs").getByRole("button", { name, exact: true });
-const topicChips = (page) => page.locator("#topic-grid button");
+const topicChips = (page) => page.locator("#topic-list .topic-name");
 const durationRows = (page) => page.locator("#duration-rows button");
 
 test("Common Entrance shows its own topics and exam lengths", async ({ page }) => {
   await page.goto("/");
   await levelTab(page, "Common Entrance").click();
   await expect(topicChips(page)).toHaveText([
-    "Number", "Fractions", "Percentages", "Ratios", "Measurement", "Geometry", "Sets", "Statistics", "Algebra",
+    "Number & Place Value", "Fractions & Decimals", "Percentages & Money", "Ratio & Proportion", "Measurement & Time",
+    "Geometry & Mensuration", "Sets & Venn Diagrams", "Statistics & Probability", "Algebra",
   ]);
   await page.locator("#nav-practice").click();
   await expect(page.locator("#exam-sub")).toContainText("Common Entrance");
@@ -40,9 +41,9 @@ test("Common Entrance shows its own topics and exam lengths", async ({ page }) =
 test("switching back to CSEC restores the CSEC topics, lengths and past papers", async ({ page }) => {
   await page.goto("/");
   await levelTab(page, "Common Entrance").click();
-  await levelTab(page, "CSEC / CXC").click();
+  await levelTab(page, "CSEC").click();
   await expect(topicChips(page)).toContainText(["Trigonometry"]);
-  await expect(topicChips(page).filter({ hasText: "Measurement" })).toHaveCount(0);
+  await expect(topicChips(page).filter({ hasText: "Measurement & Time" })).toHaveCount(0);
   await page.locator("#nav-practice").click();
   await expect(page.locator("#exam-sub")).toContainText("CSEC");
   await expect(durationRows(page)).toHaveText([/^30 min/, /^60 min/, /^90 min/, /^2h 40m/]);
@@ -53,7 +54,7 @@ test("a Common Entrance practice request names the level and topic, and the choi
   const sent = await stubTutor(page);
   await page.goto("/");
   await levelTab(page, "Common Entrance").click();
-  await topicChips(page).filter({ hasText: "Measurement" }).click();
+  await topicChips(page).filter({ hasText: "Measurement & Time" }).click();
   await expect.poll(() => sent.length).toBe(1);
   expect(sent[0]).toContain("ONE Common Entrance practice problem on Measurement & Time");
   expect(sent[0]).toContain("Write it as a Section B (2 marks) question.");
@@ -77,8 +78,8 @@ test("starting an exam tells the tutor the level", async ({ page }) => {
 test("CSEC offers Sets and Vectors, and an exam start names the paper", async ({ page }) => {
   const sent = await stubTutor(page);
   await page.goto("/");
-  await levelTab(page, "CSEC / CXC").click();
-  await expect(topicChips(page)).toContainText(["Sets", "Vectors"]);
+  await levelTab(page, "CSEC").click();
+  await expect(topicChips(page)).toContainText(["Sets & Venn Diagrams", "Vectors & Matrices"]);
   await page.locator("#nav-practice").click();
   await durationRows(page).filter({ hasText: "Paper 1" }).click();
   await page.locator("#exam-btn").click();
@@ -92,7 +93,7 @@ const paperTab = (page, name) => page.locator(`#paper-tabs button[data-paper="${
 test("a CSEC student can pick the paper a practice problem imitates, and it is remembered", async ({ page }) => {
   const sent = await stubTutor(page);
   await page.goto("/");
-  await levelTab(page, "CSEC / CXC").click();
+  await levelTab(page, "CSEC").click();
   await expect(paperTab(page, "Auto")).toHaveAttribute("aria-pressed", "true");
   await paperTab(page, "Paper 3").click();
   await topicChips(page).filter({ hasText: "Algebra" }).click();
@@ -107,7 +108,7 @@ test("a CSEC student can pick the paper a practice problem imitates, and it is r
 test("on Auto the CSEC paper follows how the student is doing", async ({ page }) => {
   const sent = await stubTutor(page);
   await page.goto("/");
-  await levelTab(page, "CSEC / CXC").click();
+  await levelTab(page, "CSEC").click();
   await topicChips(page).filter({ hasText: "Algebra" }).click();
   await expect.poll(() => sent.length).toBe(1);
   expect(sent[0]).toContain("Write it as a Paper 2 Section I (9 marks) question.");
@@ -117,7 +118,7 @@ test("the paper row only shows for levels that have paper choices", async ({ pag
   await page.goto("/");
   await levelTab(page, "Common Entrance").click();
   await expect(page.locator("#paper-pick")).toBeHidden();
-  await levelTab(page, "CSEC / CXC").click();
+  await levelTab(page, "CSEC").click();
   await expect(page.locator("#paper-pick")).toBeVisible();
 });
 
