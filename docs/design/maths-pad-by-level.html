@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; padding:24px; background:#e9e6df; font-family:'Space Grotesk',system-ui,sans-serif; color:#222; }
+  h2 { margin:0 0 4px; } .sub { margin:0 0 20px; color:#555; max-width:980px; line-height:1.5; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; }
+  .lvl { font-weight:600; margin:0 4px 2px; } .who { font-size:13px; color:#555; margin:0 4px 10px; min-height:36px; }
+  .ph { --bg:#0A1A3D;--card:#112554;--line:#1F3670;--wash:#14295B;--ink:#F4EEE0;--body:#D3D6E2;--muted:#A9B3CF;--faint:#95A2C6;--gold:#F4C143;--ib:#5D76B5;
+    background:var(--bg); color:var(--ink); border-radius:18px; padding:12px; }
+  .row { display:flex; gap:7px; align-items:center; }
+  .ta { flex:1; height:42px; background:var(--card); border:1px solid var(--ib); border-radius:13px; padding:0 12px; display:flex; align-items:center; font-size:13px; color:var(--faint); }
+  .ib { width:42px; height:42px; flex:none; border-radius:13px; background:var(--card); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--gold); font-size:20px; }
+  .ib.on { background:var(--gold); color:var(--bg); border-color:var(--gold); font:600 16px 'Newsreader',serif; }
+  .send { width:42px; height:42px; flex:none; border-radius:13px; background:var(--gold); color:var(--bg); display:flex; align-items:center; justify-content:center; }
+  svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .pad { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; margin-top:10px; padding:10px; background:var(--card); border:1px solid var(--line); border-radius:16px; }
+  .k { height:40px; background:var(--wash); border-radius:10px; display:flex; align-items:center; justify-content:center; font:500 17px/1 'Newsreader',serif; color:var(--ink); }
+  .k.op { color:var(--gold); } .k.w { font:500 13px 'Space Grotesk'; }
+  .more { grid-column:span 2; background:none; border:1px dashed var(--ib); color:var(--muted); font:500 12px 'Space Grotesk'; }
+  .tag { display:inline-block; font:600 10px 'Space Grotesk'; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin:10px 2px 0; }
+  .note { margin-top:22px; padding:14px 16px; background:#fff; border-radius:14px; max-width:980px; font-size:14px; line-height:1.55; }
+</style></head><body>
+<h2>A maths pad that matches the student's level</h2>
+<p class="sub">This is design B, but the keys change with the level picked on the home page. The keys a student uses most come first; <b>More</b> opens the full set, so nobody is ever stuck. Gold keys are operators.</p>
+<div class="grid">
+<script>
+const levels=[
+ ["Common Entrance (11+)","Ages 10–11: arithmetic, fractions, money, simple shapes.",
+  [["+","op"],["−","op"],["×","op"],["÷","op"],["="],["½"],["%"],["$"],["("],[")"],["°"],["more"]]],
+ ["CSEC","Forms 4–5: algebra, geometry, trig basics, statistics.",
+  [["x"],["y"],["x²"],["√"],["π"],["="],["("],[")"],["½"],["°"],["≤","op"],["≥","op"],["sin","w"],["cos","w"],["tan","w"],["±"],["more"]]],
+ ["Additional Maths","Calculus, logs, trig identities, vectors.",
+  [["x"],["xⁿ"],["√"],["π"],["θ"],["="],["log","w"],["ln","w"],["sin","w"],["cos","w"],["tan","w"],["e"],["d/dx","w"],["∫"],["≤","op"],["≥","op"],["more"]]],
+ ["CAPE","Sixth form: limits, series, complex numbers, matrices.",
+  [["xⁿ"],["√"],["π"],["θ"],["e"],["i"],["d/dx","w"],["∫"],["lim","w"],["Σ"],["∞"],["→"],["log","w"],["ln","w"],["∈"],["≠"],["more"]]]];
+for(const [name,who,keys] of levels){
+ const pad=keys.map(([s,c])=>s==="more"?`<span class="k more">More ▾</span>`:`<span class="k ${c||""}">${s}</span>`).join("");
+ document.write(`<div><div class="lvl">${name}</div><div class="who">${who}</div><div class="ph">
+  <div class="row"><span class="ib">+</span><span class="ta">Type your working…</span><span class="ib on">∑</span><span class="send"><svg viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></span></div>
+  <div class="pad">${pad}</div></div></div>`);
+}
+</script>
+</div>
+<div class="note"><b>Could also adapt to the topic.</b> When a student is working on Trigonometry, <i>sin cos tan θ</i> could move to the front. In Ratio, <i>:</i> would. That's an optional extra on top of the level sets.</div>
+</body></html>
