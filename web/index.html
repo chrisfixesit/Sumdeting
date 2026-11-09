@@ -326,7 +326,7 @@
       display: flex; align-items: flex-end;
     }
     [data-theme="dark"] .sheet { background: rgba(3, 8, 22, 0.6); }
-    .sheet[hidden] { display: none; }
+    .sheet[hidden], .papers-card[hidden] { display: none; }
     .sheet-card {
       width: 100%; max-width: 560px; margin: 0 auto;
       background: var(--bg);
@@ -721,22 +721,9 @@
           <option>Additional Maths</option>
           <option>CAPE</option>
         </select>
-        <select id="topic" aria-label="Topic">
-          <option>Fractions & Decimals</option>
-          <option>Percentages & Money</option>
-          <option selected>Algebra</option>
-          <option>Geometry & Mensuration</option>
-          <option>Ratio & Proportion</option>
-          <option>Statistics & Probability</option>
-          <option>Functions & Graphs</option>
-          <option>Trigonometry</option>
-        </select>
-        <select id="exam-duration" aria-label="Exam length">
-          <option value="30">30 min</option>
-          <option value="60" selected>60 min</option>
-          <option value="90">90 min</option>
-          <option value="160">2h 40m (P2)</option>
-        </select>
+        <!-- Topics and exam lengths depend on the level; filled from LEVEL_SETUP. -->
+        <select id="topic" aria-label="Topic"></select>
+        <select id="exam-duration" aria-label="Exam length"></select>
       </div>
 
       <div class="home-foot">
@@ -762,13 +749,8 @@
     <!-- ============ EXAM ============ -->
     <section id="view-practice" class="view" aria-label="Exam practice">
       <h2 class="page-h2">Exam Mode</h2>
-      <p class="page-sub">Timed practice under real CSEC conditions. No hints while the clock runs — just like the real thing.</p>
-      <div id="duration-rows" class="duration-rows" role="group" aria-label="Exam length">
-        <button type="button" data-min="30">30 min<span>short set</span></button>
-        <button type="button" data-min="60">60 min<span>standard</span></button>
-        <button type="button" data-min="90">90 min<span>extended</span></button>
-        <button type="button" data-min="160">2h 40m<span>Paper 2</span></button>
-      </div>
+      <p id="exam-sub" class="page-sub">Timed practice under real CSEC conditions. No hints while the clock runs — just like the real thing.</p>
+      <div id="duration-rows" class="duration-rows" role="group" aria-label="Exam length"></div>
       <button id="exam-btn" type="button" class="cta-primary">Start exam</button>
       <button id="papers-open" type="button" class="papers-card">
         <div class="kicker">Or work a real paper</div>
@@ -1234,20 +1216,74 @@
         }));
       } catch { /* never let sync plumbing break practice */ }
     }
-    // Markup defaults, used when a profile has no stored prefs.
-    const PREF_DEFAULTS = {
-      level: levelSel.value, topic: topicSel.value, duration: durationSel.value,
+    // What each level offers. Topic names are also the progress keys, so a
+    // topic shared by two levels (e.g. Algebra) shares its progress.
+    // durations: [minutes, label, note]; topic/duration: the level's defaults.
+    const LEVEL_SETUP = {
+      "Common Entrance": {
+        exam: "Common Entrance (BSSEE)",
+        topics: [
+          "Number & Place Value", "Fractions & Decimals", "Percentages & Money", "Ratio & Proportion",
+          "Measurement & Time", "Geometry & Mensuration", "Sets & Venn Diagrams", "Statistics & Probability", "Algebra",
+        ],
+        topic: "Number & Place Value",
+        durations: [["30", "30 min", "short set"], ["75", "1h 15m", "full paper"]],
+        duration: "75",
+      },
+      CSEC: {
+        exam: "CSEC",
+        topics: [
+          "Fractions & Decimals", "Percentages & Money", "Algebra", "Geometry & Mensuration",
+          "Ratio & Proportion", "Statistics & Probability", "Functions & Graphs", "Trigonometry",
+        ],
+        topic: "Algebra",
+        durations: [["30", "30 min", "short set"], ["60", "60 min", "standard"], ["90", "90 min", "extended"], ["160", "2h 40m", "Paper 2"]],
+        duration: "60",
+      },
+      "Additional Maths": {
+        exam: "CSEC Additional Mathematics",
+        topics: [
+          "Algebra", "Functions & Graphs", "Coordinate Geometry & Vectors", "Trigonometry",
+          "Sequences & Series", "Calculus", "Statistics & Probability",
+        ],
+        topic: "Algebra",
+        durations: [["30", "30 min", "short set"], ["90", "1h 30m", "Paper 1"], ["160", "2h 40m", "Paper 2"]],
+        duration: "90",
+      },
+      CAPE: {
+        exam: "CAPE Pure Mathematics",
+        topics: [
+          "Algebra", "Functions & Graphs", "Trigonometry", "Coordinate Geometry & Vectors",
+          "Sequences & Series", "Calculus", "Complex Numbers & Matrices", "Statistics & Probability",
+        ],
+        topic: "Algebra",
+        durations: [["30", "30 min", "short set"], ["90", "1h 30m", "Paper 1"], ["150", "2h 30m", "Paper 2"]],
+        duration: "90",
+      },
     };
+    const DEFAULT_LEVEL = "CSEC";
+    const levelSetup = () => LEVEL_SETUP[levelSel.value] ?? LEVEL_SETUP[DEFAULT_LEVEL];
+
+    // Fill the topic and length selects for the current level, keeping the
+    // wanted values when that level offers them.
+    function applyLevel(topic, duration) {
+      const setup = levelSetup();
+      topicSel.replaceChildren(...setup.topics.map((t) => new Option(t)));
+      topicSel.value = setup.topics.includes(topic) ? topic : setup.topic;
+      durationSel.replaceChildren(...setup.durations.map(([min, label]) => new Option(label, min)));
+      durationSel.value = setup.durations.some(([min]) => min === duration) ? duration : setup.duration;
+    }
+
     function loadPrefs() {
       let p = null;
       try { p = JSON.parse(localStorage.getItem(storageKey(PREFS_KEY))); } catch { /* ignore */ }
-      levelSel.value = p?.level || PREF_DEFAULTS.level;
-      topicSel.value = p?.topic || PREF_DEFAULTS.topic;
-      durationSel.value = p?.duration || PREF_DEFAULTS.duration;
+      levelSel.value = LEVEL_SETUP[p?.level] ? p.level : DEFAULT_LEVEL;
+      applyLevel(p?.topic, p?.duration);
     }
     loadPrefs();
     for (const sel of [levelSel, topicSel, durationSel]) {
       sel.addEventListener("change", () => {
+        if (sel === levelSel) applyLevel(topicSel.value, durationSel.value);
         const prefs = { level: levelSel.value, topic: topicSel.value, duration: durationSel.value };
         try {
           localStorage.setItem(storageKey(PREFS_KEY), JSON.stringify(prefs));
@@ -1353,11 +1389,13 @@
     }
 
     // Topics worth resurfacing: struggled on 2+ of the last few problems,
-    // within the last 14 days.
+    // within the last 14 days, and offered at the current level.
     function trickyTopics() {
       const m = loadMastery();
       const cutoff = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
+      const offered = levelSetup().topics;
       return Object.entries(m.topics)
+        .filter(([name]) => offered.includes(name))
         .filter(([, t]) => (t.hist ?? []).filter((h) => h.d >= cutoff && struggledEntry(h)).length >= 2)
         .map(([name]) => name)
         .slice(0, 2);
@@ -1752,9 +1790,10 @@
     examBtn.addEventListener("click", async () => {
       if (examTimer) return;
       const minutes = Number(document.getElementById("exam-duration").value);
+      const level = levelSel.value;
       const ok = await converse(
-        `Exam mode has STARTED (${minutes} minutes). Act as a quiet invigilator: no hints, no teaching. Only tell me briefly whether each answer I submit is correct or incorrect, until I say the exam is over.`,
-        { displayText: `Starting a ${minutes}-minute exam` }
+        `Exam mode has STARTED (${level}, ${minutes} minutes). Act as a quiet invigilator: no hints, no teaching. Only tell me briefly whether each answer I submit is correct or incorrect, until I say the exam is over.`,
+        { displayText: `Starting a ${minutes}-minute ${level} exam` }
       );
       if (!ok) return;
       chipsEl.hidden = true; // no hint shortcuts once the exam begins
@@ -1933,17 +1972,16 @@
 
     // ---- Level segments ----
 
-    const LEVELS = ["Common Entrance", "CSEC", "Additional Maths", "CAPE"];
+    const LEVELS = Object.keys(LEVEL_SETUP);
     const levelTabs = document.getElementById("level-tabs");
     for (const lv of LEVELS) {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "seg" + (levelSel.value === lv ? " on" : "");
+      b.className = "seg";
       b.textContent = lv === "CSEC" ? "CSEC / CXC" : lv;
       b.addEventListener("click", () => {
         levelSel.value = lv;
-        levelSel.dispatchEvent(new Event("change")); // persists prefs
-        levelTabs.querySelectorAll(".seg").forEach((x) => x.classList.toggle("on", x === b));
+        levelSel.dispatchEvent(new Event("change")); // persists prefs, then renderLevel
       });
       levelTabs.appendChild(b);
     }
@@ -1951,43 +1989,78 @@
     // ---- Topic chips ----
 
     const TOPIC_SHORT = {
+      "Number & Place Value": "Number",
       "Fractions & Decimals": "Fractions",
       "Percentages & Money": "Percentages",
       "Algebra": "Algebra",
       "Geometry & Mensuration": "Geometry",
       "Ratio & Proportion": "Ratios",
+      "Measurement & Time": "Measurement",
+      "Sets & Venn Diagrams": "Sets",
       "Statistics & Probability": "Statistics",
       "Functions & Graphs": "Graphs",
       "Trigonometry": "Trigonometry",
+      "Coordinate Geometry & Vectors": "Coordinates",
+      "Sequences & Series": "Sequences",
+      "Calculus": "Calculus",
+      "Complex Numbers & Matrices": "Complex numbers",
     };
     const topicGrid = document.getElementById("topic-grid");
     const chatContext = document.getElementById("chat-context");
-    for (const opt of topicSel.options) {
-      const topic = opt.value;
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "tchip";
-      b.textContent = TOPIC_SHORT[topic] || topic;
-      b.addEventListener("click", () => {
-        topicSel.value = topic;
-        topicSel.dispatchEvent(new Event("change")); // persists prefs
-        chatContext.textContent = `${TOPIC_SHORT[topic] || topic} · ${levelSel.value}`;
-        practiceBtn.click();
-      });
-      topicGrid.appendChild(b);
+    function renderTopicChips() {
+      topicGrid.textContent = "";
+      for (const opt of topicSel.options) {
+        const topic = opt.value;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "tchip";
+        b.textContent = TOPIC_SHORT[topic] || topic;
+        b.addEventListener("click", () => {
+          topicSel.value = topic;
+          topicSel.dispatchEvent(new Event("change")); // persists prefs
+          chatContext.textContent = `${TOPIC_SHORT[topic] || topic} · ${levelSel.value}`;
+          practiceBtn.click();
+        });
+        topicGrid.appendChild(b);
+      }
     }
 
     // ---- Exam duration rows ----
 
     const durationRows = document.getElementById("duration-rows");
-    for (const row of durationRows.querySelectorAll("button")) {
-      if (row.dataset.min === durationSel.value) row.classList.add("on");
-      row.addEventListener("click", () => {
-        durationSel.value = row.dataset.min;
-        durationSel.dispatchEvent(new Event("change")); // persists prefs
-        durationRows.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === row));
-      });
+    function renderDurationRows() {
+      durationRows.textContent = "";
+      for (const [min, label, note] of levelSetup().durations) {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.dataset.min = min;
+        row.className = min === durationSel.value ? "on" : "";
+        const span = document.createElement("span");
+        span.textContent = note;
+        row.append(label, span);
+        row.addEventListener("click", () => {
+          durationSel.value = min;
+          durationSel.dispatchEvent(new Event("change")); // persists prefs
+          durationRows.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === row));
+        });
+        durationRows.appendChild(row);
+      }
     }
+
+    // Everything that follows the chosen level: tabs, topics, exam lengths,
+    // the exam blurb and the past-papers card (CSEC Mathematics papers only).
+    function renderLevel() {
+      levelTabs.querySelectorAll(".seg").forEach((x, i) => x.classList.toggle("on", LEVELS[i] === levelSel.value));
+      renderTopicChips();
+      renderDurationRows();
+      document.getElementById("exam-sub").textContent =
+        `Timed practice under real ${levelSetup().exam} conditions. No hints while the clock runs — just like the real thing.`;
+      document.getElementById("papers-open").hidden = levelSel.value !== "CSEC";
+      renderString();
+      renderMastery();
+    }
+    levelSel.addEventListener("change", renderLevel);
+    renderLevel();
 
     // ---- Past papers bottom sheet ----
 
@@ -2039,14 +2112,10 @@
       }
     }
 
-    renderString();
-
     // Bridge for the account module (account-core / account-ui).
     function reloadLocalState() {
       loadPrefs();
-      levelTabs.querySelectorAll(".seg").forEach((x, i) => x.classList.toggle("on", LEVELS[i] === levelSel.value));
-      durationRows.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.dataset.min === durationSel.value));
-      renderMastery();
+      renderLevel();
     }
     window.SumDeTing = {
       storageKey,
