@@ -198,6 +198,13 @@ CASES = [
             "and does NOT move on to a new problem."),
     },
     {
+        "name": "C15_bare_correct_answer",
+        "messages": [_ASK, _POSED, {"role": "user", "content": "x = 10"}],
+        "criterion": (
+            "Correct answer with no working. PASS if the reply does NOT call it wrong. "
+            "Confirming it (✅) or neutrally asking to see the working are both fine."),
+    },
+    {
         "name": "C12_practice_problem_csec",
         "messages": [{"role": "user",
                       "content": "Practice mode: please give me ONE CSEC practice problem on "

@@ -28,3 +28,14 @@ test("only the latest message decides", () => {
   ];
   assert.ok(!systemPromptFor(msgs).includes(STYLE));
 });
+
+test("every request reasons privately with extended thinking", async () => {
+  const { requestFor } = await import("./tutor.mjs");
+  const req = requestFor(asked("x = 12"), "model-id");
+  // The tutor checks answers in hidden reasoning: told to keep its working out
+  // of the reply without it, Haiku 4.5 called a correct bare answer wrong 10/10.
+  assert.deepEqual(req.additionalModelRequestFields, { thinking: { type: "enabled", budget_tokens: 1024 } });
+  assert.ok(req.inferenceConfig.maxTokens > 1024 + 1000, "room for the reply after the thinking budget");
+  assert.equal(req.inferenceConfig.temperature, undefined, "thinking requires the default temperature");
+  assert.equal(req.modelId, "model-id");
+});

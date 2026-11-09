@@ -32,7 +32,7 @@ The golden rule, never broken:
 - When the student proposes an answer, tell them whether it is correct. If correct, begin your reply with the ✅ emoji, celebrate, recap the key steps in two or three bullet points, and offer one similar practice problem. If wrong, point to the step where it went wrong and ask a guiding question. Only use ✅ when confirming a correct final answer, never elsewhere.
 
 Verify before you confirm (critical — this outranks the confirmation style above):
-- Before you reply to ANY student step or proposed answer, silently work the problem yourself and compute the correct value at that step. Do your own arithmetic every time; never accept the student's stated number without checking it against your own calculation. This working is private: never write it in your reply, because it contains the answer. Show at most the student's own step that went wrong. If they gave only a final answer with no working, do not solve it for them: say it is not right yet and ask them to show their first step.
+- Before you reply to ANY student step or proposed answer, silently work the problem yourself and compute the correct value at that step. Do your own arithmetic every time; never accept the student's stated number without checking it against your own calculation. This working is private: never write it in your reply, because it contains the answer. Show at most the student's own step that went wrong. If they gave only a final answer with no working and it is wrong, do not solve it for them: say it is not right yet and ask them to show their first step. A correct bare answer is confirmed as usual.
 - Only affirm a step or answer ("Right", "Good", ✅) when your own working agrees with it. If the student's arithmetic, the sign of a term they moved across, or any stated value is wrong — EVEN when their final answer happens to come out correct — do NOT confirm it. Name that specific error and ask one guiding question about it.
 - Do not award ✅ until you have verified, by your own complete working, that the final answer is correct.
 - Never confirm something and then contradict or reverse it, in the same message or a later one. If you are unsure, verify first, then give a single consistent response. A visible flip-flop confuses the student and destroys trust.
@@ -158,18 +158,26 @@ function toConverseMessages(messages) {
   });
 }
 
-const baseInput = (messages, modelId) => ({
+// The tutor works out every answer in hidden reasoning before replying, so it
+// can check a student's work without writing the solution into the reply.
+// Without it, Haiku 4.5 either leaked the solution while checking or, told to
+// keep the working private, stopped checking and called correct answers wrong.
+// Thinking needs the default temperature and room for the reply after its budget.
+const THINKING_BUDGET = 1024;
+
+export const requestFor = (messages, modelId) => ({
   modelId,
   system: [{ text: systemPromptFor(messages) }],
   messages: toConverseMessages(messages),
-  inferenceConfig: { maxTokens: 1500, temperature: 0.4 },
+  inferenceConfig: { maxTokens: THINKING_BUDGET + 1500 },
+  additionalModelRequestFields: { thinking: { type: "enabled", budget_tokens: THINKING_BUDGET } },
 });
 
 /**
  * Buffered: returns the tutor's full reply as a string.
  */
 export async function askTutor(messages, modelId) {
-  const result = await client.send(new ConverseCommand(baseInput(messages, modelId)));
+  const result = await client.send(new ConverseCommand(requestFor(messages, modelId)));
   return result.output?.message?.content?.map((c) => c.text ?? "").join("") ?? "";
 }
 
@@ -178,7 +186,7 @@ export async function askTutor(messages, modelId) {
  */
 export async function askTutorStream(messages, modelId, onText) {
   const result = await client.send(
-    new ConverseStreamCommand(baseInput(messages, modelId))
+    new ConverseStreamCommand(requestFor(messages, modelId))
   );
   for await (const event of result.stream) {
     const text = event.contentBlockDelta?.delta?.text;
