@@ -53,7 +53,8 @@ test("progress shows beads, words and the pickup button", async ({ page }) => {
   await expect(stats.locator(".beads i.on")).toHaveCount(4);
   await expect(stats.locator(".mastery-word")).toHaveText("Familiar");
   await expect(stats.locator(".count")).toContainText("4 of 5");
-  await expect(stats).toHaveAccessibleName("Statistics & Probability, Familiar, 4 of 5 beads");
+  await expect(stats).toHaveAccessibleName("Statistics & Probability, Familiar, 4 of 5 beads, up next");
+  await expect(topicRow(page, "Algebra")).toHaveAccessibleName("Algebra, Familiar, 3 of 5 beads");
   await expect(page.locator("#pickup-btn")).toHaveText("Pick up Statistics & Probability");
   await expect(page.locator("#next-step-text")).toHaveText("One more bead and Statistics & Probability is mastered.");
   await expect(page.locator("#stat-beads")).toContainText("12");
@@ -220,6 +221,7 @@ test("a topic tried but never solved reads Attempted on home and String", async 
   await levelTab(page, "CSEC").click();
   const trig = topicRow(page, "Trigonometry");
   await expect(trig.locator(".mastery-word")).toHaveText("Attempted");
+  await expect(trig).toHaveAccessibleName("Trigonometry, Attempted, 0 of 5 beads, up next");
   await expect(topicRow(page, "Algebra").locator(".mastery-word")).toHaveText("Not started");
   await page.locator("#nav-string").click();
   const row = (name) => page.locator("#string-topics .trow", { hasText: name }).first();
@@ -250,4 +252,14 @@ test("a home question typed while a reply streams is kept, not lost", async ({ p
   await expect(page.locator("#chat .msg.tutor").last()).toContainText("Here is a problem");
   await page.waitForTimeout(300);
   expect(sent.length).toBe(1);
+});
+
+test("keyboard focus keeps the shape of pill buttons", async ({ page }) => {
+  await page.goto("/");
+  const btn = page.locator("#practice-btn");
+  const before = await btn.evaluate((el) => getComputedStyle(el).borderTopLeftRadius);
+  await page.keyboard.press("Tab"); // keyboard modality, so focus() below is :focus-visible
+  await btn.focus();
+  expect(await btn.evaluate((el) => el.matches(":focus-visible"))).toBe(true);
+  expect(await btn.evaluate((el) => getComputedStyle(el).borderTopLeftRadius)).toBe(before);
 });

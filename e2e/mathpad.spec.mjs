@@ -156,3 +156,34 @@ test("an open pad follows a new practice topic", async ({ page }) => {
   await expect(page.locator("#mathpad")).toBeVisible();
   await expect.poll(async () => (await keyLabels(page))[0]).toBe("sin");
 });
+
+test("pad keys have spoken names", async ({ page }) => {
+  await openChat(page, "CSEC", "Fractions & Decimals");
+  await page.locator("#pad-toggle").click();
+  await page.locator("#pad-more").click();
+  await expect(padKey(page, "½")).toHaveAccessibleName("fraction slash");
+  await expect(padKey(page, "x²")).toHaveAccessibleName("x squared");
+  await expect(padKey(page, "√")).toHaveAccessibleName("square root");
+  const missing = await page.locator("#pad-keys button[data-ins]").evaluateAll((bs) =>
+    bs.filter((b) => !b.getAttribute("aria-label")).map((b) => b.textContent));
+  expect(missing).toEqual([]);
+});
+
+test("a key pressed from the keyboard keeps focus and inserts", async ({ page }) => {
+  await openChat(page);
+  await page.locator("#pad-toggle").click();
+  await page.locator("#input").fill("2");
+  await page.locator("#pad-toggle").focus();
+  let onKey = false;
+  for (let i = 0; i < 6 && !onKey; i++) {
+    await page.keyboard.press("Tab");
+    onKey = await page.evaluate(() => !!document.activeElement?.closest("#pad-keys button[data-ins]"));
+  }
+  expect(onKey).toBe(true);
+  const label = await page.evaluate(() => document.activeElement.textContent);
+  const ins = await page.evaluate(() => document.activeElement.dataset.ins);
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#input")).toHaveValue("2" + ins);
+  expect(await page.evaluate(() => document.activeElement.textContent)).toBe(label);
+  expect(await page.evaluate(() => !!document.activeElement.closest("#pad-keys"))).toBe(true);
+});

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   masteryState, masteryWord, beadCount, upNext, nextStep, nextStepLine, liveStreak, showStreak,
-  randomTopic, PAD_LEVEL_KEYS, PAD_TOPIC_KEYS, padKeys, ALL_PAD_KEYS, keyInsert,
+  randomTopic, PAD_LEVEL_KEYS, PAD_TOPIC_KEYS, padKeys, ALL_PAD_KEYS, keyInsert, keyLabel,
 } from "./home-core.mjs";
 
 test("masteryState thresholds", () => {
@@ -114,4 +114,20 @@ test("keyInsert", () => {
 test("ALL_PAD_KEYS", () => {
   assert.equal(new Set(ALL_PAD_KEYS).size, ALL_PAD_KEYS.length);
   for (const k of ["lim", "$", "x̄"]) assert.ok(ALL_PAD_KEYS.includes(k), k);
+});
+
+test("keyLabel gives every pad key a spoken name", () => {
+  for (const k of ALL_PAD_KEYS) {
+    const name = keyLabel(k);
+    assert.equal(typeof name, "string", k);
+    assert.ok(name.trim().length > 0, k);
+    // Only plain letters and "log" may read as themselves; every symbol needs a spoken name.
+    if (!/^[a-z]$/i.test(k) && k !== "log") assert.notEqual(name, k, `${k} has no spoken name`);
+  }
+  assert.equal(keyLabel("½"), "fraction slash");
+  assert.equal(keyLabel("x²"), "x squared");
+  assert.equal(keyLabel("√"), "square root");
+  assert.equal(keyLabel("d/dx"), "derivative d by d x");
+  assert.equal(keyLabel("≤"), "less than or equal to");
+  assert.equal(keyLabel("zz"), "zz"); // unknown keys fall back to the label
 });

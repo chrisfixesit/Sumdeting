@@ -28,6 +28,11 @@ test.describe("bottom bar on phone, rail from tablet", () => {
       expect(box.height).toBeGreaterThan(700);
       expect(box.width).toBeLessThan(120);
     });
+    test("rail scrolls rather than clips on a short screen", async ({ page }) => {
+      await page.setViewportSize({ width: 820, height: 420 });
+      await page.goto("/");
+      expect(await page.locator(".appnav").evaluate((el) => getComputedStyle(el).overflowY)).toBe("auto");
+    });
   });
 });
 

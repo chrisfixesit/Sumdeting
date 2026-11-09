@@ -125,9 +125,22 @@ const INSERTS = {
 };
 export function keyInsert(label) { return INSERTS[label] ?? label; }
 
+// Spoken names for the pad keys, so a screen reader says "square root", not "√".
+const KEY_LABELS = {
+  "+": "plus", "−": "minus", "×": "times", "÷": "divided by", "=": "equals", "½": "fraction slash",
+  "%": "percent", "$": "dollar", "(": "open bracket", ")": "close bracket", "°": "degrees",
+  x: "x", y: "y", "x²": "x squared", "xⁿ": "x to the power", "√": "square root", "π": "pi",
+  "≤": "less than or equal to", "≥": "greater than or equal to", "≠": "not equal to", "±": "plus or minus",
+  sin: "sine", cos: "cosine", tan: "tangent", log: "log", ln: "ln, natural log", e: "e", i: "i",
+  "θ": "theta", "d/dx": "derivative d by d x", "∫": "integral", lim: "limit", "Σ": "sum",
+  "∞": "infinity", "→": "arrow, tends to", "∈": "is an element of", "∪": "union", "∩": "intersection",
+  ":": "ratio colon", "x̄": "x bar",
+};
+export function keyLabel(label) { return KEY_LABELS[label] ?? label; }
+
 if (typeof window !== "undefined") {
   window.SumHome = {
     masteryState, masteryWord, beadCount, upNext, nextStep, nextStepLine, liveStreak, showStreak,
-    randomTopic, PAD_LEVEL_KEYS, PAD_TOPIC_KEYS, padKeys, ALL_PAD_KEYS, keyInsert,
+    randomTopic, PAD_LEVEL_KEYS, PAD_TOPIC_KEYS, padKeys, ALL_PAD_KEYS, keyInsert, keyLabel,
   };
 }

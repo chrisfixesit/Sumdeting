@@ -221,7 +221,7 @@
 
     #view-home { font: 400 16px/1.5 'Space Grotesk', system-ui, sans-serif; color: var(--ink); }
     :where(#view-home) :where(button, input) { font: inherit; color: inherit; }
-    #view-home :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
+    #view-home :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
 
     .tally { display: flex; gap: 12px; min-height: 0; margin: 0; font-size: 13px; color: var(--muted); }
     .tally [hidden] { display: none; }
@@ -767,6 +767,7 @@
         flex-direction: column; align-items: stretch;
         padding: 20px 8px;
         border-top: 0; border-right: 1px solid var(--line);
+        overflow-y: auto; /* short screens: the rail scrolls rather than clipping its last button */
       }
       [data-theme="dark"] .appnav { background: var(--strip); }
       .appnav .rail-mark { display: block; align-self: center; flex: none; margin: 0 0 18px; }
@@ -1947,7 +1948,7 @@
     let padAll = false;
 
     function renderPad() {
-      const { padKeys, ALL_PAD_KEYS, keyInsert } = window.SumHome;
+      const { padKeys, ALL_PAD_KEYS, keyInsert, keyLabel } = window.SumHome;
       const mine = padKeys(levelSel.value, currentTopic || topicSel.value);
       const keys = padAll ? [...new Set([...mine, ...ALL_PAD_KEYS])] : mine;
       const buttons = keys.map((label) => {
@@ -1955,6 +1956,7 @@
         b.type = "button";
         b.textContent = label;
         b.dataset.ins = keyInsert(label);
+        b.setAttribute("aria-label", keyLabel(label));
         if (/^[a-z/]{2,}$/i.test(label)) b.className = "w";
         else if (PAD_OPS.has(label)) b.className = "op";
         else if (PAD_BIG.has(label)) b.className = "big";
@@ -1990,7 +1992,8 @@
       }
       const ins = key.dataset.ins;
       input.setRangeText(ins, input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length, "end");
-      input.focus();
+      // Taps and clicks go back to the text box; Enter or Space on a key (detail 0) stays on the key.
+      if (e.detail > 0) input.focus();
     });
     for (const sel of [levelSel, topicSel]) {
       sel.addEventListener("change", () => { if (!mathpad.hidden) renderPad(); });
@@ -2481,7 +2484,8 @@
         b.type = "button";
         b.className = topic === upNextTopic ? "trow-home next" : "trow-home";
         b.dataset.topic = topic;
-        b.setAttribute("aria-label", `${topic}, ${word}, ${solved} of 5 beads`);
+        const upNextName = topic === upNextTopic ? ", up next" : "";
+        b.setAttribute("aria-label", `${topic}, ${word}, ${solved} of 5 beads${upNextName}`);
 
         const nm = document.createElement("span");
         nm.className = "nm";
