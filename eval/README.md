@@ -13,6 +13,10 @@ python3 eval/tutor_eval.py
 
 # or against another environment
 BASE_URL=https://staging.example.com python3 eval/tutor_eval.py
+
+# or a prompt change before deploying: a local server on Bedrock credentials
+PORT=8080 node server.mjs &
+API_URL=http://localhost:8080/api/chat python3 eval/tutor_eval.py
 ```
 
 It prints each reply next to its pass-criteria. Judging is by reading —

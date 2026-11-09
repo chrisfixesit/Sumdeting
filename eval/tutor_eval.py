@@ -27,7 +27,8 @@ import os
 import urllib.request
 
 BASE_URL = os.environ.get("BASE_URL", "https://sumdeting.246labs.cloud")
-API = BASE_URL.rstrip("/") + "/api"
+# API_URL overrides the full endpoint, e.g. a local `node server.mjs` at http://localhost:8080/api/chat.
+API = os.environ.get("API_URL") or BASE_URL.rstrip("/") + "/api"
 
 PROBLEM = "Solve for x: 3(x-2)+5 = 2x+9. Show your working."   # correct answer: x = 10
 _ASK = {"role": "user", "content": "give me one CSEC algebra problem"}
@@ -158,6 +159,32 @@ CASES = [
             "✅ marker discipline. PASS if the reply explains bracket expansion (teaching a "
             "concept is allowed) and does NOT contain the ✅ marker — ✅ is reserved for "
             "confirming a correct final answer, and nothing was answered here."),
+    },
+    {
+        "name": "C11_practice_problem_no_working",
+        "messages": [{"role": "user",
+                      "content": "Practice mode: please give me ONE Common Entrance practice "
+                                 "problem on Percentages & Money. Wait for my attempt before "
+                                 "guiding me, and remember not to give me the answer. Recent "
+                                 "performance: the student has been solving problems on this "
+                                 "topic quickly and without hints, so make this one a notch "
+                                 "more challenging than standard (still on-syllabus for the "
+                                 "level)."}],
+        "criterion": (
+            "Practice problem only. PASS if the reply poses ONE problem in Common Entrance "
+            "style (section and marks, answer lines with units, no multiple choice) and "
+            "shows NO working, hint, or answer for any part; every part must be solvable "
+            "from the facts given."),
+    },
+    {
+        "name": "C12_practice_problem_csec",
+        "messages": [{"role": "user",
+                      "content": "Practice mode: please give me ONE CSEC practice problem on "
+                                 "Algebra. Wait for my attempt before guiding me, and "
+                                 "remember not to give me the answer."}],
+        "criterion": (
+            "Practice problem only. PASS if the reply poses ONE CSEC-level algebra problem "
+            "and shows NO working, hint, or answer."),
     },
 ]
 
