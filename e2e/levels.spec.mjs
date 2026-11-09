@@ -56,6 +56,7 @@ test("a Common Entrance practice request names the level and topic, and the choi
   await topicChips(page).filter({ hasText: "Measurement" }).click();
   await expect.poll(() => sent.length).toBe(1);
   expect(sent[0]).toContain("ONE Common Entrance practice problem on Measurement & Time");
+  expect(sent[0]).toContain("Write it as a Section B (2 marks) question.");
 
   await page.reload(); // reopens on the saved chat, so the home tabs are hidden
   await expect(page.locator("#level-tabs .seg.on")).toHaveText("Common Entrance");
@@ -71,6 +72,53 @@ test("starting an exam tells the tutor the level", async ({ page }) => {
   await expect.poll(() => sent.length).toBe(1);
   expect(sent[0]).toContain("Common Entrance");
   expect(sent[0]).toContain("75 minutes");
+});
+
+test("CSEC offers Sets and Vectors, and an exam start names the paper", async ({ page }) => {
+  const sent = await stubTutor(page);
+  await page.goto("/");
+  await levelTab(page, "CSEC / CXC").click();
+  await expect(topicChips(page)).toContainText(["Sets", "Vectors"]);
+  await page.locator("#nav-practice").click();
+  await durationRows(page).filter({ hasText: "Paper 1" }).click();
+  await page.locator("#exam-btn").click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toContain("CSEC Paper 1, 90 minutes");
+});
+
+// CSS rather than role locators: after a reload the app reopens the saved chat and the home is hidden.
+const paperTab = (page, name) => page.locator(`#paper-tabs button[data-paper="${name}"]`);
+
+test("a CSEC student can pick the paper a practice problem imitates, and it is remembered", async ({ page }) => {
+  const sent = await stubTutor(page);
+  await page.goto("/");
+  await levelTab(page, "CSEC / CXC").click();
+  await expect(paperTab(page, "Auto")).toHaveAttribute("aria-pressed", "true");
+  await paperTab(page, "Paper 3").click();
+  await topicChips(page).filter({ hasText: "Algebra" }).click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toContain("Write it as a Paper 3 applied (10 marks) question.");
+
+  await page.reload();
+  await expect(paperTab(page, "Paper 3")).toHaveAttribute("aria-pressed", "true");
+  await expect(paperTab(page, "Auto")).toHaveAttribute("aria-pressed", "false");
+});
+
+test("on Auto the CSEC paper follows how the student is doing", async ({ page }) => {
+  const sent = await stubTutor(page);
+  await page.goto("/");
+  await levelTab(page, "CSEC / CXC").click();
+  await topicChips(page).filter({ hasText: "Algebra" }).click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toContain("Write it as a Paper 2 Section I (9 marks) question.");
+});
+
+test("the paper row only shows for levels that have paper choices", async ({ page }) => {
+  await page.goto("/");
+  await levelTab(page, "Common Entrance").click();
+  await expect(page.locator("#paper-pick")).toBeHidden();
+  await levelTab(page, "CSEC / CXC").click();
+  await expect(page.locator("#paper-pick")).toBeVisible();
 });
 
 test("saved choices that don't belong to the level fall back to that level's defaults", async ({ page }) => {

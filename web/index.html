@@ -713,6 +713,11 @@
       <div class="row-head"><b>Your level</b></div>
       <div id="level-tabs" class="seg-row" role="group" aria-label="Choose your level"></div>
 
+      <div id="paper-pick" hidden>
+        <div class="row-head"><b>Paper</b><span>the style of each problem</span></div>
+        <div id="paper-tabs" class="seg-row" role="group" aria-label="Choose a paper to practise"></div>
+      </div>
+
       <!-- Hidden selects: single source of truth for level/topic (kept for JS + saved prefs) -->
       <div class="practice" aria-label="Practice mode" hidden>
         <select id="level" aria-label="Level">
@@ -1227,6 +1232,8 @@
           "Measurement & Time", "Geometry & Mensuration", "Sets & Venn Diagrams", "Statistics & Probability", "Algebra",
         ],
         topic: "Number & Place Value",
+        // The paper section a practice problem imitates, by difficulty tier.
+        styles: { standard: "Section B (2 marks)", easier: "Section A (1 mark)", harder: "Section C (3 marks)" },
         durations: [["30", "30 min", "short set"], ["75", "1h 15m", "full paper"]],
         duration: "75",
       },
@@ -1235,9 +1242,17 @@
         topics: [
           "Fractions & Decimals", "Percentages & Money", "Algebra", "Geometry & Mensuration",
           "Ratio & Proportion", "Statistics & Probability", "Functions & Graphs", "Trigonometry",
+          "Sets & Venn Diagrams", "Vectors & Matrices",
         ],
         topic: "Algebra",
-        durations: [["30", "30 min", "short set"], ["60", "60 min", "standard"], ["90", "90 min", "extended"], ["160", "2h 40m", "Paper 2"]],
+        styles: { standard: "Paper 2 Section I (9 marks)", easier: "Paper 1 multiple-choice (1 mark)", harder: "Paper 2 Section II (12 marks)" },
+        // Papers the student can pick instead of Auto (the styles above), each by tier.
+        papers: {
+          "Paper 1": { standard: "Paper 1 multiple-choice (1 mark)" },
+          "Paper 2": { standard: "Paper 2 Section I (9 marks)", harder: "Paper 2 Section II (12 marks)" },
+          "Paper 3": { standard: "Paper 3 applied (10 marks)" },
+        },
+        durations: [["30", "30 min", "short set"], ["60", "60 min", "Paper 3"], ["90", "90 min", "Paper 1"], ["160", "2h 40m", "Paper 2"]],
         duration: "60",
       },
       "Additional Maths": {
@@ -1375,17 +1390,25 @@
     const struggledEntry = (h) => !h.ok || h.hints > 0 || h.turns >= 5;
 
     // Adapt the next practice problem to recent performance on this topic.
-    function difficultyGuidance(topic) {
+    // "harder", "easier" or "standard", from the last few problems on this topic.
+    function difficultyTier(topic) {
       const t = loadMastery().topics[topic];
       const recent = t?.hist?.slice(-3) ?? [];
-      if (recent.length < 2) return "";
-      if (recent.every((h) => h.ok && h.hints === 0 && h.turns <= 3)) {
-        return " Recent performance: the student has been solving problems on this topic quickly and without hints, so make this one a notch more challenging than standard (still on-syllabus for the level).";
-      }
-      if (recent.filter(struggledEntry).length >= 2) {
-        return " Recent performance: the student has found this topic difficult lately, so make this one a confidence-builder — slightly easier than standard, broken into an inviting first step.";
-      }
-      return "";
+      if (recent.length < 2) return "standard";
+      if (recent.every((h) => h.ok && h.hints === 0 && h.turns <= 3)) return "harder";
+      if (recent.filter(struggledEntry).length >= 2) return "easier";
+      return "standard";
+    }
+    const TIER_GUIDANCE = {
+      harder: " Recent performance: the student has been solving problems on this topic quickly and without hints, so make this one a notch more challenging than standard (still on-syllabus for the level).",
+      easier: " Recent performance: the student has found this topic difficult lately, so make this one a confidence-builder — slightly easier than standard, broken into an inviting first step.",
+      standard: "",
+    };
+    function difficultyGuidance(topic) {
+      const tier = difficultyTier(topic);
+      const paper = levelSetup().papers?.[paperChoice()];
+      const style = paper ? paper[tier] ?? paper.standard : levelSetup().styles?.[tier];
+      return (style ? ` Write it as a ${style} question.` : "") + TIER_GUIDANCE[tier];
     }
 
     // Topics worth resurfacing: struggled on 2+ of the last few problems,
@@ -1790,7 +1813,9 @@
     examBtn.addEventListener("click", async () => {
       if (examTimer) return;
       const minutes = Number(document.getElementById("exam-duration").value);
-      const level = levelSel.value;
+      // Name the paper when the chosen length is one ("CSEC Paper 1").
+      const note = levelSetup().durations.find(([min]) => min === durationSel.value)?.[2] ?? "";
+      const level = /^Paper/.test(note) ? `${levelSel.value} ${note}` : levelSel.value;
       const ok = await converse(
         `Exam mode has STARTED (${level}, ${minutes} minutes). Act as a quiet invigilator: no hints, no teaching. Only tell me briefly whether each answer I submit is correct or incorrect, until I say the exam is over.`,
         { displayText: `Starting a ${minutes}-minute ${level} exam` }
@@ -1986,6 +2011,40 @@
       levelTabs.appendChild(b);
     }
 
+    // ---- Paper choice (levels with papers only) ----
+
+    // Kept on this device per profile, apart from the synced prefs, which carry
+    // only level, topic and duration.
+    const PAPER_KEY = "mathmentor.paper.v1";
+    const AUTO_PAPER = "Auto";
+    function paperChoice() {
+      let p = null;
+      try { p = localStorage.getItem(storageKey(PAPER_KEY)); } catch { /* ignore */ }
+      return levelSetup().papers?.[p] ? p : AUTO_PAPER;
+    }
+    const paperPick = document.getElementById("paper-pick");
+    const paperTabs = document.getElementById("paper-tabs");
+    function renderPaperTabs() {
+      const papers = levelSetup().papers;
+      paperPick.hidden = !papers;
+      paperTabs.textContent = "";
+      if (!papers) return;
+      const chosen = paperChoice();
+      for (const name of [AUTO_PAPER, ...Object.keys(papers)]) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = name === chosen ? "seg on" : "seg";
+        b.dataset.paper = name;
+        b.textContent = name;
+        b.setAttribute("aria-pressed", String(name === chosen));
+        b.addEventListener("click", () => {
+          try { localStorage.setItem(storageKey(PAPER_KEY), name); } catch { /* ignore */ }
+          renderPaperTabs();
+        });
+        paperTabs.appendChild(b);
+      }
+    }
+
     // ---- Topic chips ----
 
     const TOPIC_SHORT = {
@@ -2004,6 +2063,7 @@
       "Sequences & Series": "Sequences",
       "Calculus": "Calculus",
       "Complex Numbers & Matrices": "Complex numbers",
+      "Vectors & Matrices": "Vectors",
     };
     const topicGrid = document.getElementById("topic-grid");
     const chatContext = document.getElementById("chat-context");
@@ -2052,6 +2112,7 @@
     function renderLevel() {
       levelTabs.querySelectorAll(".seg").forEach((x, i) => x.classList.toggle("on", LEVELS[i] === levelSel.value));
       renderTopicChips();
+      renderPaperTabs();
       renderDurationRows();
       document.getElementById("exam-sub").textContent =
         `Timed practice under real ${levelSetup().exam} conditions. No hints while the clock runs — just like the real thing.`;
