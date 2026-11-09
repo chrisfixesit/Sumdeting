@@ -12,6 +12,7 @@ const STATUS = {
   not_found: 404,
   too_many_attempts: 429,
   rate_limited: 429,
+  email_unavailable: 503,
   email_is_student: 400,
   email_is_parent: 400,
   already_linked: 400,

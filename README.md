@@ -59,6 +59,8 @@ ACCOUNT_DEV=1 docker compose up --build
 
 `ACCOUNT_DEV=1` swaps DynamoDB and SES for an in-memory store and a dev outbox. Emails the app would send (sign-in links, codes, consent requests) are readable at `http://localhost:8080/api/account/_dev/outbox`. Data is lost on restart.
 
+Without `ACCOUNT_DEV=1`, sign-in emails need SES: set `EMAIL_MODE=ses`, `EMAIL_FROM` (an address on a verified SES identity), `SITE_URL` (for example `http://localhost:8080`) and credentials allowed `ses:SendEmail`; `TABLE_NAME` optionally points at DynamoDB. With neither, sign-in answers "not available here" rather than pretending to send.
+
 ## Tests
 
 ```bash

@@ -44,6 +44,7 @@ const keepaliveApi = createApi({ fetchImpl: (u, o) => fetch(u, { ...o, keepalive
 const MESSAGES = {
   network: "Couldn't reach SumDeTing. Check your connection and try again.",
   rate_limited: "Too many tries for now. Please wait a while and try again.",
+  email_unavailable: "Sign-in isn't available on this copy of SumDeTing.",
   invalid_code: "That code didn't work. Check it and try again.",
   too_many_attempts: "Too many wrong codes. Ask for a new one.",
   bad_request: "Check the details and try again.",

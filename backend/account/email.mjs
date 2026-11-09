@@ -1,3 +1,4 @@
+import { httpError } from "./http.mjs";
 const esc = (s) =>
   String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -185,6 +186,13 @@ export function createMailer({ mode, from, siteUrl, sesClient } = {}) {
             },
           })
         );
+      },
+    };
+  }
+  if (mode === "off") {
+    return {
+      async send() {
+        throw httpError("email_unavailable");
       },
     };
   }

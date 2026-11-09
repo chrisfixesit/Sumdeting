@@ -31,8 +31,10 @@ export function depsFromEnv(env = process.env) {
     : createMemoryTable({ now });
   const siteUrl = env.SITE_URL ?? "";
   const dev = env.ACCOUNT_DEV === "1";
+  // Without SES, only dev mode may "send" (to the readable outbox). Otherwise mail is off and
+  // sign-in says so (503 email_unavailable) rather than claiming an email went out.
   const mailer = createMailer({
-    mode: env.EMAIL_MODE ?? "memory",
+    mode: env.EMAIL_MODE || (dev ? "memory" : "off"),
     from: env.EMAIL_FROM,
     siteUrl,
   });

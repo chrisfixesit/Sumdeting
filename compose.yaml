@@ -18,6 +18,15 @@ services:
       # the outbox hands out sign-in links to anyone who can reach the port.
       # Off unless you opt in: `ACCOUNT_DEV=1 docker compose up --build`.
       ACCOUNT_DEV: ${ACCOUNT_DEV:-0}
+      # Real sign-in email without dev mode: EMAIL_MODE=ses with EMAIL_FROM on a
+      # verified SES identity, SITE_URL for the links (http://localhost:8080) and
+      # credentials allowed ses:SendEmail. TABLE_NAME uses DynamoDB; unset keeps
+      # accounts in memory. With neither dev mode nor SES, sign-in answers
+      # "email_unavailable" instead of pretending to send.
+      EMAIL_MODE: ${EMAIL_MODE:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      SITE_URL: ${SITE_URL:-}
+      TABLE_NAME: ${TABLE_NAME:-}
       # Credentials come from the ~/.aws mount below by default.
       # To use static/session creds or a named profile instead, export them
       # in your shell before `docker compose up`; compose passes them through:

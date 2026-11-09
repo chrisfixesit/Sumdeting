@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { makeApp } from "./testkit.mjs";
-import { makeHandler, lambdaDepsFromEnv, depsFromEnv } from "./index.mjs";
+import { makeHandler, lambdaDepsFromEnv, depsFromEnv, createAppRouter } from "./index.mjs";
 import { createAppServer } from "../../server.mjs";
 
 const DAY = 24 * 3600 * 1000;
@@ -291,6 +291,23 @@ test("lambda deps throw when required env is missing", () => {
     delete env[name];
     assert.throws(() => lambdaDepsFromEnv(env), new RegExp(name));
   }
+});
+
+test("local server without dev mode or SES refuses sign-in instead of pretending to send", async () => {
+  const signin = async (env) => {
+    const deps = depsFromEnv(env);
+    const res = await createAppRouter(deps)({
+      method: "POST", path: "/signin/start", headers: {}, cookies: {}, body: { email: "a@x.com" }, ip: "203.0.113.1",
+    });
+    return { res, deps };
+  };
+  for (const env of [{}, { ACCOUNT_DEV: "0" }, { EMAIL_MODE: "" }]) {
+    const { res } = await signin(env);
+    assert.deepEqual([res.status, res.body], [503, { error: "email_unavailable" }], JSON.stringify(env));
+  }
+  const { res: dev, deps } = await signin({ ACCOUNT_DEV: "1" });
+  assert.equal(dev.status, 200);
+  assert.equal(deps.mailer.outbox.length, 1);
 });
 
 test("sign-in IP limit is 300 unless a dev server raises it (e2e only)", () => {
