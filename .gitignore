@@ -23,3 +23,11 @@ __pycache__/
 # Local QA/audit notes (contain operator details)
 QA-REPORT.md
 SECURITY-QA-AUDIT.md
+
+# Brainstorm mockups (superpowers visual companion)
+.superpowers/
+
+# Playwright end-to-end tests
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/

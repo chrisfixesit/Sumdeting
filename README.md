@@ -6,7 +6,7 @@ A Bajan AI math tutor that refuses to just give you the answer. SumDeTing uses C
 
 Built for Barbadian students: the tutor knows the local journey from Common Entrance (BSSEE) through CSEC/CXC Mathematics to CAPE, encourages in a warm Bajan voice while keeping every mathematical step in clear standard English, and uses everyday Barbadian contexts (BBD prices, bus fares, cricket) in its examples.
 
-**Stack:** Claude (Amazon Bedrock Converse API) · AWS Lambda (Function URL) · S3 + CloudFront (OAC) · OpenTofu · Docker (hardened local runtime)
+**Stack:** Claude (Amazon Bedrock Converse API) · AWS Lambda (Function URL) · S3 + CloudFront (OAC) · OpenTofu (in tofu-or-not-tofu) · Docker (hardened local runtime)
 
 One codebase, two runtimes: `backend/tutor.mjs` powers both the serverless Lambda deployment and a hardened Docker container for local development.
 
@@ -19,9 +19,16 @@ flowchart LR
     CF -->|POST /api · SigV4 via OAC| FU[Lambda Function URL · IAM auth]
     FU --> L[Lambda: tutor handler]
     L -->|Converse API| B[Claude on Amazon Bedrock]
+    CF -->|POST /api/account/* · SigV4 via OAC| AU[Lambda Function URL · account]
+    AU --> AL[Lambda: account handler]
+    AL --> D[(DynamoDB: accounts and progress)]
+    AL -->|sign-in and consent emails| SES[Amazon SES]
+    EB[EventBridge Scheduler] -->|daily| J[Lambda: janitor]
+    J --> D
+    J --> SES
 ```
 
-The frontend is a single HTML page. KaTeX, marked, DOMPurify and the brand fonts are self-hosted under `web/vendor/`, so the CSP allows only the site's own origin. The backend is one Node.js Lambda that validates the conversation, applies the Socratic tutoring prompt, and calls the Bedrock Converse API. Nothing is stored server-side; the conversation lives in the student's browser (localStorage, 24h) so a refresh doesn't lose their session.
+The frontend is a single HTML page. KaTeX, marked, DOMPurify and the brand fonts are self-hosted under `web/vendor/`, so the CSP allows only the site's own origin. The backend is one Node.js Lambda that validates the conversation, applies the Socratic tutoring prompt, and calls the Bedrock Converse API. Chats are never stored server-side: the conversation lives in the student's browser (localStorage, 24h) so a refresh doesn't lose their session. Accounts are optional. A signed-in student's practice progress (topics, problems solved, streak, preferences) and profile details are stored in DynamoDB so it follows them across devices; an account Lambda handles sign-in (emailed links and codes via SES), parent and guardian access and under-13 parental consent, and an EventBridge Scheduler janitor deletes expired and inactive data. See the [privacy notice draft](web/privacy.html) and the [launch runbook](docs/launch-runbook.md).
 
 ## Why Socratic?
 
@@ -42,20 +49,32 @@ docker compose up --build
 
 The image follows container-hardening practice: multi-stage build, non-root `node` user, read-only filesystem, all capabilities dropped, `no-new-privileges`, and a healthcheck on `/healthz`.
 
-## Deploy to AWS
-
-Prerequisites: an AWS account with Bedrock model access enabled for Claude (check the model ID in `infra/variables.tf`), plus OpenTofu or Terraform.
+### Accounts in local development
 
 ```bash
-cd infra
-cp terraform.tfvars.example terraform.tfvars   # then fill in your own values, including domain_name (or "" for no custom domain)
-tofu init
-tofu apply
+ACCOUNT_DEV=1 node server.mjs
+# or, in the container:
+ACCOUNT_DEV=1 docker compose up --build
 ```
 
-For a fresh deployment without a custom domain, set `domain_name = ""` and leave `dns_role_arn` empty; the AWS provider then skips the cross-account DNS role. If DNS records were created earlier, removing them still needs working DNS-role credentials.
+`ACCOUNT_DEV=1` swaps DynamoDB and SES for an in-memory store and a dev outbox. Emails the app would send (sign-in links, codes, consent requests) are readable at `http://localhost:8080/api/account/_dev/outbox`. Data is lost on restart.
 
-Outputs include `site_url` (the CloudFront URL) and `api_url` (the same-origin `/api` path). The Function URL itself requires IAM auth. Its resource policy grants invoke access only to this CloudFront distribution, which signs requests with Origin Access Control, so anonymous callers can't reach it directly. IAM principals in your own account with Lambda invoke permissions still can, and those calls bypass CloudFront. The `/api` path through CloudFront is still public and anonymous by design, so anyone can trigger Bedrock calls billed to your account; add a WAF rate limit in front of it before you share the site widely. A monthly cost budget emails `alert_email` (set in `infra/terraform.tfvars`) when spend runs hot, but it only alerts: it doesn't cap spend. The limit is `monthly_budget_usd` in `infra/variables.tf`.
+Dev mode never sends real email, and refuses to start with `EMAIL_MODE=ses` or `TABLE_NAME`. Without `ACCOUNT_DEV=1`, sign-in emails need SES: set `EMAIL_MODE=ses`, `EMAIL_FROM` (an address on a verified SES identity), `SITE_URL` (for example `http://localhost:8080`) and credentials allowed `ses:SendEmail`; `TABLE_NAME` optionally points at DynamoDB (never together with `ACCOUNT_DEV=1`, which refuses to start). With neither, sign-in answers "not available here" rather than pretending to send.
+
+## Tests
+
+```bash
+cd backend && npm test                      # account backend unit tests
+cd e2e && npm ci && npx playwright install chromium && npx playwright test   # browser tests
+```
+
+The end-to-end suite starts its own server with `ACCOUNT_DEV=1` on port 8099. Before a public launch, work through [docs/launch-runbook.md](docs/launch-runbook.md).
+
+## Deploy to AWS
+
+Infrastructure no longer lives in this repo. It is managed in [chrisfixesit/tofu-or-not-tofu](https://github.com/chrisfixesit/tofu-or-not-tofu) under `accounts/eportfolio-prod/sumdeting` (the accounts feature arrives with tofu PR #40: the `sumdeting-account` and `sumdeting-janitor` Lambdas, the `sumdeting-accounts` table, SES, and the CloudFront `/api/account/*` behaviour). DKIM records are a separate PR in that repo's `management/dns`, and the `sumdeting-github-deploy` role's access to the new functions is a separate github-deploy PR. The old `infra/` folder is retired: do not apply it.
+
+Code and site files ship through `.github/workflows/deploy.yml` on merge to `main` (behind the `production` environment approval). It updates the three Lambdas from one zip, uploads the site, and invalidates CloudFront. It refuses to deploy while `web/privacy.html` is still a draft (see the launch runbook).
 
 Cost: serverless throughout; a few cents per study session with Claude Haiku.
 
@@ -81,8 +100,7 @@ Found a vulnerability? Please open a private [security advisory](https://github.
 ## Roadmap
 
 - Voice input for younger students
-- Optional session history with DynamoDB + TTL
-- Teacher/parent view with progress summaries
+- Teacher view with class-level progress summaries
 
 ## License
 

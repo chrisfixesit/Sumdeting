@@ -5,11 +5,12 @@
  * assets silently failing to load (CDN 503s, bad SRI hashes, CSP blocks),
  * which breaks math rendering with no server-side error to alarm on.
  *
- * Run after every `tofu apply` (and nightly via cron):
+ * Run after every deploy (and nightly via cron):
  *   BASE_URL=https://sumdeting.246labs.cloud node .github/smoke/smoke.mjs
  *
  * Requires: npm i playwright && npx playwright install --with-deps chromium
  */
+import { createHash } from "node:crypto";
 import { chromium } from "playwright";
 
 const BASE_URL = (process.env.BASE_URL ?? "https://sumdeting.246labs.cloud").replace(/\/$/, "");
@@ -100,6 +101,29 @@ try {
   }, BASE_URL);
   check("/api streams a reply", api.status === 200 && api.len > 0 && !api.snag,
     `status ${api.status}, ${api.len} chars${api.snag ? ", model error in stream" : ""}`);
+
+  // 6b. Accounts: privacy page, account endpoint, account UI module
+  const priv = await page.request.get(BASE_URL + "/privacy.html");
+  check("privacy page loads (200)", priv.status() === 200, `status ${priv.status()}`);
+  // The draft notice must never be live (deploy.yml also refuses it unless ALLOW_DRAFT_PRIVACY is set).
+  const privHtml = await priv.text();
+  const draftMarks = ["DRAFT", "owner to fill in"].filter((m) => privHtml.includes(m));
+  check("privacy page is the reviewed notice, not the draft", draftMarks.length === 0, draftMarks.join(", "));
+
+  const acctBody = "{}";
+  const acctRes = await page.request.post(BASE_URL + "/api/account/me", {
+    headers: {
+      "content-type": "application/json",
+      "x-amz-content-sha256": createHash("sha256").update(acctBody).digest("hex"),
+    },
+    data: acctBody,
+  });
+  const acctJson = await acctRes.json().catch(() => null);
+  check("account endpoint reachable", acctRes.status() === 401 && acctJson?.error === "not_signed_in",
+    `status ${acctRes.status()} ${JSON.stringify(acctJson)}`);
+
+  const slotHasButton = await page.waitForSelector("#account-slot button", { timeout: 10000 }).then(() => true, () => false);
+  check("account-ui.mjs loaded", slotHasButton);
 
   // 7. No asset failures during load
   const relevantBad = badResponses.filter((u) => !u.includes("favicon"));

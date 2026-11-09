@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy | SumDeTing</title>
+  <meta name="robots" content="noindex" />
+  <script>
+    try {
+      const t = localStorage.getItem("sumdeting.theme");
+      document.documentElement.dataset.theme =
+        t || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    } catch { document.documentElement.dataset.theme = "light"; }
+  </script>
+  <link rel="stylesheet" href="/vendor/fonts/fonts.css" />
+  <style>
+    :root {
+      --bg: #F4EEE0; --card: #FBF7EC; --card-border: #E7DFC9; --line: #E1D8C1;
+      --ink: #15181E; --body: #3a3a34; --muted: #6a6658; --blue: #0B39A8; --primary: var(--blue);
+    }
+    :root[data-theme="dark"] {
+      --bg: #211D16; --card: #2A251B; --card-border: #3A3327; --line: #3A3327;
+      --ink: #EFE9DA; --body: #CFC7B4; --muted: #A79F8B; --blue: #F4C143; --primary: #F4C143;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--body);
+      font-family: 'Space Grotesk', system-ui, sans-serif; line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    main { max-width: 720px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1, h2 { font-family: 'Fraunces', Georgia, serif; color: var(--ink); line-height: 1.2; }
+    h1 { font-size: 2rem; margin: 16px 0 8px; }
+    h2 { font-size: 1.3rem; margin: 32px 0 8px; }
+    a { color: var(--primary); }
+    a.back { display: inline-block; padding: 8px 0; font-weight: 600; }
+    .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 15px; padding: 4px 20px 20px; }
+    .lead { color: var(--muted); }
+    ul { padding-left: 1.2rem; }
+    li { margin: 4px 0; }
+    code { background: var(--line); padding: 1px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="/">Back to SumDeTing</a>
+    <h1>How SumDeTing uses your information</h1>
+    <p class="lead">Last updated: November 2026. This page is written for parents and students. We aim to meet the requirements of the Barbados Data Protection Act 2019.</p>
+
+    <div class="card">
+      <h2>The short version</h2>
+      <p>You can use SumDeTing without an account. An account is optional and only exists so a student's practice progress follows them from one device to another. We keep as little as we can, we never store the chats, and you can delete everything yourself at any time.</p>
+
+      <h2>What we store if you make an account</h2>
+      <p>For the account:</p>
+      <ul>
+        <li>the email address used to sign in;</li>
+        <li>the account type (parent or student);</li>
+        <li>dates: when the account was created, when consent was given, and when it was last used;</li>
+        <li>for a student who makes their own account, whether they said they are 13 or older;</li>
+        <li>the email addresses in any invites you send (for example to add a guardian), kept until the invite is used or expires, and for no more than 30 days;</li>
+        <li>a sign-in cookie on your device that keeps you signed in until 90 days after you last use it.</li>
+      </ul>
+      <p>For each student profile:</p>
+      <ul>
+        <li>first name and last name;</li>
+        <li>level (for example Common Entrance or CSEC) and a chosen colour;</li>
+        <li>whether the student is under 13;</li>
+        <li>for an under-13 profile, the parent's email address, which we use to ask for approval;</li>
+        <li>consent details: who approved and when;</li>
+        <li>practice progress: topics practised, problems solved and attempted, the number of hints and turns on recent problems, the daily streak, and practice preferences.</li>
+      </ul>
+
+      <h2>To keep the service safe</h2>
+      <ul>
+        <li>When you sign in or use your account, we use your device's IP address briefly to stop abuse, such as too many sign-in attempts. We keep it for that purpose for up to an hour.</li>
+        <li>For the same reason we count how many sign-in and invite emails go to each email address, for up to a day.</li>
+        <li>Our standard service logs, which can include IP addresses, are kept for up to 90 days.</li>
+      </ul>
+
+      <h2>What is kept on your device</h2>
+      <p>Practice progress, updates that have not been sent to your account yet, and a marker that you are signed in are kept in the browser on that device. Signing out clears them from the device. If you are signed out automatically instead (for example, after 90 days without using your account), updates that have not been sent yet stay on the device. They are sent when you sign in again there, and cleared if a different account signs in on that device.</p>
+
+      <h2>What we never store on our servers</h2>
+      <ul>
+        <li>chat conversations with the tutor, and the tutor's replies;</li>
+        <li>photos of homework;</li>
+        <li>date of birth;</li>
+        <li>school.</li>
+      </ul>
+      <p>Chats stay on the device you used, in the browser, for 24 hours and then they are cleared.</p>
+
+      <h2>Why we store it</h2>
+      <p>We use this information only to run the account: to sign you in, to show a student their own progress on any device, and to let parents and guardians see how a child is getting on. We do not sell it, and we do not use it for advertising. When a student types a question or sends a photo to the tutor, that is sent to Claude, an AI model, through Amazon Bedrock (Amazon Web Services) to write the reply. SumDeTing does not store those chats on its servers.</p>
+
+      <h2>Who can see a child's progress</h2>
+      <ul>
+        <li>the account that owns the profile;</li>
+        <li>any guardian that a parent has added;</li>
+        <li>parents who were given view-only access.</li>
+      </ul>
+      <p>Parents with view-only access see progress only. Nobody can see the chats, because we do not keep them.</p>
+
+      <h2>Students under 13</h2>
+      <p>A student under 13 who signs up with their own email needs a parent to approve by email first. Until the parent approves, no progress is saved to our servers and it stays on the device. If the parent declines, or does not answer within 7 days, the request is deleted.</p>
+      <p>The parent who approved can withdraw that approval at any time from the parent section ("Withdraw approval and delete their data", after confirming with a code we email). This deletes the child's profile and practice progress from SumDeTing. The child can keep practising on their device, but nothing is saved to an account.</p>
+      <p>If the parent who approved stops seeing the child's progress, or their account is deleted, without withdrawing approval (and no other approving parent remains), the child's saved progress is deleted, the profile goes back to waiting for approval, and we email that parent to approve again. If nobody approves within 7 days, the profile is deleted.</p>
+
+      <h2>How long we keep things</h2>
+      <ul>
+        <li>Sign-in links and codes work for 15 minutes.</li>
+        <li>Invite and consent links work for 7 days.</li>
+        <li>Pending invites are removed after 30 days.</li>
+        <li>Unfinished sign-ups are deleted after 7 days.</li>
+        <li>Under-13 profiles still waiting for a parent are deleted after 7 days.</li>
+        <li>Inactive accounts: we send a warning email after about 23 months without use. The sign-in link in that email works for 30 days. An account is deleted only after more than 2 years without use and at least 30 days after that warning. Using SumDeTing again at any point restarts the clock.</li>
+        <li>If a guardian who still uses SumDeTing was added to a child's profile, and the account that owns the profile stops using SumDeTing, the profile moves to that guardian instead of being deleted.</li>
+      </ul>
+
+      <h2>Deleting information</h2>
+      <p>A parent can remove a child, or delete the whole account, from the parent section after confirming with a code we email. A student can delete their own account from the profile menu, also with an emailed code. Deleting removes the profiles, the progress and any access links. Copies held in backups are overwritten within about 35 days.</p>
+
+      <h2>Where it is held</h2>
+      <p>Account information is held with Amazon Web Services in the United States. It is encrypted at rest. Sign-in and approval emails are sent through Amazon SES.</p>
+
+      <h2>Contact</h2>
+      <p>Questions, or want a copy or correction of your information? Email us at <a href="mailto:admin@246labs.cloud">admin@246labs.cloud</a>.</p>
+    </div>
+  </main>
+</body>
+</html>
