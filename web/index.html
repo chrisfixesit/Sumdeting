@@ -713,6 +713,11 @@
       <div class="row-head"><b>Your level</b></div>
       <div id="level-tabs" class="seg-row" role="group" aria-label="Choose your level"></div>
 
+      <div id="unit-pick" hidden>
+        <div class="row-head"><b>Unit</b><span>topics follow the unit</span></div>
+        <div id="unit-tabs" class="seg-row" role="group" aria-label="Choose your unit"></div>
+      </div>
+
       <div id="paper-pick" hidden>
         <div class="row-head"><b>Paper</b><span>the style of each problem</span></div>
         <div id="paper-tabs" class="seg-row" role="group" aria-label="Choose a paper to practise"></div>
@@ -1267,17 +1272,48 @@
       },
       CAPE: {
         exam: "CAPE Pure Mathematics",
-        topics: [
-          "Algebra", "Functions & Graphs", "Trigonometry", "Coordinate Geometry & Vectors",
-          "Sequences & Series", "Calculus", "Complex Numbers & Matrices", "Statistics & Probability",
-        ],
-        topic: "Algebra",
+        // Each unit has its own syllabus, so the topics follow the chosen unit.
+        units: {
+          "Unit 1": {
+            topics: ["Logic & Proof", "Algebra", "Functions & Graphs", "Trigonometry", "Coordinate Geometry & Vectors", "Calculus"],
+            topic: "Algebra",
+          },
+          "Unit 2": {
+            topics: ["Complex Numbers", "Further Calculus", "Sequences & Series", "Counting & Probability", "Matrices", "Differential Equations"],
+            topic: "Complex Numbers",
+          },
+        },
+        styles: { standard: "Paper 2 (25 marks)", easier: "Paper 1 multiple-choice (1 mark)", harder: "Paper 2 (25 marks)" },
+        papers: {
+          "Paper 1": { standard: "Paper 1 multiple-choice (1 mark)" },
+          "Paper 2": { standard: "Paper 2 (25 marks)" },
+          "Paper 3": { standard: "Paper 3/B (20 marks)" },
+        },
         durations: [["30", "30 min", "short set"], ["90", "1h 30m", "Paper 1"], ["150", "2h 30m", "Paper 2"]],
         duration: "90",
       },
     };
     const DEFAULT_LEVEL = "CSEC";
-    const levelSetup = () => LEVEL_SETUP[levelSel.value] ?? LEVEL_SETUP[DEFAULT_LEVEL];
+    const levelBase = () => LEVEL_SETUP[levelSel.value] ?? LEVEL_SETUP[DEFAULT_LEVEL];
+
+    // A level with units (CAPE) takes its topics from the chosen unit. Like the
+    // paper choice, the unit is kept on this device per profile, not synced.
+    const UNIT_KEY = "mathmentor.unit.v1";
+    function storedUnit() {
+      try { return localStorage.getItem(storageKey(UNIT_KEY)); } catch { return null; }
+    }
+    function unitChoice() {
+      const units = levelBase().units;
+      if (!units) return null;
+      const u = storedUnit();
+      return units[u] ? u : Object.keys(units)[0];
+    }
+    const levelSetup = () => {
+      const base = levelBase();
+      return base.units ? { ...base, ...base.units[unitChoice()] } : base;
+    };
+    // The level as the tutor sees it, with the unit where there is one ("CAPE Unit 1").
+    const levelName = () => [levelSel.value, unitChoice()].filter(Boolean).join(" ");
 
     // Fill the topic and length selects for the current level, keeping the
     // wanted values when that level offers them.
@@ -1293,6 +1329,13 @@
       let p = null;
       try { p = JSON.parse(localStorage.getItem(storageKey(PREFS_KEY))); } catch { /* ignore */ }
       levelSel.value = LEVEL_SETUP[p?.level] ? p.level : DEFAULT_LEVEL;
+      // No unit chosen on this device yet (say, prefs synced from another one):
+      // take the unit the saved topic belongs to.
+      const units = levelBase().units;
+      const unitOfTopic = units && Object.keys(units).find((u) => units[u].topics.includes(p?.topic));
+      if (unitOfTopic && !units[storedUnit()]) {
+        try { localStorage.setItem(storageKey(UNIT_KEY), unitOfTopic); } catch { /* ignore */ }
+      }
       applyLevel(p?.topic, p?.duration);
     }
     loadPrefs();
@@ -1815,7 +1858,7 @@
       const minutes = Number(document.getElementById("exam-duration").value);
       // Name the paper when the chosen length is one ("CSEC Paper 1").
       const note = levelSetup().durations.find(([min]) => min === durationSel.value)?.[2] ?? "";
-      const level = /^Paper/.test(note) ? `${levelSel.value} ${note}` : levelSel.value;
+      const level = /^Paper/.test(note) ? `${levelName()} ${note}` : levelName();
       const ok = await converse(
         `Exam mode has STARTED (${level}, ${minutes} minutes). Act as a quiet invigilator: no hints, no teaching. Only tell me briefly whether each answer I submit is correct or incorrect, until I say the exam is over.`,
         { displayText: `Starting a ${minutes}-minute ${level} exam` }
@@ -1855,7 +1898,7 @@
     // ---- Practice mode ----
 
     practiceBtn.addEventListener("click", async () => {
-      const level = document.getElementById("level").value;
+      const level = levelName();
       const topic = document.getElementById("topic").value;
       // Asking for a fresh problem abandons the current one — log it as
       // unsolved so the tricky-topics logic can resurface the topic later.
@@ -2011,6 +2054,33 @@
       levelTabs.appendChild(b);
     }
 
+    // ---- Unit choice (levels with units only) ----
+
+    const unitPick = document.getElementById("unit-pick");
+    const unitTabs = document.getElementById("unit-tabs");
+    function renderUnitTabs() {
+      const units = levelBase().units;
+      unitPick.hidden = !units;
+      unitTabs.textContent = "";
+      if (!units) return;
+      const chosen = unitChoice();
+      for (const name of Object.keys(units)) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = name === chosen ? "seg on" : "seg";
+        b.dataset.unit = name;
+        b.textContent = name;
+        b.setAttribute("aria-pressed", String(name === chosen));
+        b.addEventListener("click", () => {
+          try { localStorage.setItem(storageKey(UNIT_KEY), name); } catch { /* ignore */ }
+          applyLevel(topicSel.value, durationSel.value);
+          topicSel.dispatchEvent(new Event("change")); // persists the unit's topic
+          renderLevel();
+        });
+        unitTabs.appendChild(b);
+      }
+    }
+
     // ---- Paper choice (levels with papers only) ----
 
     // Kept on this device per profile, apart from the synced prefs, which carry
@@ -2063,6 +2133,11 @@
       "Sequences & Series": "Sequences",
       "Calculus": "Calculus",
       "Complex Numbers & Matrices": "Complex numbers",
+      "Logic & Proof": "Logic",
+      "Complex Numbers": "Complex numbers",
+      "Further Calculus": "Calculus II",
+      "Counting & Probability": "Probability",
+      "Differential Equations": "Diff. equations",
       "Vectors & Matrices": "Vectors",
     };
     const topicGrid = document.getElementById("topic-grid");
@@ -2078,7 +2153,7 @@
         b.addEventListener("click", () => {
           topicSel.value = topic;
           topicSel.dispatchEvent(new Event("change")); // persists prefs
-          chatContext.textContent = `${TOPIC_SHORT[topic] || topic} · ${levelSel.value}`;
+          chatContext.textContent = `${TOPIC_SHORT[topic] || topic} · ${levelName()}`;
           practiceBtn.click();
         });
         topicGrid.appendChild(b);
@@ -2111,6 +2186,7 @@
     // the exam blurb and the past-papers card (CSEC Mathematics papers only).
     function renderLevel() {
       levelTabs.querySelectorAll(".seg").forEach((x, i) => x.classList.toggle("on", LEVELS[i] === levelSel.value));
+      renderUnitTabs();
       renderTopicChips();
       renderPaperTabs();
       renderDurationRows();
