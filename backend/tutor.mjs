@@ -201,6 +201,10 @@ export function requestFor(messages, modelId, { thinking = true } = {}) {
 // thinking. Only an empty reply is retried: a partly written one is kept.
 const cutOffBlank = (wroteText, stopReason) => !wroteText && stopReason === "max_tokens";
 
+// If the retry is blank too, say so: an empty assistant turn would fail
+// validation ("Empty message") on every later request in the conversation.
+export const BLANK_REPLY = "Sorry, I couldn't write a reply that time. Please send your message again.";
+
 const bedrock = (command) => client.send(command);
 
 /**
@@ -213,7 +217,8 @@ export async function askTutor(messages, modelId, send = bedrock) {
     return { reply, stopReason: result.stopReason };
   };
   const first = await once();
-  return cutOffBlank(first.reply, first.stopReason) ? (await once({ thinking: false })).reply : first.reply;
+  if (!cutOffBlank(first.reply, first.stopReason)) return first.reply;
+  return (await once({ thinking: false })).reply || BLANK_REPLY;
 }
 
 /**
@@ -235,5 +240,7 @@ export async function askTutorStream(messages, modelId, onText, send = bedrock) 
     return { wroteText, stopReason };
   };
   const first = await once();
-  if (cutOffBlank(first.wroteText, first.stopReason)) await once({ thinking: false });
+  if (!cutOffBlank(first.wroteText, first.stopReason)) return;
+  const retry = await once({ thinking: false });
+  if (!retry.wroteText) onText(BLANK_REPLY);
 }

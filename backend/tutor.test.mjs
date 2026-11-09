@@ -100,3 +100,12 @@ test("complete replies, and replies that already have text, are not asked again"
     assert.equal(buffered.requests.length + streamed.requests.length, 2, reply.stop);
   }
 });
+
+test("if the retry is blank too, the student gets a message instead of an empty reply", async () => {
+  // An empty assistant turn would fail validation ("Empty message") on every later request.
+  const { askTutor, askTutorStream, BLANK_REPLY } = await import("./tutor.mjs");
+  assert.equal(await askTutor(asked("Practice mode: one please"), "model-id", fakeBedrock([CUT_OFF, CUT_OFF]).send), BLANK_REPLY);
+  const chunks = [];
+  await askTutorStream(asked("Practice mode: one please"), "model-id", (t) => chunks.push(t), fakeBedrock([CUT_OFF, CUT_OFF]).send);
+  assert.deepEqual(chunks, [BLANK_REPLY]);
+});
