@@ -112,6 +112,24 @@ test("attach menu closes on an outside click and after a choice", async ({ page 
   await expect(page.locator("#sketch-modal")).toBeVisible();
 });
 
+test("drawing on the sketch pad never selects page text", async ({ page }) => {
+  await openChat(page);
+  await page.locator("#attach-btn").click();
+  await page.locator("#sketch").click();
+  const box = await page.locator("#sk-canvas").boundingBox();
+  await page.mouse.move(box.x + 40, box.y + 60);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 200, box.y + 120, { steps: 8 });
+  await page.mouse.move(box.x + 200, 5, { steps: 8 });
+  await page.mouse.up();
+  expect(await page.evaluate(() => window.getSelection().toString())).toBe("");
+  const userSelect = (sel) => page.locator(sel).evaluate((el) => getComputedStyle(el).userSelect);
+  expect(await userSelect("#sketch-modal")).toBe("none");
+  expect(await userSelect("body")).toBe("none");
+  await page.locator("#sk-cancel").click();
+  expect(await userSelect("body")).not.toBe("none");
+});
+
 test("composer row runs +, text box, ∑, send", async ({ page }) => {
   await openChat(page);
   const ids = ["#attach-btn", "#input", "#pad-toggle", "#send"];
