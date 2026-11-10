@@ -152,6 +152,27 @@ test("an attached drawing is cropped to the writing", async ({ page }) => {
   expect(h).toBeLessThan(full[1]);
 });
 
+test("a drawing still attaches whole after the pad changes size", async ({ page }) => {
+  await openChat(page);
+  await page.locator("#attach-btn").click();
+  await page.locator("#sketch").click();
+  const box = await page.locator("#sk-canvas").boundingBox();
+  await page.mouse.move(box.x + 40, box.y + box.height - 30);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 140, box.y + box.height - 10, { steps: 6 });
+  await page.mouse.up();
+  // as if the iPad rotated: the pad gets shorter on screen, its pixels don't
+  await page.locator("#sk-canvas").evaluate((c) => { c.style.height = "120px"; });
+  await page.locator("#sk-send").click();
+  const img = page.locator("#attachment-img");
+  await expect(img).toHaveJSProperty("complete", true);
+  const [w, h] = await img.evaluate((el) => [el.naturalWidth, el.naturalHeight]);
+  const dpr = await page.evaluate(() => devicePixelRatio);
+  expect(w).toBeCloseTo(148 * dpr, -1);
+  // 20px of ink, 24px of margin above, and the 10px left before the pad's edge
+  expect(h).toBeCloseTo(54 * dpr, -1);
+});
+
 test("composer row runs +, text box, ∑, send", async ({ page }) => {
   await openChat(page);
   const ids = ["#attach-btn", "#input", "#pad-toggle", "#send"];

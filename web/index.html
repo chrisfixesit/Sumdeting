@@ -2149,9 +2149,13 @@
     let skDrawing = false;
     let skErasing = false;
     let skDrawn = false;
-    let skBox = null; // [minX, minY, maxX, maxY] of the ink, in CSS pixels
-    function skGrow(x, y) {
+    // [minX, minY, maxX, maxY] of the ink in canvas pixels, which stay put if
+    // the iPad rotates and the canvas's on-screen size changes
+    let skBox = null;
+    let skScale = 1;
+    function skGrow(cssX, cssY) {
       if (skErasing) return;
+      const x = cssX * skScale, y = cssY * skScale;
       skBox = skBox
         ? [Math.min(skBox[0], x), Math.min(skBox[1], y), Math.max(skBox[2], x), Math.max(skBox[3], y)]
         : [x, y, x, y];
@@ -2167,6 +2171,7 @@
         skCanvas.height = Math.round(rect.height * dpr);
         skCtx = skCanvas.getContext("2d");
         skCtx.scale(dpr, dpr);
+        skScale = dpr;
         skCtx.fillStyle = "#ffffff";
         skCtx.fillRect(0, 0, rect.width, rect.height);
         skCtx.lineCap = "round";
@@ -2229,20 +2234,16 @@
     // Send only the part with writing on it. A small sum on a big blank pad
     // gets shrunk before the tutor sees it, and it then misreads x as z or r.
     function skCropped() {
-      const rect = skCanvas.getBoundingClientRect();
-      const pad = 24;
-      const [x0, y0, x1, y1] = skBox ?? [0, 0, rect.width, rect.height];
-      const left = Math.max(0, x0 - pad), top = Math.max(0, y0 - pad);
-      const width = Math.min(rect.width, x1 + pad) - left;
-      const height = Math.min(rect.height, y1 + pad) - top;
-      const scale = skCanvas.width / rect.width;
+      const pad = 24 * skScale;
+      const [x0, y0, x1, y1] = skBox ?? [0, 0, skCanvas.width, skCanvas.height];
+      const left = Math.max(0, Math.floor(x0 - pad)), top = Math.max(0, Math.floor(y0 - pad));
       const out = document.createElement("canvas");
-      out.width = Math.round(width * scale);
-      out.height = Math.round(height * scale);
+      out.width = Math.max(1, Math.min(skCanvas.width, Math.ceil(x1 + pad)) - left);
+      out.height = Math.max(1, Math.min(skCanvas.height, Math.ceil(y1 + pad)) - top);
       const ctx = out.getContext("2d");
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, out.width, out.height);
-      ctx.drawImage(skCanvas, left * scale, top * scale, out.width, out.height, 0, 0, out.width, out.height);
+      ctx.drawImage(skCanvas, left, top, out.width, out.height, 0, 0, out.width, out.height);
       return out;
     }
 
