@@ -40,7 +40,19 @@
     p { margin: 0 0 12px; }
     a { color: var(--primary); text-underline-offset: 3px; }
     a:focus-visible, summary:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; border-radius: 4px; }
-    a.back { display: inline-block; padding: 8px 0; font-weight: 600; }
+    /* Same mark and wordmark as the app header, so the page reads as part of SumDeTing. */
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
+    .brand { display: flex; align-items: center; gap: 9px; }
+    .mark2x2 {
+      display: grid; grid-template-columns: 1fr 1fr; place-items: center;
+      width: 26px; height: 26px; flex: none; line-height: 1; color: var(--primary);
+    }
+    [data-theme="dark"] .mark2x2 { color: var(--ink); }
+    .mark2x2 .op { font: 800 12px/1 'Space Grotesk', system-ui, sans-serif; color: currentColor; }
+    .mark2x2 .op.plus { color: var(--gold); }
+    .wordmark { font: 600 1.15rem 'Space Grotesk'; letter-spacing: -0.02em; color: var(--ink); }
+    .wordmark b { color: var(--primary); font-weight: 600; }
+    a.back { display: inline-block; padding: 8px 0; font-weight: 600; font-size: 0.92rem; }
     .lead { font-size: 1.12rem; color: var(--body); max-width: 34em; }
     .muted { color: var(--muted); }
     b, strong { color: var(--ink); font-weight: 600; }
@@ -49,14 +61,15 @@
 
     /* The string: each step of a problem is a bead on one thread. The last bead is gold,
        the same way a solved problem adds a gold bead to the student's string in the app. */
-    .string { list-style: none; padding: 0; margin: 20px 0 0; position: relative; }
-    .string::before {
-      content: ""; position: absolute; left: 15px; top: 14px; bottom: 30px;
-      width: 3px; border-radius: 2px; background: var(--thread);
-    }
+    .string { list-style: none; padding: 0; margin: 20px 0 0; }
     .string li { position: relative; padding: 0 0 22px 52px; margin: 0; }
+    /* Each step draws the thread down to the next bead, so it ends at the gold one. */
+    .string li:not(:last-child)::after {
+      content: ""; position: absolute; left: 15px; top: 16px; bottom: -16px;
+      width: 3px; background: var(--thread);
+    }
     .string li::before {
-      content: ""; position: absolute; left: 4px; top: 2px;
+      content: ""; position: absolute; left: 4px; top: 2px; z-index: 1;
       width: 25px; height: 30px; border-radius: 50%;
       background: var(--bead-off); box-shadow: inset -3px -4px 0 rgba(0, 0, 0, 0.12);
     }
@@ -77,6 +90,12 @@
     .levels { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 0.95rem; }
     .levels th, .levels td { text-align: left; vertical-align: top; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); }
     .levels th { font-weight: 600; color: var(--ink); white-space: nowrap; }
+    /* On a phone, each level's name sits above its description instead of squeezing it. */
+    @media (max-width: 559px) {
+      .levels tr, .levels th, .levels td { display: block; }
+      .levels th { padding: 12px 0 0; border-bottom: 0; }
+      .levels td { padding: 2px 0 12px; }
+    }
 
     .note { background: var(--card); border: 1px solid var(--card-border); border-radius: 15px; padding: 16px 20px; margin: 16px 0; }
     .note p:last-child { margin-bottom: 0; }
@@ -93,14 +112,22 @@
 </head>
 <body>
   <main>
-    <a class="back" href="/">Back to SumDeTing</a>
+    <div class="top">
+      <span class="brand">
+        <span class="mark2x2" aria-hidden="true">
+          <span class="op plus">+</span><span class="op">−</span>
+          <span class="op">×</span><span class="op">÷</span>
+        </span>
+        <span class="wordmark"><b>Sum</b>DeTing</span>
+      </span>
+      <a class="back" href="/">Back to SumDeTing</a>
+    </div>
 
     <h1>How SumDeTing works</h1>
-    <p class="lead">SumDeTing is a maths tutor from Barbados that helps you get to the answer yourself. It asks what you tried, gives one hint at a time, and never hands the answer over. When you get there, you know how you did it.</p>
-    <p class="muted">It covers Common Entrance (BSSEE), CSEC Mathematics, CSEC Additional Mathematics and CAPE Pure Mathematics. You don't need an account to use it.</p>
+    <p class="lead">SumDeTing is a maths tutor from Barbados that helps you get to the answer yourself. It asks what you tried and gives one hint at a time, so when you get there, you know how you did it.</p>
+    <p class="muted">For Common Entrance, CSEC, Additional Maths and CAPE. No account needed.</p>
 
     <h2>How a problem goes</h2>
-    <p>Every problem is worked the same way, one step at a time.</p>
     <ol class="string">
       <li><h3>Show me the question</h3><p>Snap a photo of it, type it, draw it or say it. Or tap <b>Give me a problem</b> and I'll pick one at your level.</p></li>
       <li><h3>Tell me what you tried</h3><p>Even a first line helps. I'd rather see a wrong start than a blank page.</p></li>
@@ -141,7 +168,7 @@
     <h2>Practise a topic</h2>
     <p>On the home page, choose your level, then pick a topic. Each topic is a thread of five beads; solve a problem and a bead turns gold. <b>Pick up</b> takes you back to the topic you were working on, and <b>Give me a problem</b> lets me choose.</p>
     <table class="levels">
-      <tr><th scope="row">Common Entrance</th><td>Questions in the style of the BSSEE paper, from 1-mark Section A up to 3-mark Section C.</td></tr>
+      <tr><th scope="row">Common Entrance</th><td>Questions in the style of the BSSEE paper, from 1&#8209;mark Section A up to 3&#8209;mark Section C.</td></tr>
       <tr><th scope="row">CSEC</th><td>Paper 1, 2 or 3 style, or leave it on Auto for a mix.</td></tr>
       <tr><th scope="row">Additional Maths</th><td>CSEC Additional Mathematics, including calculus and sequences.</td></tr>
       <tr><th scope="row">CAPE</th><td>Pure Mathematics. Choose Unit 1 or Unit 2, and the topics follow the unit.</td></tr>
