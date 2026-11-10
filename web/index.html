@@ -2596,6 +2596,7 @@
 
         b.append(nm, beads, st, count);
         b.addEventListener("click", () => {
+          if (busy) return; // leave the header alone while a reply is in flight
           chatContext.textContent = `${TOPIC_SHORT[topic] || topic} · ${levelName()}`;
           practise(topic);
         });
