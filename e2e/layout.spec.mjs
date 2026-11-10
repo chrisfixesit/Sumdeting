@@ -91,3 +91,39 @@ for (const size of SIZES) {
     });
   });
 }
+
+// iPhone Safari zooms the whole page when a focused field's text is under
+// 16px, pushing Send and the last tab off screen.
+test("every text field is at least 16px so iPhone Safari doesn't zoom", async ({ page }) => {
+  await page.goto("/");
+  const sizes = await page.evaluate(() =>
+    [...document.querySelectorAll("textarea, input[type=text], input:not([type]), input[type=email]")]
+      .map((el) => [el.id || el.name, parseFloat(getComputedStyle(el).fontSize)]));
+  expect(sizes.length).toBeGreaterThan(1);
+  for (const [id, px] of sizes) expect(px, id).toBeGreaterThanOrEqual(16);
+});
+
+test.describe("typing on a phone", () => {
+  test.use({ viewport: PHONE });
+  test("the tabs step aside while the chat box has focus", async ({ page }) => {
+    await page.goto("/");
+    await page.locator("#nav-chat").click();
+    await expect(page.locator(".appnav")).toBeVisible();
+    await page.locator("#input").focus();
+    await expect(page.locator(".appnav")).toBeHidden();
+    const box = await page.locator("#composer").boundingBox();
+    expect(Math.abs(box.y + box.height - PHONE.height)).toBeLessThanOrEqual(4);
+    await page.locator("#input").blur();
+    await expect(page.locator(".appnav")).toBeVisible();
+  });
+});
+
+test("a one-line answer keeps the chat box the height of its buttons", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#nav-chat").click();
+  await page.fill("#input", "I cant find them");
+  const box = await page.locator("#input").boundingBox();
+  expect(box.height).toBeLessThanOrEqual(48);
+  await page.fill("#input", "line one\nline two\nline three");
+  expect((await page.locator("#input").boundingBox()).height).toBeGreaterThan(60);
+});
