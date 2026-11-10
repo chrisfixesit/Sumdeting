@@ -861,8 +861,12 @@
       background: rgba(20, 16, 8, 0.55);
       display: flex; align-items: center; justify-content: center;
       z-index: 60; padding: 1rem;
+      /* an Apple Pencil stroke on iPad otherwise selects text and pops up Copy / Look Up */
+      -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none;
     }
     .sketch-modal[hidden] { display: none; }
+    body:has(.sketch-modal:not([hidden])) { -webkit-user-select: none; user-select: none; }
     .sketch-card {
       background: var(--bg); border-radius: 18px; padding: 0.7rem;
       display: flex; flex-direction: column; gap: 0.6rem;
@@ -2145,6 +2149,7 @@
     let skDrawn = false;
 
     document.getElementById("sketch").addEventListener("click", () => {
+      window.getSelection()?.removeAllRanges();
       sketchModal.hidden = false;
       requestAnimationFrame(() => {
         const rect = skCanvas.getBoundingClientRect();
@@ -2168,6 +2173,7 @@
 
     skCanvas.addEventListener("pointerdown", (e) => {
       if (!skCtx) return;
+      e.preventDefault();
       skCanvas.setPointerCapture(e.pointerId);
       skDrawing = true;
       skCtx.beginPath();
@@ -2184,6 +2190,11 @@
     const skStop = () => { skDrawing = false; };
     skCanvas.addEventListener("pointerup", skStop);
     skCanvas.addEventListener("pointercancel", skStop);
+    // iPad Safari starts a text selection from touch events, which pointer
+    // events can't cancel, so stop them on the canvas itself.
+    for (const type of ["touchstart", "touchmove"]) {
+      skCanvas.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+    }
 
     function skSetTool(erase) {
       skErasing = erase;
