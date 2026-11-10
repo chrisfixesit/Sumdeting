@@ -723,7 +723,7 @@
       min-height: 44px; max-height: 160px;
       border: 1px solid var(--input-border); border-radius: 12px;
       padding: 0.65rem 0.9rem;
-      font: 400 0.86rem 'Space Grotesk';
+      font: 400 1rem 'Space Grotesk'; /* under 16px, iPhone Safari zooms the page on focus */
       background: var(--card); color: var(--ink);
       outline: none;
     }
@@ -760,6 +760,13 @@
     .appnav button.on { color: var(--primary); }
     .appnav button.on .bar { background: var(--primary); }
     .appnav .rail-mark { display: none; }
+    /* Phone, typing in the chat: the keyboard is up, so the tabs step aside
+       and the composer sits on the keyboard instead of above the tabs. */
+    @media (max-width: 767px) {
+      body:has(#input:focus) .appnav { display: none; }
+      body:has(#input:focus) { padding-bottom: 0; }
+      body:has(#input:focus) #composer { bottom: 0; }
+    }
 
     /* ===== Tablet and up: the nav becomes a left rail, views sit beside it ===== */
     @media (min-width: 768px) {
@@ -1073,7 +1080,7 @@
               <button id="mic" type="button"><svg class="icon" aria-hidden="true"><use href="#i-mic"/></svg><span id="mic-label">Speak your problem</span></button>
             </div>
           </div>
-          <textarea id="input" aria-label="Type your maths problem" placeholder="Type your working…"></textarea>
+          <textarea id="input" rows="1" aria-label="Type your maths problem" placeholder="Type your working…"></textarea>
           <button id="pad-toggle" class="ib-btn pad-toggle" type="button" aria-label="Maths keys" aria-expanded="false" aria-controls="mathpad">∑</button>
           <button id="send" class="send-btn" type="submit" aria-label="Send"><svg class="icon"><use href="#i-send"/></svg></button>
         </div>
