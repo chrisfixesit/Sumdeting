@@ -771,6 +771,7 @@
       }
       [data-theme="dark"] .appnav { background: var(--strip); }
       .appnav .rail-mark { display: block; align-self: center; flex: none; margin: 0 0 18px; }
+      .appnav .rail-mark img { width: 64px; height: 64px; object-fit: contain; }
       .appnav .inner { flex-direction: column; gap: 6px; max-width: none; margin: 0; }
       .appnav button {
         flex: none; position: relative; justify-content: center; gap: 6px;
@@ -1103,11 +1104,10 @@
   </div>
 
   <nav class="appnav" aria-label="Main navigation">
-    <svg class="rail-mark" width="40" height="28" viewBox="0 0 40 28" aria-hidden="true">
-      <defs><radialGradient id="rail-mark-g" cx="42%" cy="34%" r="70%"><stop offset="0" stop-color="#FFE59E"/><stop offset=".5" stop-color="#F4C143"/><stop offset="1" stop-color="#A57411"/></radialGradient></defs>
-      <rect x="0" y="12.5" width="40" height="3" rx="1.5" fill="#9EA6B8"/>
-      <ellipse cx="20" cy="14" rx="9" ry="12.5" fill="url(#rail-mark-g)"/>
-    </svg>
+    <span class="rail-mark" aria-hidden="true">
+      <img class="logo-light" src="sumdeting-icon-blue.png" alt="" />
+      <img class="logo-dark" src="sumdeting-icon-cream.png" alt="" />
+    </span>
     <div class="inner">
       <button id="nav-home" class="on" type="button"><span class="bar"></span><svg class="icon"><use href="#i-home"/></svg><span>Home</span></button>
       <button id="nav-chat" type="button"><span class="bar"></span><svg class="icon"><use href="#i-pencil"/></svg><span>Tutor</span></button>
