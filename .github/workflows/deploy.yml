@@ -112,7 +112,7 @@ jobs:
           aws s3 cp dist/manifest.webmanifest "$S3/manifest.webmanifest" --only-show-errors \
             --content-type application/manifest+json --cache-control "no-cache"
           # Top-level modules (account UI, home-core) and the account stylesheet (short cache: they
-          # are not versioned) and the privacy notice. Before index.html, which references them.
+          # are not versioned), the privacy notice and the About page. Before index.html, which references them.
           # Build site has already removed *.test.mjs, so every top-level .mjs here ships.
           for f in dist/*.mjs; do
             aws s3 cp "$f" "$S3/$(basename "$f")" --only-show-errors \
@@ -121,6 +121,8 @@ jobs:
           aws s3 cp dist/account.css "$S3/account.css" --only-show-errors \
             --content-type text/css --cache-control "public, max-age=300"
           aws s3 cp dist/privacy.html "$S3/privacy.html" --only-show-errors \
+            --content-type "text/html; charset=utf-8" --cache-control "no-cache"
+          aws s3 cp dist/about.html "$S3/about.html" --only-show-errors \
             --content-type "text/html; charset=utf-8" --cache-control "no-cache"
           # Last, so the new page never references assets that aren't there yet.
           aws s3 cp dist/index.html "$S3/index.html" --only-show-errors \
@@ -134,7 +136,7 @@ jobs:
           for f in dist/*.mjs; do modules+=("/$(basename "$f")"); done
           id=$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" \
             --paths "/" "/index.html" "/manifest.webmanifest" "/vendor/fonts/*" \
-            "/account*" "${modules[@]}" "/privacy.html" --query Invalidation.Id --output text)
+            "/account*" "${modules[@]}" "/privacy.html" "/about.html" --query Invalidation.Id --output text)
           aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION" --id "$id"
 
   smoke:
