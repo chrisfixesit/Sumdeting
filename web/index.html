@@ -161,6 +161,13 @@
       color: var(--ink);
       display: flex; align-items: center; gap: 0.55rem;
     }
+    #menu a {
+      padding: 0.8rem 1rem;
+      font: 500 0.82rem 'Space Grotesk';
+      color: var(--ink); text-decoration: none;
+      display: flex; align-items: center; gap: 0.55rem;
+    }
+    #menu a .icon { color: var(--primary); }
     #menu button:last-child { border-bottom: 0; }
     #menu button:disabled { opacity: 0.4; cursor: default; }
     #menu button .icon { color: var(--primary); }
@@ -925,6 +932,7 @@
         <button id="recap" type="button" disabled title="Work through at least one problem first"><svg class="icon"><use href="#i-file"/></svg> Session recap</button>
         <button id="new-session" type="button" title="Clear this conversation and start fresh"><svg class="icon"><use href="#i-refresh"/></svg> New session</button>
         <button id="theme" type="button" title="Switch theme"><svg class="icon"><use href="#i-moon"/></svg> <span id="theme-label">Dark mode</span></button>
+        <a id="help-link" href="/about.html"><svg class="icon"><use href="#i-book"/></svg> About SumDeTing</a>
       </div>
     </div>
   </header>
@@ -1003,6 +1011,7 @@
 
       <footer class="home-foot">
         <p>Made in Barbados. Built with Claude on Amazon Bedrock.</p>
+        <p><a href="/about.html">About SumDeTing</a></p>
         <p><a href="https://github.com/chrisfixesit/Sumdeting" rel="noopener">Source on GitHub</a></p>
       </footer>
     </section>

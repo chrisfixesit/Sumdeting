@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>About SumDeTing</title>
+  <meta name="description" content="About SumDeTing and how to use it: a Bajan maths tutor that guides you to the answer one hint at a time, for Common Entrance, CSEC, Additional Maths and CAPE." />
+  <link rel="icon" href="/sumdeting-favicon-app.png" />
+  <script>
+    try {
+      const t = localStorage.getItem("sumdeting.theme");
+      document.documentElement.dataset.theme =
+        t || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    } catch { document.documentElement.dataset.theme = "light"; }
+  </script>
+  <link rel="stylesheet" href="/vendor/fonts/fonts.css" />
+  <style>
+    /* Same tokens as index.html, so the guide reads as part of the app. */
+    :root {
+      --bg: #F4EEE0; --card: #FBF7EC; --card-border: #E7DFC9; --line: #E1D8C1; --wash: #EAE2CF;
+      --ink: #15181E; --body: #3a3a34; --muted: #5E5A4C; --blue: #0B39A8; --primary: var(--blue);
+      --gold: #F4A900; --bead-off: #C9BE9f; --thread: #9EA6B8;
+    }
+    :root[data-theme="dark"] {
+      --bg: #0A1A3D; --card: #112554; --card-border: #1F3670; --line: #1F3670; --wash: #14295B;
+      --ink: #F4EEE0; --body: #D3D6E2; --muted: #A9B3CF; --blue: #F4C143; --primary: #F4C143;
+      --gold: #F4C143; --bead-off: #2E4580; --thread: #5D76B5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--body);
+      font-family: 'Space Grotesk', system-ui, sans-serif; line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    main { max-width: 680px; margin: 0 auto; padding: 24px 16px 72px; }
+    h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; color: var(--ink); line-height: 1.2; }
+    h1 { font-size: clamp(2.2rem, 7vw, 3rem); margin: 20px 0 12px; letter-spacing: -0.01em; }
+    h2 { font-size: 1.45rem; margin: 48px 0 10px; }
+    h3 { font-size: 1.08rem; margin: 0 0 2px; }
+    p { margin: 0 0 12px; }
+    a { color: var(--primary); text-underline-offset: 3px; }
+    a:focus-visible, summary:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; border-radius: 4px; }
+    /* Same mark and wordmark as the app header, so the page reads as part of SumDeTing. */
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
+    .brand { display: flex; align-items: center; gap: 9px; }
+    .mark2x2 {
+      display: grid; grid-template-columns: 1fr 1fr; place-items: center;
+      width: 26px; height: 26px; flex: none; line-height: 1; color: var(--primary);
+    }
+    [data-theme="dark"] .mark2x2 { color: var(--ink); }
+    .mark2x2 .op { font: 800 12px/1 'Space Grotesk', system-ui, sans-serif; color: currentColor; }
+    .mark2x2 .op.plus { color: var(--gold); }
+    .wordmark { font: 600 1.15rem 'Space Grotesk'; letter-spacing: -0.02em; color: var(--ink); }
+    .wordmark b { color: var(--primary); font-weight: 600; }
+    a.back { display: inline-block; padding: 8px 0; font-weight: 600; font-size: 0.92rem; }
+    .lead { font-size: 1.12rem; color: var(--body); max-width: 34em; }
+    .muted { color: var(--muted); }
+    b, strong { color: var(--ink); font-weight: 600; }
+    ul { padding-left: 1.2rem; margin: 0 0 12px; }
+    li { margin: 6px 0; }
+
+    /* The string: each step of a problem is a bead on one thread. The last bead is gold,
+       the same way a solved problem adds a gold bead to the student's string in the app. */
+    .string { list-style: none; padding: 0; margin: 20px 0 0; }
+    .string li { position: relative; padding: 0 0 22px 52px; margin: 0; }
+    /* Each step draws the thread down to the next bead, so it ends at the gold one. */
+    .string li:not(:last-child)::after {
+      content: ""; position: absolute; left: 15px; top: 16px; bottom: -16px;
+      width: 3px; background: var(--thread);
+    }
+    .string li::before {
+      content: ""; position: absolute; left: 4px; top: 2px; z-index: 1;
+      width: 25px; height: 30px; border-radius: 50%;
+      background: var(--bead-off); box-shadow: inset -3px -4px 0 rgba(0, 0, 0, 0.12);
+    }
+    .string li.solved::before {
+      background: radial-gradient(circle at 42% 34%, #FFE59E, #F4C143 50%, #A57411);
+      box-shadow: none;
+    }
+    .string li p { margin: 0; }
+
+    .ways { display: grid; grid-template-columns: 1fr; gap: 0; margin: 16px 0 0; border-top: 1px solid var(--line); }
+    .ways > div { display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .ways svg { width: 22px; height: 22px; margin-top: 3px; stroke: var(--primary); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .ways .sym { font: 700 1.2rem/1 'Space Grotesk'; color: var(--primary); text-align: center; margin-top: 4px; }
+    @media (min-width: 640px) {
+      .ways { grid-template-columns: 1fr 1fr; column-gap: 32px; }
+    }
+
+    .levels { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 0.95rem; }
+    .levels th, .levels td { text-align: left; vertical-align: top; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); }
+    .levels th { font-weight: 600; color: var(--ink); white-space: nowrap; }
+    /* On a phone, each level's name sits above its description instead of squeezing it. */
+    @media (max-width: 559px) {
+      .levels tr, .levels th, .levels td { display: block; }
+      .levels th { padding: 12px 0 0; border-bottom: 0; }
+      .levels td { padding: 2px 0 12px; }
+    }
+
+    .note { background: var(--card); border: 1px solid var(--card-border); border-radius: 15px; padding: 16px 20px; margin: 16px 0; }
+    .note p:last-child { margin-bottom: 0; }
+
+    details { border-bottom: 1px solid var(--line); }
+    details:first-of-type { border-top: 1px solid var(--line); }
+    summary { cursor: pointer; padding: 14px 0; font-weight: 600; color: var(--ink); }
+    details p { padding: 0 0 6px; }
+
+    .cta { display: inline-block; margin-top: 8px; padding: 12px 22px; border-radius: 999px;
+      background: var(--primary); color: var(--bg); font-weight: 600; text-decoration: none; }
+    footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 0.9rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="top">
+      <span class="brand">
+        <span class="mark2x2" aria-hidden="true">
+          <span class="op plus">+</span><span class="op">−</span>
+          <span class="op">×</span><span class="op">÷</span>
+        </span>
+        <span class="wordmark"><b>Sum</b>DeTing</span>
+      </span>
+      <a class="back" href="/">Back to SumDeTing</a>
+    </div>
+
+    <h1>How SumDeTing works</h1>
+    <p class="lead">SumDeTing is a maths tutor from Barbados that helps you get to the answer yourself. It asks what you tried and gives one hint at a time, so when you get there, you know how you did it.</p>
+    <p class="muted">For Common Entrance, CSEC, Additional Maths and CAPE. No account needed.</p>
+
+    <h2>How a problem goes</h2>
+    <ol class="string">
+      <li><h3>Show me the question</h3><p>Snap a photo of it, type it, draw it or say it. Or tap <b>Give me a problem</b> and I'll pick one at your level.</p></li>
+      <li><h3>Tell me what you tried</h3><p>Even a first line helps. I'd rather see a wrong start than a blank page.</p></li>
+      <li><h3>Get one hint</h3><p>I point at the step that needs another look and ask you a question about it. Just one hint at a time, so the thinking stays yours.</p></li>
+      <li><h3>Try again</h3><p>Send your next step. We go back and forth until it clicks.</p></li>
+      <li class="solved"><h3>You solve it</h3><p>I check your answer, recap the method, and a gold bead goes on your string.</p></li>
+    </ol>
+
+    <h2>Ways to ask</h2>
+    <p>Start from the home page, or from the <b>+</b> button in the Tutor chat.</p>
+    <div class="ways">
+      <div>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <p><b>Snap a photo</b> of the question in your book or on a worksheet. Keep the whole question in the picture, flat and in good light.</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+        <p><b>Type it</b>, like <i>3/4 of 120</i> or <i>solve 2x + 5 = 17</i>.</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+        <p><b>Draw it</b> with your finger or a stylus. Good for shapes, number lines and working you'd rather write by hand.</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+        <p><b>Say it</b> out loud, in browsers that support speech.</p>
+      </div>
+      <div>
+        <span class="sym" aria-hidden="true">∑</span>
+        <p><b>Maths keys.</b> Tap ∑ in the chat for fractions, powers, roots and symbols. The keys change with your level, and the ones for your current topic come first.</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+        <p><b>Read aloud.</b> Turn it on from the ☰ menu and I'll read my replies out to you.</p>
+      </div>
+    </div>
+
+    <h2>Practise a topic</h2>
+    <p>On the home page, choose your level, then pick a topic. Each topic is a thread of five beads; solve a problem and a bead turns gold. <b>Pick up</b> takes you back to the topic you were working on, and <b>Give me a problem</b> lets me choose.</p>
+    <table class="levels">
+      <tr><th scope="row">Common Entrance</th><td>Questions in the style of the BSSEE paper, from 1&#8209;mark Section A up to 3&#8209;mark Section C.</td></tr>
+      <tr><th scope="row">CSEC</th><td>Paper 1, 2 or 3 style, or leave it on Auto for a mix.</td></tr>
+      <tr><th scope="row">Additional Maths</th><td>CSEC Additional Mathematics, including calculus and sequences.</td></tr>
+      <tr><th scope="row">CAPE</th><td>Pure Mathematics. Choose Unit 1 or Unit 2, and the topics follow the unit.</td></tr>
+    </table>
+    <p>Problems get a little easier if you're finding them tough, and a little harder as you get them right. CAPE questions stay at the level of the real papers, which are hard enough already.</p>
+
+    <h2>Your string</h2>
+    <p>The <b>String</b> page shows every bead you've earned this week, your daily streak, and how far along you are in each topic. Practise a little every day to keep the streak going.</p>
+
+    <h2>Exam practice</h2>
+    <p>The <b>Exam</b> page runs timed practice in the style of the real paper, from a 30-minute short set to a full paper. There are no hints while the clock runs, just like the exam. When time is up, or you tap <b>End exam</b>, we go through your answers together.</p>
+    <p>CSEC students can also open real past papers from 2004 to 2025. Screenshot a question, send it to me, and we'll work it through.</p>
+
+    <h2>Keep your progress on any device</h2>
+    <p>Without an account, your progress stays in the browser on the device you're using. Sign in with an email, no password needed, and your beads, streak and topics follow you between school and home.</p>
+    <ul>
+      <li>One email can hold several student profiles, so siblings can share a family account.</li>
+      <li>A student under 13 needs a parent to approve by email first.</li>
+      <li>Parents can add a guardian, or give view-only access to see how a child is getting on.</li>
+    </ul>
+    <div class="note">
+      <p><b>Chats are never stored on our servers.</b> Your conversation stays in the browser for 24 hours, then it's cleared. Accounts keep only progress. Read <a href="/privacy.html">how SumDeTing uses your information</a>.</p>
+    </div>
+
+    <h2>About SumDeTing</h2>
+    <p>SumDeTing was made in Barbados by 246labs for Barbadian students, from Class 4 to sixth form. Most AI tutors assume an American classroom. This one knows the road from Common Entrance through CSEC to CAPE, uses the methods CXC examiners expect, and sets problems in places you know: prices in Barbados dollars, bus fares, cricket scores, the walk between parishes.</p>
+    <p>Its one rule is that it doesn't do your homework for you. Tools that hand out answers get the homework finished, but they don't help you learn. SumDeTing asks questions, finds the step where things went wrong, and leaves the last move to you.</p>
+    <p>The tutor runs on Claude, an AI model made by Anthropic, through Amazon Bedrock. The code is open source under the MIT licence, so anyone can see how it works.</p>
+
+    <h2>Questions</h2>
+    <details>
+      <summary>Why won't you just tell me the answer?</summary>
+      <p>Because copying an answer doesn't help in an exam. Working it out with a hint does. If you're really stuck, say so. I'll work a similar problem with different numbers, step by step, so you can use the same method on yours.</p>
+    </details>
+    <details>
+      <summary>Are you right every time?</summary>
+      <p>Not always. I'm built on an AI model, and I can make mistakes. If something looks wrong, say so and ask me to check again. Your teacher has the final word.</p>
+    </details>
+    <details>
+      <summary>Why do you talk Bajan?</summary>
+      <p>So I feel like a friendly tutor from home. I might cheer you on in Bajan, but I write every maths step in clear standard English, the way you'd write it in the exam.</p>
+    </details>
+    <details>
+      <summary>How do I start over?</summary>
+      <p>Open the ☰ menu and choose <b>New session</b>. <b>Session recap</b> in the same menu gives you a summary of what you worked through.</p>
+    </details>
+    <details>
+      <summary>Can teachers use you in class?</summary>
+      <p>Yes. I work on phones, school tablets and laptops in any modern browser, with nothing to install. Students can use it without accounts.</p>
+    </details>
+
+    <a class="cta" href="/">Start practising</a>
+
+    <footer>
+      <p>Made in Barbados by 246labs. Built with Claude on Amazon Bedrock. <a href="https://github.com/chrisfixesit/Sumdeting" rel="noopener">Source on GitHub</a>.</p>
+      <p>Questions or feedback? Email <a href="mailto:admin@246labs.cloud">admin@246labs.cloud</a>.</p>
+    </footer>
+  </main>
+</body>
+</html>
