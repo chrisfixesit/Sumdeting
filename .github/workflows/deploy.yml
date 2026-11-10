@@ -111,9 +111,10 @@ jobs:
             --content-type image/png --cache-control "public, max-age=86400"
           aws s3 cp dist/manifest.webmanifest "$S3/manifest.webmanifest" --only-show-errors \
             --content-type application/manifest+json --cache-control "no-cache"
-          # Account UI: top-level modules and stylesheet (short cache: they are not versioned) and the
-          # privacy notice. Before index.html, which references them.
-          for f in dist/account-*.mjs; do
+          # Top-level modules (account UI, home-core) and the account stylesheet (short cache: they
+          # are not versioned) and the privacy notice. Before index.html, which references them.
+          # Build site has already removed *.test.mjs, so every top-level .mjs here ships.
+          for f in dist/*.mjs; do
             aws s3 cp "$f" "$S3/$(basename "$f")" --only-show-errors \
               --content-type text/javascript --cache-control "public, max-age=300"
           done
@@ -127,9 +128,13 @@ jobs:
 
       - name: Invalidate CloudFront
         run: |
+          # Every top-level module by name: CloudFront only allows * at the end of a path, so "/*.mjs" is invalid.
+          # dist/ already has *.test.mjs removed (Build site), so this matches what Upload site sent.
+          modules=()
+          for f in dist/*.mjs; do modules+=("/$(basename "$f")"); done
           id=$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" \
             --paths "/" "/index.html" "/manifest.webmanifest" "/vendor/fonts/*" \
-            "/account*" "/privacy.html" --query Invalidation.Id --output text)
+            "/account*" "${modules[@]}" "/privacy.html" --query Invalidation.Id --output text)
           aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION" --id "$id"
 
   smoke:

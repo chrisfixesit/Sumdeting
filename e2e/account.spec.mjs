@@ -285,7 +285,7 @@ test("progress follows student to a second browser context", async ({ browser, p
   await expect(pageB.getByRole("dialog")).toHaveCount(0);
   await pageB.locator("#nav-string").click();
   await expect(pageB.locator("#string-count")).toHaveText("1");
-  await expect(pageB.locator(".trow", { hasText: "Trigonometry" })).toContainText("in progress");
+  await expect(pageB.locator(".trow", { hasText: "Trigonometry" })).toContainText("Attempted");
   await expect(pageB.getByText("this device only")).toBeHidden();
   await other.close();
 });

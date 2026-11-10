@@ -125,6 +125,10 @@ try {
   const slotHasButton = await page.waitForSelector("#account-slot button", { timeout: 10000 }).then(() => true, () => false);
   check("account-ui.mjs loaded", slotHasButton);
 
+  const homeRows = await page.waitForSelector("#topic-list .trow-home", { state: "attached", timeout: 10000 })
+    .then(() => page.locator("#topic-list .trow-home").count(), () => 0);
+  check("home-core.mjs loaded / topics render", homeRows > 0, `${homeRows} topic rows`);
+
   // 7. No asset failures during load
   const relevantBad = badResponses.filter((u) => !u.includes("favicon"));
   check("no failed asset requests", failedRequests.length === 0 && relevantBad.length === 0,
