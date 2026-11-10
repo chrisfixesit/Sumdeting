@@ -130,6 +130,28 @@ test("drawing on the sketch pad never selects page text", async ({ page }) => {
   expect(await userSelect("body")).not.toBe("none");
 });
 
+test("an attached drawing is cropped to the writing", async ({ page }) => {
+  await openChat(page);
+  await page.locator("#attach-btn").click();
+  await page.locator("#sketch").click();
+  const box = await page.locator("#sk-canvas").boundingBox();
+  await page.mouse.move(box.x + 40, box.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 140, box.y + 70, { steps: 6 });
+  await page.mouse.up();
+  const full = await page.locator("#sk-canvas").evaluate((c) => [c.width, c.height]);
+  await page.locator("#sk-send").click();
+  const img = page.locator("#attachment-img");
+  await expect(img).toHaveJSProperty("complete", true);
+  const [w, h] = await img.evaluate((el) => [el.naturalWidth, el.naturalHeight]);
+  const dpr = await page.evaluate(() => devicePixelRatio);
+  // 100 x 30 of ink plus 24px of margin on each side
+  expect(w).toBeCloseTo(148 * dpr, -1);
+  expect(h).toBeCloseTo(78 * dpr, -1);
+  expect(w).toBeLessThan(full[0]);
+  expect(h).toBeLessThan(full[1]);
+});
+
 test("composer row runs +, text box, ∑, send", async ({ page }) => {
   await openChat(page);
   const ids = ["#attach-btn", "#input", "#pad-toggle", "#send"];

@@ -1836,7 +1836,9 @@
       input.value = "";
 
       await converse(
-        text || "Here is a photo of my problem. Please transcribe it and help me work through it.",
+        text || (image.handwritten
+          ? "Here is my problem, handwritten. Please write out what it says and help me work through it."
+          : "Here is a photo of my problem. Please transcribe it and help me work through it."),
         { image, restoreOnError: true }
       );
     });
@@ -2147,6 +2149,13 @@
     let skDrawing = false;
     let skErasing = false;
     let skDrawn = false;
+    let skBox = null; // [minX, minY, maxX, maxY] of the ink, in CSS pixels
+    function skGrow(x, y) {
+      if (skErasing) return;
+      skBox = skBox
+        ? [Math.min(skBox[0], x), Math.min(skBox[1], y), Math.max(skBox[2], x), Math.max(skBox[3], y)]
+        : [x, y, x, y];
+    }
 
     document.getElementById("sketch").addEventListener("click", () => {
       window.getSelection()?.removeAllRanges();
@@ -2163,6 +2172,7 @@
         skCtx.lineCap = "round";
         skCtx.lineJoin = "round";
         skDrawn = false;
+        skBox = null;
       });
     });
 
@@ -2178,14 +2188,17 @@
       skDrawing = true;
       skCtx.beginPath();
       skCtx.moveTo(...skPos(e));
+      skGrow(...skPos(e));
     });
     skCanvas.addEventListener("pointermove", (e) => {
       if (!skDrawing || !skCtx) return;
       skCtx.strokeStyle = skErasing ? "#ffffff" : "#16213a";
       skCtx.lineWidth = skErasing ? 26 : 3;
-      skCtx.lineTo(...skPos(e));
+      const [x, y] = skPos(e);
+      skCtx.lineTo(x, y);
       skCtx.stroke();
       skDrawn = true;
+      skGrow(x, y);
     });
     const skStop = () => { skDrawing = false; };
     skCanvas.addEventListener("pointerup", skStop);
@@ -2210,7 +2223,28 @@
       skCtx.fillStyle = "#ffffff";
       skCtx.fillRect(0, 0, rect.width, rect.height);
       skDrawn = false;
+      skBox = null;
     });
+
+    // Send only the part with writing on it. A small sum on a big blank pad
+    // gets shrunk before the tutor sees it, and it then misreads x as z or r.
+    function skCropped() {
+      const rect = skCanvas.getBoundingClientRect();
+      const pad = 24;
+      const [x0, y0, x1, y1] = skBox ?? [0, 0, rect.width, rect.height];
+      const left = Math.max(0, x0 - pad), top = Math.max(0, y0 - pad);
+      const width = Math.min(rect.width, x1 + pad) - left;
+      const height = Math.min(rect.height, y1 + pad) - top;
+      const scale = skCanvas.width / rect.width;
+      const out = document.createElement("canvas");
+      out.width = Math.round(width * scale);
+      out.height = Math.round(height * scale);
+      const ctx = out.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, out.width, out.height);
+      ctx.drawImage(skCanvas, left * scale, top * scale, out.width, out.height, 0, 0, out.width, out.height);
+      return out;
+    }
 
     document.getElementById("sk-cancel").addEventListener("click", () => {
       sketchModal.hidden = true;
@@ -2221,8 +2255,9 @@
 
     document.getElementById("sk-send").addEventListener("click", () => {
       if (!skDrawn) { sketchModal.hidden = true; return; }
-      const dataUrl = skCanvas.toDataURL("image/jpeg", 0.85);
+      const dataUrl = skCropped().toDataURL("image/jpeg", 0.85);
       pendingImage = {
+        handwritten: true,
         format: "jpeg",
         data: dataUrl.split(",")[1],
         previewUrl: dataUrl,
