@@ -105,6 +105,13 @@ export const PAD_TOPIC_KEYS = {
   "Sequences & Series": ["Σ", "xⁿ"],
   Calculus: ["d/dx", "∫", "xⁿ"],
   "Complex Numbers & Matrices": ["i", "θ"],
+  // CAPE Unit 1 / Unit 2 topics
+  "Logic & Proof": ["≠", "∈", "→"],
+  "Complex Numbers": ["i", "θ"],
+  "Further Calculus": ["∫", "d/dx", "ln", "e"],
+  "Counting & Probability": ["Σ", "("],
+  Matrices: ["(", ")", "="],
+  "Differential Equations": ["d/dx", "e", "∫"],
 };
 
 const dedupe = (keys) => [...new Set(keys)];

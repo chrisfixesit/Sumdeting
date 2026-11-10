@@ -132,8 +132,8 @@ test("switching level re-renders topics and the next step", async ({ page }) => 
   await levelTab(page, "CAPE").click();
   await expect(levelTab(page, "CAPE")).toHaveAttribute("aria-pressed", "true");
   await expect(levelTab(page, "CSEC")).toHaveAttribute("aria-pressed", "false");
-  await expect(page.locator("#topic-list .topic-name")).toContainText(["Complex Numbers & Matrices"]);
-  await expect(page.locator("#paper-pick")).toBeHidden();
+  await expect(page.locator("#topic-list .topic-name")).toContainText(["Logic & Proof"]);
+  await expect(page.locator("#unit-pick")).toBeVisible();
   await expect(page.locator("#next-step-text")).toHaveText("New here? Pick a topic below, or let me choose.");
 });
 

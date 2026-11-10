@@ -96,6 +96,8 @@ test("every level topic has a pad entry", () => {
     "Measurement & Time", "Geometry & Mensuration", "Sets & Venn Diagrams", "Statistics & Probability",
     "Algebra", "Functions & Graphs", "Trigonometry", "Vectors & Matrices", "Coordinate Geometry & Vectors",
     "Sequences & Series", "Calculus", "Complex Numbers & Matrices",
+    "Logic & Proof", "Complex Numbers", "Further Calculus", "Counting & Probability", "Matrices",
+    "Differential Equations",
   ]) assert.ok(Array.isArray(PAD_TOPIC_KEYS[t]), t);
 });
 
