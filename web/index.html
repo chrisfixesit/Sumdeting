@@ -614,6 +614,14 @@
       font: 500 0.78rem 'Space Grotesk'; cursor: pointer;
     }
     .chips button:hover { border-color: var(--primary); color: var(--primary); }
+    .chips .chip-short { display: none; }
+    /* On a phone the three chips wrapped onto two rows; short labels keep them on one */
+    @media (max-width: 767px) {
+      .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+      .chips button { flex: none; min-height: 36px; }
+      .chips .chip-long { display: none; }
+      .chips .chip-short { display: inline; }
+    }
 
     /* ===== Composer strip ===== */
     #composer {
@@ -1641,9 +1649,9 @@
 
     const chipsEl = document.getElementById("chips");
     const CHIPS = [
-      ["i-bulb", "Give me a hint", "Can I get a small hint for my next step? Just one nudge, not the answer."],
-      ["i-file", "Show a similar example", "I'm stuck — please fully work a similar example with different numbers, then let me try mine again."],
-      ["i-refresh", "Explain it simpler", "Can you explain that last part again, more simply?"],
+      ["i-bulb", "Give me a hint", "Hint", "Can I get a small hint for my next step? Just one nudge, not the answer."],
+      ["i-file", "Show a similar example", "Similar example", "I'm stuck — please fully work a similar example with different numbers, then let me try mine again."],
+      ["i-refresh", "Explain it simpler", "Simpler", "Can you explain that last part again, more simply?"],
     ];
     function iconSvg(id) {
       const NS = "http://www.w3.org/2000/svg";
@@ -1654,11 +1662,18 @@
       svg.appendChild(use);
       return svg;
     }
-    for (const [icon, label, msg] of CHIPS) {
+    for (const [icon, label, short, msg] of CHIPS) {
       const b = document.createElement("button");
       b.type = "button";
+      // The short phone label is a word from the full one, so voice control still matches it
+      b.setAttribute("aria-label", label);
       b.appendChild(iconSvg(icon));
-      b.appendChild(document.createTextNode(" " + label));
+      for (const [cls, text] of [["chip-long", label], ["chip-short", short]]) {
+        const span = document.createElement("span");
+        span.className = cls;
+        span.textContent = " " + text;
+        b.appendChild(span);
+      }
       b.addEventListener("click", () => {
         chipsEl.hidden = true;
         // Hint-style chips count toward "needed help" on the active practice problem.

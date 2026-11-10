@@ -116,6 +116,20 @@ test.describe("typing on a phone", () => {
     await page.locator("#input").blur();
     await expect(page.locator(".appnav")).toBeVisible();
   });
+  test("the hint chips fit on one row and keep their full names", async ({ page }) => {
+    await page.goto("/");
+    await page.locator("#nav-chat").click();
+    await page.evaluate(() => { document.getElementById("chips").hidden = false; });
+    const chips = page.locator("#chips button");
+    await expect(chips).toHaveCount(3);
+    const boxes = await chips.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON()));
+    for (const b of boxes) {
+      expect(b.top).toBe(boxes[0].top);
+      expect(b.right).toBeLessThanOrEqual(PHONE.width);
+    }
+    expect((await chips.first().innerText()).trim()).toBe("Hint");
+    await expect(chips.first()).toHaveAccessibleName("Give me a hint");
+  });
 });
 
 test("a one-line answer keeps the chat box the height of its buttons", async ({ page }) => {
