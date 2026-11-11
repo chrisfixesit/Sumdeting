@@ -145,9 +145,9 @@ test("an attached drawing is cropped to the writing", async ({ page }) => {
   await expect(img).toHaveJSProperty("complete", true);
   const [w, h] = await img.evaluate((el) => [el.naturalWidth, el.naturalHeight]);
   const dpr = await page.evaluate(() => devicePixelRatio);
-  // 100 x 30 of ink plus 24px of margin on each side
-  expect(w).toBeCloseTo(148 * dpr, -1);
-  expect(h).toBeCloseTo(78 * dpr, -1);
+  // a 100 x 30 stroke, 3px wide, plus 24px of margin on each side
+  expect(w).toBeCloseTo(151 * dpr, -1);
+  expect(h).toBeCloseTo(81 * dpr, -1);
   expect(w).toBeLessThan(full[0]);
   expect(h).toBeLessThan(full[1]);
 });
@@ -168,9 +168,33 @@ test("a drawing still attaches whole after the pad changes size", async ({ page 
   await expect(img).toHaveJSProperty("complete", true);
   const [w, h] = await img.evaluate((el) => [el.naturalWidth, el.naturalHeight]);
   const dpr = await page.evaluate(() => devicePixelRatio);
-  expect(w).toBeCloseTo(148 * dpr, -1);
-  // 20px of ink, 24px of margin above, and the 10px left before the pad's edge
-  expect(h).toBeCloseTo(54 * dpr, -1);
+  expect(w).toBeCloseTo(151 * dpr, -1);
+  // 21.5px of ink, 24px of margin above, and the 10px left before the pad's edge
+  expect(h).toBeCloseTo(55.5 * dpr, -1);
+});
+
+test("erased writing is left out of the crop", async ({ page }) => {
+  await openChat(page);
+  await page.locator("#attach-btn").click();
+  await page.locator("#sketch").click();
+  const box = await page.locator("#sk-canvas").boundingBox();
+  const stroke = async (x0, y0, x1, y1) => {
+    await page.mouse.move(box.x + x0, box.y + y0);
+    await page.mouse.down();
+    await page.mouse.move(box.x + x1, box.y + y1, { steps: 6 });
+    await page.mouse.up();
+  };
+  await stroke(40, 40, 140, 70);
+  await stroke(box.width - 60, box.height - 60, box.width - 30, box.height - 30);
+  await page.locator("#sk-eraser").click();
+  await stroke(box.width - 60, box.height - 60, box.width - 30, box.height - 30);
+  await page.locator("#sk-send").click();
+  const img = page.locator("#attachment-img");
+  await expect(img).toHaveJSProperty("complete", true);
+  const [w, h] = await img.evaluate((el) => [el.naturalWidth, el.naturalHeight]);
+  const dpr = await page.evaluate(() => devicePixelRatio);
+  expect(w).toBeCloseTo(151 * dpr, -1);
+  expect(h).toBeCloseTo(81 * dpr, -1);
 });
 
 test("composer row runs +, text box, ∑, send", async ({ page }) => {

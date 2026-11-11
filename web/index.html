@@ -2149,17 +2149,7 @@
     let skDrawing = false;
     let skErasing = false;
     let skDrawn = false;
-    // [minX, minY, maxX, maxY] of the ink in canvas pixels, which stay put if
-    // the iPad rotates and the canvas's on-screen size changes
-    let skBox = null;
-    let skScale = 1;
-    function skGrow(cssX, cssY) {
-      if (skErasing) return;
-      const x = cssX * skScale, y = cssY * skScale;
-      skBox = skBox
-        ? [Math.min(skBox[0], x), Math.min(skBox[1], y), Math.max(skBox[2], x), Math.max(skBox[3], y)]
-        : [x, y, x, y];
-    }
+    let skScale = 1; // canvas pixels per CSS pixel, set when the pad opens
 
     document.getElementById("sketch").addEventListener("click", () => {
       window.getSelection()?.removeAllRanges();
@@ -2177,7 +2167,6 @@
         skCtx.lineCap = "round";
         skCtx.lineJoin = "round";
         skDrawn = false;
-        skBox = null;
       });
     });
 
@@ -2193,17 +2182,14 @@
       skDrawing = true;
       skCtx.beginPath();
       skCtx.moveTo(...skPos(e));
-      skGrow(...skPos(e));
     });
     skCanvas.addEventListener("pointermove", (e) => {
       if (!skDrawing || !skCtx) return;
       skCtx.strokeStyle = skErasing ? "#ffffff" : "#16213a";
       skCtx.lineWidth = skErasing ? 26 : 3;
-      const [x, y] = skPos(e);
-      skCtx.lineTo(x, y);
+      skCtx.lineTo(...skPos(e));
       skCtx.stroke();
       skDrawn = true;
-      skGrow(x, y);
     });
     const skStop = () => { skDrawing = false; };
     skCanvas.addEventListener("pointerup", skStop);
@@ -2224,18 +2210,40 @@
 
     document.getElementById("sk-clear").addEventListener("click", () => {
       if (!skCtx) return;
-      const rect = skCanvas.getBoundingClientRect();
+      // the whole bitmap, not the on-screen size, which shrinks if the iPad rotates
+      skCtx.save();
+      skCtx.setTransform(1, 0, 0, 1, 0, 0);
       skCtx.fillStyle = "#ffffff";
-      skCtx.fillRect(0, 0, rect.width, rect.height);
+      skCtx.fillRect(0, 0, skCanvas.width, skCanvas.height);
+      skCtx.restore();
       skDrawn = false;
-      skBox = null;
     });
+
+    // [minX, minY, maxX, maxY] of the ink in canvas pixels, read from the
+    // bitmap itself so erasing, Clear and a rotated iPad are all accounted for.
+    // null when the pad is blank.
+    function skInkBox() {
+      const { width, height } = skCanvas;
+      const px = skCtx.getImageData(0, 0, width, height).data;
+      let x0 = width, y0 = height, x1 = -1, y1 = -1;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const i = (y * width + x) * 4;
+          if (px[i] < 250 || px[i + 1] < 250 || px[i + 2] < 250) {
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+      }
+      return x1 < 0 ? null : [x0, y0, x1 + 1, y1 + 1];
+    }
 
     // Send only the part with writing on it. A small sum on a big blank pad
     // gets shrunk before the tutor sees it, and it then misreads x as z or r.
-    function skCropped() {
+    function skCropped([x0, y0, x1, y1]) {
       const pad = 24 * skScale;
-      const [x0, y0, x1, y1] = skBox ?? [0, 0, skCanvas.width, skCanvas.height];
       const left = Math.max(0, Math.floor(x0 - pad)), top = Math.max(0, Math.floor(y0 - pad));
       const out = document.createElement("canvas");
       out.width = Math.max(1, Math.min(skCanvas.width, Math.ceil(x1 + pad)) - left);
@@ -2255,8 +2263,9 @@
     });
 
     document.getElementById("sk-send").addEventListener("click", () => {
-      if (!skDrawn) { sketchModal.hidden = true; return; }
-      const dataUrl = skCropped().toDataURL("image/jpeg", 0.85);
+      const ink = skDrawn ? skInkBox() : null;
+      if (!ink) { sketchModal.hidden = true; return; }
+      const dataUrl = skCropped(ink).toDataURL("image/jpeg", 0.85);
       pendingImage = {
         handwritten: true,
         format: "jpeg",
