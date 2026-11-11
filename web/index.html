@@ -1836,7 +1836,9 @@
       input.value = "";
 
       await converse(
-        text || "Here is a photo of my problem. Please transcribe it and help me work through it.",
+        text || (image.handwritten
+          ? "Here is my problem, handwritten. Please write out what it says and help me work through it."
+          : "Here is a photo of my problem. Please transcribe it and help me work through it."),
         { image, restoreOnError: true }
       );
     });
@@ -2147,6 +2149,7 @@
     let skDrawing = false;
     let skErasing = false;
     let skDrawn = false;
+    let skScale = 1; // canvas pixels per CSS pixel, set when the pad opens
 
     document.getElementById("sketch").addEventListener("click", () => {
       window.getSelection()?.removeAllRanges();
@@ -2158,6 +2161,7 @@
         skCanvas.height = Math.round(rect.height * dpr);
         skCtx = skCanvas.getContext("2d");
         skCtx.scale(dpr, dpr);
+        skScale = dpr;
         skCtx.fillStyle = "#ffffff";
         skCtx.fillRect(0, 0, rect.width, rect.height);
         skCtx.lineCap = "round";
@@ -2206,11 +2210,50 @@
 
     document.getElementById("sk-clear").addEventListener("click", () => {
       if (!skCtx) return;
-      const rect = skCanvas.getBoundingClientRect();
+      // the whole bitmap, not the on-screen size, which shrinks if the iPad rotates
+      skCtx.save();
+      skCtx.setTransform(1, 0, 0, 1, 0, 0);
       skCtx.fillStyle = "#ffffff";
-      skCtx.fillRect(0, 0, rect.width, rect.height);
+      skCtx.fillRect(0, 0, skCanvas.width, skCanvas.height);
+      skCtx.restore();
       skDrawn = false;
     });
+
+    // [minX, minY, maxX, maxY] of the ink in canvas pixels, read from the
+    // bitmap itself so erasing, Clear and a rotated iPad are all accounted for.
+    // null when the pad is blank.
+    function skInkBox() {
+      const { width, height } = skCanvas;
+      const px = skCtx.getImageData(0, 0, width, height).data;
+      let x0 = width, y0 = height, x1 = -1, y1 = -1;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const i = (y * width + x) * 4;
+          if (px[i] < 250 || px[i + 1] < 250 || px[i + 2] < 250) {
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+      }
+      return x1 < 0 ? null : [x0, y0, x1 + 1, y1 + 1];
+    }
+
+    // Send only the part with writing on it. A small sum on a big blank pad
+    // gets shrunk before the tutor sees it, and it then misreads x as z or r.
+    function skCropped([x0, y0, x1, y1]) {
+      const pad = 24 * skScale;
+      const left = Math.max(0, Math.floor(x0 - pad)), top = Math.max(0, Math.floor(y0 - pad));
+      const out = document.createElement("canvas");
+      out.width = Math.max(1, Math.min(skCanvas.width, Math.ceil(x1 + pad)) - left);
+      out.height = Math.max(1, Math.min(skCanvas.height, Math.ceil(y1 + pad)) - top);
+      const ctx = out.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, out.width, out.height);
+      ctx.drawImage(skCanvas, left, top, out.width, out.height, 0, 0, out.width, out.height);
+      return out;
+    }
 
     document.getElementById("sk-cancel").addEventListener("click", () => {
       sketchModal.hidden = true;
@@ -2220,9 +2263,11 @@
     });
 
     document.getElementById("sk-send").addEventListener("click", () => {
-      if (!skDrawn) { sketchModal.hidden = true; return; }
-      const dataUrl = skCanvas.toDataURL("image/jpeg", 0.85);
+      const ink = skDrawn ? skInkBox() : null;
+      if (!ink) { sketchModal.hidden = true; return; }
+      const dataUrl = skCropped(ink).toDataURL("image/jpeg", 0.85);
       pendingImage = {
+        handwritten: true,
         format: "jpeg",
         data: dataUrl.split(",")[1],
         previewUrl: dataUrl,
