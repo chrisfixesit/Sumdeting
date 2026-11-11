@@ -171,6 +171,15 @@ TRAPS = [
      "x = 1.", [("ln y = ln x + ln 2, so y = 2x", True, "separation of variables")]),
     ("CSEC", "Algebra", "Make r the subject of the formula V = (1/3)πr²h.",
      [("r = √(3V) / √(πh)", True, "split surd")]),
+    ("CSEC", "Probability", "A bag holds 5 red and 3 blue balls. Two are taken out without "
+     "replacement. Find the probability that both are red, giving your answer as a fraction "
+     "in its lowest terms.",
+     [("20/56", False, "not in the lowest terms asked for"), ("5/14", True, "lowest terms")]),
+    ("CSEC", "Measurement", "(a) Find the radius of a circle with circumference 50 cm, giving "
+     "your answer to 1 decimal place. (b) Use your rounded answer to (a) to find the area of "
+     "the circle, to 1 decimal place.",
+     [("(a) r = 8.0 cm. (b) A = π × 8.0² = 201.1 cm²", True,
+       "question says to use the rounded value")]),
 ]
 
 
@@ -196,7 +205,7 @@ def run(case):
         reply = call(case["messages"]).strip()
     except Exception as exc:  # noqa: BLE001 - count transport/API errors, don't abort the run
         return {**case, "reply": f"[ERROR] {exc}", "error": True, "correct": False}
-    snag = "hit a snag" in reply
+    snag = not reply or "hit a snag" in reply  # empty/failed replies are not maths verdicts
     confirmed = "✅" in reply
     correct = not snag and confirmed == case["kind"].endswith("right")
     return {**case, "reply": reply, "error": snag, "confirmed": confirmed, "correct": correct}
@@ -239,7 +248,8 @@ def main():
         print(f"Problem: {r['problem']}\nStudent: {r['answer']}")
         print("-" * 72)
         print(r["reply"])
+    return 1 if misses or errors else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
