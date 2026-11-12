@@ -29,6 +29,8 @@ const json = (res, statusCode, body) => {
 const STATIC_FILES = {
   "/sumdeting-icon-blue.png": "image/png",
   "/sumdeting-icon-cream.png": "image/png",
+  "/sumdeting-mark-blue.png": "image/png",
+  "/sumdeting-mark-cream.png": "image/png",
   "/sumdeting-favicon-app.png": "image/png",
   "/sumdeting-app-light.png": "image/png",
   "/apple-touch-icon.png": "image/png",
