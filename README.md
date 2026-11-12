@@ -12,6 +12,10 @@ One codebase, two runtimes: `backend/tutor.mjs` powers both the serverless Lambd
 
 ## Architecture
 
+[![SumDeTing on AWS: CloudFront with WAF in front of S3, the tutor and account Lambdas, Bedrock, DynamoDB and SES](docs/sumdeting-architecture.png)](docs/sumdeting-architecture.png)
+
+The full AWS diagram above is generated from the tofu stack. Its source is [`docs/sumdeting-architecture.drawio`](docs/sumdeting-architecture.drawio), and the PNG embeds it too, so either opens for editing in draw.io. The request flow in short:
+
 ```mermaid
 flowchart LR
     U[Student's browser] -->|HTTPS| CF[CloudFront · AWS WAF]
@@ -93,7 +97,7 @@ Cost: serverless throughout; a few cents per study session with Claude Haiku 4.5
 - The Lambda role can invoke one Bedrock model and nothing else. The model ID comes from configuration, never from the request.
 - Every request is size-capped (turns, characters, photos) before the model is called, and model replies are sanitized with DOMPurify before they reach the page.
 - Security headers (CSP locked to `'self'`, HSTS, `nosniff`, `frame-ancestors 'none'`) are set at CloudFront, on the site and on `/api`.
-- AWS WAF rate-limits the tutor: 500 requests to `/api` per 5 minutes per IP, enough for a busy class behind one school address. The rule decodes and normalizes the path first, so encoded variants like `/%61pi` still count. It runs in count mode for now and will switch to blocking after a week of real classes shows no school gets close.
+- AWS WAF watches the tutor's request rate against a limit of 500 requests to `/api` per 5 minutes per IP, enough for a busy class behind one school address. The rule decodes and normalizes the path first, so encoded variants like `/%61pi` still count. It is in count mode for now: it records IPs that go over the limit but doesn't block them. Blocking will be switched on after a week of real classes shows no school gets close.
 - CloudWatch alarms (Lambda errors and throttles, Bedrock failures, account API failures, a stopped janitor) email the maintainer through SNS.
 - The code is audited with Cloudflare's [security-audit skill](https://github.com/cloudflare/security-audit-skill); findings are fixed in the open.
 
