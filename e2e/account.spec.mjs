@@ -3,6 +3,7 @@
 // are readable from GET /api/account/_dev/outbox. The tutor chat (Bedrock) is
 // never called: progress is driven by dispatching `sumdeting:progress` events
 // and by seeding localStorage.
+import { createHash } from "node:crypto";
 import { test, expect } from "@playwright/test";
 
 const ANON_MASTERY = "mathmentor.mastery.v1";
@@ -854,6 +855,15 @@ test("anonymous load makes no account requests; signed-in reload restores the pr
 // ---- Final review fixes ----
 
 const serverUnlocked = (page) => page.evaluate(async () => (await window.SumDeTingAccount.api("/me")).data?.parentUnlocked);
+// The same question asked with the page's cookies but without the app, for
+// when the page has been navigated away.
+const serverUnlockedNoApp = async (page) => {
+  const r = await page.context().request.post("/api/account/me", {
+    data: "{}",
+    headers: { "Content-Type": "application/json", "x-amz-content-sha256": createHash("sha256").update("{}").digest("hex") },
+  });
+  return (await r.json()).parentUnlocked;
+};
 
 test("handing the device to a child after setup locks the parent section (R19)", async ({ page, request }) => {
   const email = uniqueEmail("handover");
@@ -940,9 +950,11 @@ test("leaving the page locks the parent section", async ({ page, request }) => {
   await setUpParent(page, request, email, [{ first: "Eli", last: "Ward" }]);
   await openSectionWithCode(page, request, email); // leave with the section open
   expect(await serverUnlocked(page)).toBe(true);
-  const locked = page.waitForRequest((r) => r.url().endsWith("/api/account/parent/lock"));
   await page.goto("about:blank");
-  await locked;
+  // Checked before the app loads again, so only the pagehide lock can have
+  // done it. (Playwright doesn't report a keepalive request sent while the
+  // page unloads, so the request itself can't be awaited.)
+  await expect.poll(() => serverUnlockedNoApp(page)).toBe(false);
   await page.goto("/");
   await expect(dialog(page).getByRole("heading", { name: "Who's practising?" })).toBeVisible();
   await expect.poll(() => serverUnlocked(page)).toBe(false);
@@ -1034,6 +1046,8 @@ test("signing out with unsaved practice asks first", async ({ page, request }) =
   expect(await page.evaluate((pid) => JSON.parse(localStorage.getItem(`sumdeting.queue.${pid}`) ?? "[]").length, pid)).toBe(1);
   await accountBtn(page).click();
   await dialog(page).getByRole("button", { name: "Sign out" }).click();
+  // wait for the question, or the click lands on the menu's busy Sign out
+  await expect(dialog(page).getByText(/Sign out anyway\?/)).toBeVisible();
   await dialog(page).getByRole("button", { name: "Sign out" }).click();
   await expect(accountBtn(page)).toHaveAttribute("aria-label", /sign in/i);
 });
