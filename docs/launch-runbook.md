@@ -30,7 +30,7 @@ You do not have to wait for approval to deploy. While SES is in sandbox, test on
 
 ## 2. Deploy
 
-1. Infrastructure is not applied from this repo (`infra/` is retired; never run `tofu apply` there). It lives in chrisfixesit/tofu-or-not-tofu. Merge these PRs (owner) and CI applies them:
+1. Infrastructure is not applied from this repo (the old `infra/` folder has been removed). It lives in chrisfixesit/tofu-or-not-tofu. Merge these PRs (owner) and CI applies them:
    - Tofu PR #40, `accounts/eportfolio-prod/sumdeting`: the DynamoDB table `sumdeting-accounts`, the account Lambda `sumdeting-account` and its log group, the CloudFront `/api/account/*` behaviour, the SES domain identity, the janitor Lambda `sumdeting-janitor` (5-minute timeout) with its log group and daily schedule, and CloudWatch alarms (account errors, janitor errors, janitor record failures) that email the alerts topic. Confirm the SNS subscription email if you haven't already.
    - The DKIM records PR in `management/dns`.
    - The github-deploy PR that lets the `sumdeting-github-deploy` role update the code of the two new functions.

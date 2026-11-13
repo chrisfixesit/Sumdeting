@@ -11,31 +11,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tofu:
-    name: OpenTofu (fmt / init / validate)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: infra
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      - name: Setup OpenTofu
-        uses: opentofu/setup-opentofu@9d84900f3238fab8cd84ce47d658d25dd008be2f # v1
-        with:
-          tofu_version: 1.8.0
-          tofu_wrapper: false
-
-      - name: tofu fmt -check -recursive
-        run: tofu fmt -check -recursive
-
-      - name: tofu init (no backend)
-        run: tofu init -backend=false
-
-      - name: tofu validate
-        run: tofu validate
-
   unit:
     name: Backend (unit tests)
     runs-on: ubuntu-latest
