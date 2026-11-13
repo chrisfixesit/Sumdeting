@@ -26,18 +26,6 @@ const json = (res, statusCode, body) => {
   res.end(JSON.stringify(body));
 };
 
-const STATIC_FILES = {
-  "/sumdeting-icon-blue.png": "image/png",
-  "/sumdeting-icon-cream.png": "image/png",
-  "/sumdeting-mark-blue.png": "image/png",
-  "/sumdeting-mark-cream.png": "image/png",
-  "/sumdeting-favicon-app.png": "image/png",
-  "/sumdeting-app-light.png": "image/png",
-  "/apple-touch-icon.png": "image/png",
-  "/og-image.png": "image/png",
-  "/manifest.webmanifest": "application/manifest+json",
-};
-
 const ACCOUNT_PREFIX = "/api/account";
 const ACCOUNT_BODY_LIMIT = 64 * 1024;
 
@@ -108,17 +96,6 @@ export function createAppServer(opts = {}) {
     if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(indexHtml);
-      return;
-    }
-
-    if (req.method === "GET" && STATIC_FILES[req.url]) {
-      try {
-        const body = readFileSync(path.join(root, "web", req.url));
-        res.writeHead(200, { "Content-Type": STATIC_FILES[req.url], "Cache-Control": "public, max-age=86400" });
-        res.end(body);
-      } catch {
-        json(res, 404, { error: "Not found" });
-      }
       return;
     }
 
