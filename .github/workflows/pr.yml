@@ -61,6 +61,33 @@ jobs:
           done
         shell: bash
 
+  docker:
+    name: Docker (build + serve the site)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Build image
+        run: docker build -t sumdeting:ci .
+
+      - name: Every page, module and image is served
+        run: |
+          docker run -d --name app -p 127.0.0.1:8080:8080 sumdeting:ci
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz >/dev/null && break; sleep 1; done
+          # Read the list from web/ itself, so a new file is checked without editing this job.
+          status=0
+          for f in web/* web/vendor/fonts/fonts.css web/vendor/katex-0.16.21/katex.min.js; do
+            [ -f "$f" ] || continue
+            case "$f" in *.test.mjs) continue ;; esac
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080/${f#web/}")
+            echo "$code /${f#web/}"
+            [ "$code" = 200 ] || status=1
+          done
+          [ "$status" = 0 ] || docker logs app
+          exit "$status"
+        shell: bash
+
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest

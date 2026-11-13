@@ -64,7 +64,7 @@
       --primary: var(--blue);
       --text: var(--ink);
       --border: var(--line);
-      --input-border: var(--line);
+      --input-border: #857E6C;   /* 3.5:1 on --card, 3:1+ on --bg/--wash/--strip */
       --tutor-bubble: var(--card);
       --tutor-border: var(--card-border);
       --radius: 15px;
@@ -161,6 +161,13 @@
       color: var(--ink);
       display: flex; align-items: center; gap: 0.55rem;
     }
+    #menu a {
+      padding: 0.8rem 1rem;
+      font: 500 0.82rem 'Space Grotesk';
+      color: var(--ink); text-decoration: none;
+      display: flex; align-items: center; gap: 0.55rem;
+    }
+    #menu a .icon { color: var(--primary); }
     #menu button:last-child { border-bottom: 0; }
     #menu button:disabled { opacity: 0.4; cursor: default; }
     #menu button .icon { color: var(--primary); }
@@ -176,19 +183,211 @@
     .view.active { display: block; }
     #view-chat.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
-    /* ===== HOME ===== */
-    .home-hero { text-align: center; padding: 0.4rem 0.25rem 0.25rem; }
-    .home-hero .float { display: inline-block; animation: floaty 5s ease-in-out infinite; }
-    .home-hero img { width: 86px; height: 86px; object-fit: contain; }
-    .home-hero h1 {
-      font: 600 1.65rem/1.18 'Fraunces', serif;
-      letter-spacing: -0.01em;
-      margin: 0.85rem 0.5rem 0;
+    /* ===== HOME (3A "String": hairlines and type, the bead threads are the one object) ===== */
+    /* Home-only tokens. Light values are measured in the design spec ("Colours and type"). */
+    :root {
+      --h-lede: var(--body);
+      --h-snap: #F4A900;
+      --h-snap-edge: #C98A00;
+      --h-snap-ink: #15181E;
+      --h-snap-shadow: 0 1px 0 rgba(255, 255, 255, 0.45) inset, 0 -3px 0 #C98A00 inset, 0 1px 2px rgba(80, 55, 0, 0.18);
+      --h-field: #857E6C;         /* field border + resting bead, 3.5:1 on the page */
+      --h-soft: #CFC5AC;          /* decorative borders on secondary buttons */
+      --h-hover: #EAE2CF;
+      --h-row-hover: rgba(21, 24, 30, 0.035);
+      --h-next-bg: var(--card);
+      --h-tag-ink: #FFFFFF;
+      --h-thread: #857E6C;
+      --h-thread-alpha: 0.7;
+      --h-bead-off: var(--bg);
+      --h-bead: radial-gradient(circle at 34% 30%, #FFE9AE 0 11%, #DC9C00 30%, #A86B00 66%, #7F5100);
+      --h-bead-shadow: 0 1px 1.5px rgba(80, 50, 0, 0.35);
+      --h-pick-bg: transparent;
+      --h-pick-hover: rgba(11, 57, 168, 0.07);
+    }
+    :root[data-theme="dark"] {
+      --h-lede: var(--muted);
+      --h-snap: #F4C143;
+      --h-snap-edge: #C99A26;
+      --h-snap-ink: #0A1A3D;
+      --h-snap-shadow: 0 1px 0 rgba(255, 255, 255, 0.4) inset, 0 -3px 0 #C99A26 inset;
+      --h-field: #5B6D9E;
+      --h-soft: #1F3670;
+      --h-hover: #18306A;
+      --h-row-hover: rgba(255, 255, 255, 0.03);
+      --h-next-bg: rgba(244, 193, 67, 0.07);
+      --h-tag-ink: #0A1A3D;
+      --h-thread: #A9B3CF;
+      --h-thread-alpha: 0.55;
+      --h-bead-off: var(--bg);
+      --h-bead: radial-gradient(circle at 34% 30%, #FFF2C6 0 10%, #FBD56E 30%, #F4C143 60%, #A57411);
+      --h-bead-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+      --h-pick-bg: rgba(244, 193, 67, 0.08);
+      --h-pick-hover: rgba(244, 193, 67, 0.16);
+    }
+
+    #view-home { font: 400 16px/1.5 'Space Grotesk', system-ui, sans-serif; color: var(--ink); }
+    :where(#view-home) :where(button, input) { font: inherit; color: inherit; }
+    #view-home :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+
+    .tally { display: flex; gap: 12px; min-height: 0; margin: 0; font-size: 13px; color: var(--muted); }
+    .tally [hidden] { display: none; }
+    .tally b {
+      font: 600 15px 'Fraunces', serif; font-variation-settings: "opsz" 24;
       color: var(--ink);
     }
-    .home-hero p { font: 400 0.88rem/1.6 'Space Grotesk'; color: var(--muted); margin: 0.75rem 0.75rem 0; }
 
-    .cta-stack { display: flex; flex-direction: column; gap: 10px; margin: 1.35rem 0 0.5rem; }
+    .ask h1 {
+      font: 600 50px/1 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 144;
+      letter-spacing: -0.025em; color: var(--ink);
+      margin: 14px 0 16px;
+    }
+    .ask .lede { color: var(--h-lede); margin: 0 0 18px; max-width: 40ch; text-wrap: pretty; }
+
+    .snap {
+      display: flex; align-items: center; gap: 14px;
+      width: 100%; min-height: 64px; padding: 0 22px;
+      border: 0; border-radius: 14px;
+      background: var(--h-snap); color: var(--h-snap-ink);
+      font-weight: 600; font-size: 18px; text-align: left; cursor: pointer;
+      box-shadow: var(--h-snap-shadow);
+    }
+    .snap svg { width: 28px; height: 28px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; }
+    .snap small { display: block; font-weight: 400; font-size: 14px; }
+    .snap:active { transform: translateY(1px); }
+
+    .home-type {
+      margin-top: 12px; display: flex; align-items: stretch;
+      border: 1.5px solid var(--h-field); border-radius: 12px;
+      background: var(--card); overflow: hidden;
+    }
+    .home-type:focus-within { border-color: var(--primary); }
+    .home-type input {
+      flex: 1; min-width: 0; border: 0; background: none;
+      padding: 0 16px; min-height: 52px; font-size: 16px;
+    }
+    .home-type input::placeholder { color: var(--muted); opacity: 1; }
+    #view-home .home-type input:focus { outline: none; }
+    .home-type button {
+      border: 0; background: none; width: 52px; flex: none;
+      display: grid; place-items: center; cursor: pointer;
+    }
+    #view-home .home-type button:focus-visible { outline-offset: -4px; }
+    .home-type svg, .alt svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .alt svg { width: 20px; height: 20px; stroke-width: 1.7; }
+
+    .alt { display: flex; gap: 10px; margin-top: 10px; }
+    .alt button {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px;
+      min-height: 48px; border-radius: 12px;
+      border: 1px solid var(--h-soft); background: var(--card);
+      font-weight: 500; cursor: pointer;
+    }
+    .alt button[hidden] { display: none; }
+    .alt button:hover, .home-type button:hover { background: var(--h-hover); }
+
+    .practise-sec { margin-top: 40px; }
+    .practise-sec h2 {
+      font: 500 25px/1.2 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 48;
+      letter-spacing: -0.01em; color: var(--ink);
+    }
+    .pick-label { font-size: 14px; color: var(--muted); margin: 14px 0 8px; }
+
+    .seg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .seg {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 44px; padding: 0 14px;
+      border-radius: 999px; border: 1px solid var(--h-soft);
+      background: var(--card); color: var(--muted);
+      font-weight: 500; font-size: 15px; white-space: nowrap; cursor: pointer;
+    }
+    [data-theme="dark"] .seg { background: transparent; }
+    .seg:hover { color: var(--ink); }
+    .seg.on, [data-theme="dark"] .seg.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+    #paper-tabs, #unit-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+    #paper-tabs .seg, #unit-tabs .seg { flex: 1 0 auto; min-height: 40px; font-size: 14px; }
+
+    .upnext { margin: 18px 0 18px; }
+    .upnext p { margin: 0 0 10px; color: var(--muted); font-size: 15px; }
+    .upnext p a { color: var(--primary); text-underline-offset: 3px; font-weight: 500; }
+    .acts { display: flex; gap: 10px; }
+    .acts button { flex: 1 1 0; min-width: 0; }
+    .acts button[hidden] { display: none; }
+    .pick, .give {
+      min-height: 48px; padding: 0 10px; border-radius: 12px;
+      font-size: 15px; cursor: pointer;
+    }
+    .pick {
+      border: 1.5px solid var(--primary); background: var(--h-pick-bg);
+      color: var(--primary); font-weight: 600;
+    }
+    .pick:hover { background: var(--h-pick-hover); }
+    .give { border: 1px solid var(--h-soft); background: var(--card); font-weight: 500; }
+    .give:hover { background: var(--h-hover); }
+    .give:disabled, .pick:disabled { opacity: 0.55; cursor: wait; }
+
+    /* Topic rows: name on the first line; the thread of five beads, the
+       mastery word and the count on the second, so long names never wrap. */
+    .strings { list-style: none; padding: 0; border-top: 1px solid var(--line); }
+    .strings li { border-bottom: 1px solid var(--line); }
+    .trow-home {
+      display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-areas: "nm nm nm" "thr st num";
+      align-items: center; column-gap: 12px; row-gap: 4px;
+      width: 100%; min-height: 64px; padding: 10px 6px 10px 14px;
+      border: 0; background: none; text-align: left; cursor: pointer;
+    }
+    .trow-home:hover { background: var(--h-row-hover); }
+    #view-home .trow-home:focus-visible { outline-offset: -3px; }
+    .trow-home.next { background: var(--h-next-bg); box-shadow: inset 3px 0 0 var(--primary); }
+    .trow-home .nm { grid-area: nm; display: flex; align-items: center; min-width: 0; }
+    .topic-name { font-weight: 500; font-size: 16px; line-height: 1.4; }
+    .trow-home .tag {
+      flex: none; margin-left: 8px; padding: 1px 6px; border-radius: 4px;
+      background: var(--primary); color: var(--h-tag-ink);
+      font-size: 12px; font-weight: 600; white-space: nowrap;
+    }
+    .mastery-word { grid-area: st; font-size: 14px; color: var(--muted); white-space: nowrap; }
+    .trow-home .count {
+      grid-area: num; text-align: right; white-space: nowrap;
+      font: 600 15px 'Fraunces', serif; font-variation-settings: "opsz" 24; color: var(--ink);
+    }
+    .beads { grid-area: thr; position: relative; display: flex; gap: 5px; align-items: center; padding: 0 12px; height: 18px; }
+    .beads::before {
+      content: ""; position: absolute; left: 0; right: 0; top: 50%;
+      height: 1.5px; margin-top: -0.75px;
+      background: var(--h-thread); opacity: var(--h-thread-alpha);
+    }
+    .beads::after {
+      content: ""; position: absolute; right: -3px; top: 50%;
+      width: 5px; height: 5px; margin-top: -2.5px; border-radius: 50%;
+      background: var(--h-thread);
+    }
+    .beads i {
+      position: relative; width: 14px; height: 14px; border-radius: 50%;
+      background: var(--h-bead-off); box-shadow: inset 0 0 0 1.5px var(--h-field);
+    }
+    .beads i.on { background: var(--h-bead); box-shadow: var(--h-bead-shadow); }
+    .beads i.on.anim { animation: bead-fill 0.38s cubic-bezier(0.3, 1.4, 0.5, 1) both; animation-delay: var(--d, 0ms); }
+    @keyframes bead-fill {
+      from { background: var(--h-bead-off); box-shadow: inset 0 0 0 1.5px var(--h-field); transform: scale(0.75); }
+    }
+    @media (prefers-reduced-motion: reduce) { .beads i.anim { animation: none !important; } }
+
+    .home-foot {
+      margin-top: 36px; padding: 28px 0 24px;
+      border-top: 1px solid var(--line);
+      font-size: 14px; color: var(--muted);
+    }
+    .home-foot p { margin: 0 0 4px; }
+    .home-foot a { color: var(--primary); text-underline-offset: 3px; }
+    [data-theme="dark"] .home-foot a { color: var(--ink); }
+
+    @media (min-width: 768px) {
+      .ask h1 { font-size: 68px; }
+      .seg-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    }
+
     .cta-primary {
       width: 100%; padding: 0.95rem; border: 0; border-radius: var(--radius);
       background: var(--primary); color: var(--on-primary);
@@ -197,68 +396,6 @@
     }
     [data-theme="dark"] .cta-primary { box-shadow: 0 8px 20px -6px rgba(244, 193, 67, 0.35); }
     .cta-primary:disabled { opacity: 0.55; cursor: wait; }
-    .cta-ghost {
-      width: 100%; padding: 0.85rem; border: 1.5px solid #D8CFB8; border-radius: var(--radius);
-      background: transparent; color: var(--ink);
-      font: 600 0.88rem 'Space Grotesk'; cursor: pointer;
-    }
-    [data-theme="dark"] .cta-ghost { border-color: var(--input-border); }
-
-    .steps-card {
-      margin-top: 1.6rem; padding: 1.1rem;
-      background: var(--card); border: 1px solid var(--card-border); border-radius: 18px;
-    }
-    .steps-card .kicker {
-      font: 600 0.75rem 'Space Grotesk'; letter-spacing: 0.14em;
-      text-transform: uppercase; color: var(--primary); margin-bottom: 0.85rem;
-    }
-    .step { display: flex; gap: 12px; align-items: flex-start; margin-top: 0.85rem; }
-    .step:first-of-type { margin-top: 0; }
-    .step .n {
-      width: 26px; height: 26px; border-radius: 50%; flex: none;
-      background: var(--blue); color: var(--on-primary);
-      font: 600 0.75rem 'Space Grotesk';
-      display: flex; align-items: center; justify-content: center;
-    }
-    [data-theme="dark"] .step .n { background: var(--line); color: var(--ink); }
-    .step.gold .n { background: var(--gold); color: #15181E; }
-    [data-theme="dark"] .step.gold .n { background: var(--gold); color: var(--on-primary); }
-    .step p { font: 400 0.82rem/1.5 'Space Grotesk'; color: var(--body); }
-
-    .row-head {
-      display: flex; justify-content: space-between; align-items: center;
-      margin: 1.5rem 0 0.75rem;
-    }
-    .row-head b { font: 600 0.88rem 'Space Grotesk'; color: var(--ink); }
-    .row-head span { font: 400 0.75rem 'Space Grotesk'; color: var(--faint); }
-
-    .chips-row { display: flex; flex-wrap: wrap; gap: 8px; }
-    .tchip {
-      padding: 0.56rem 0.9rem;
-      border: 1px solid var(--line); border-radius: 11px;
-      background: var(--card);
-      font: 500 0.82rem 'Space Grotesk'; color: var(--ink);
-      cursor: pointer;
-    }
-    .tchip:hover { border-color: var(--primary); }
-    .tchip:disabled { opacity: 0.5; cursor: wait; }
-
-    .seg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .seg {
-      text-align: center; padding: 0.7rem 0.3rem; border-radius: 12px;
-      background: var(--wash); color: var(--muted);
-      border: 1px solid transparent;
-      font: 500 0.8rem 'Space Grotesk'; cursor: pointer;
-    }
-    [data-theme="dark"] .seg { background: var(--card); border-color: var(--line); }
-    .seg.on { background: var(--primary); color: var(--on-primary); font-weight: 600; border-color: var(--primary); }
-
-    .home-foot {
-      margin-top: 1.75rem; text-align: center;
-      font: 400 0.7rem/1.6 'Space Grotesk'; color: var(--faint);
-      border-top: 1px solid var(--line); padding: 1.1rem 0 1.4rem;
-    }
-    .home-foot a { color: var(--primary); }
 
     /* ===== Practice hidden selects ===== */
     .practice[hidden] { display: none; }
@@ -486,25 +623,13 @@
     .chips button:hover { border-color: var(--primary); color: var(--primary); }
 
     /* ===== Composer strip ===== */
-    form {
+    #composer {
       position: sticky; bottom: 76px;
       background: var(--strip);
       border-top: 1px solid var(--line);
       margin: 0 -1.25rem;
       padding: 0.55rem 0.8rem 0.7rem;
     }
-
-    .mathbar { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
-    .mathbar::-webkit-scrollbar { display: none; }
-    .mathbar .mathbar-label { display: none; }
-    .mathbar button {
-      flex: none; min-width: 38px; text-align: center;
-      padding: 0.5rem 0;
-      background: var(--card); border: 1px solid var(--line); border-radius: 9px;
-      font: 500 0.9rem 'Newsreader', serif; color: var(--ink);
-      cursor: pointer; line-height: 1.2;
-    }
-    .mathbar button:hover { border-color: var(--primary); color: var(--primary); }
 
     .attachment-preview {
       display: none; align-items: center; gap: 0.6rem;
@@ -520,24 +645,85 @@
     }
 
     .composer-row { display: flex; gap: 9px; align-items: flex-end; }
-    .photo-btn {
-      width: 40px; height: 44px; flex: none;
+    /* Square icon buttons either side of the text box: + (attach) and the maths pad toggle */
+    .ib-btn {
+      width: 44px; height: 44px; flex: none;
       border-radius: 12px;
-      background: var(--card); border: 1px solid var(--line);
+      background: var(--card); border: 1px solid var(--input-border);
       display: flex; align-items: center; justify-content: center;
-      font-size: 1rem; color: var(--primary);
-      cursor: pointer; line-height: 1;
+      color: var(--primary); cursor: pointer; line-height: 1; padding: 0;
     }
-    .photo-btn:hover { border-color: var(--primary); }
-    .photo-btn.rec { color: #dc2626; border-color: #dc2626; animation: rec-pulse 1.2s ease-in-out infinite; }
-    @keyframes rec-pulse { 50% { opacity: 0.55; } }
+    .ib-btn:hover { border-color: var(--primary); }
+    .ib-btn .icon { width: 20px; height: 20px; }
+    .attach-btn[aria-expanded="true"] .icon { transform: rotate(45deg); }
+    .attach-btn.rec { color: #dc2626; border-color: #dc2626; }
+    [data-theme="dark"] .attach-btn.rec { color: var(--danger); border-color: var(--danger); }
+    .pad-toggle { font: 600 1.25rem/1 'Newsreader', serif; font-optical-sizing: none; font-variation-settings: 'opsz' 24; }
+    .pad-toggle[aria-expanded="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+    #composer button:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+
+    /* + menu: photo, draw, voice. It opens upwards from the + button. */
+    .attach-wrap { position: relative; flex: none; }
+    .attach-menu {
+      position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 20;
+      min-width: 15.5rem; padding: 6px;
+      background: var(--card); border: 1px solid var(--input-border); border-radius: 14px;
+      box-shadow: 0 14px 34px -12px rgba(10, 26, 61, 0.35);
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .attach-menu[hidden] { display: none; }
+    .attach-menu button {
+      display: flex; align-items: center; gap: 0.75rem;
+      min-height: 46px; padding: 0 0.85rem; border: 0; border-radius: 10px;
+      background: none; color: var(--ink); text-align: left; cursor: pointer;
+      font: 500 0.92rem 'Space Grotesk', system-ui, sans-serif;
+    }
+    .attach-menu button[hidden] { display: none; }
+    .attach-menu button .icon { width: 20px; height: 20px; color: var(--primary); }
+    .attach-menu button:hover { background: var(--wash); }
+    .attach-menu button:focus-visible { outline-offset: -3px; }
+    #mic.rec, #mic.rec .icon { color: #b91c1c; }
+    [data-theme="dark"] #mic.rec, [data-theme="dark"] #mic.rec .icon { color: var(--danger); }
+
+    /* Maths pad: keys chosen by level and topic, all one size */
+    .mathpad {
+      margin-top: 8px; padding: 8px;
+      background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    }
+    .mathpad[hidden] { display: none; }
+    .pad-keys {
+      display: grid; gap: 6px;
+      grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+      max-height: 46vh; overflow-y: auto;
+      padding: 3px; margin: -3px; /* room for the focus ring inside the scroll box */
+    }
+    .pad-keys button {
+      height: 44px; min-width: 0; padding: 0;
+      background: var(--wash); border: 1px solid transparent; border-radius: 10px;
+      color: var(--ink); cursor: pointer;
+      font: 500 1.2rem/1 'Newsreader', serif;
+      font-optical-sizing: none; font-variation-settings: 'opsz' 24;
+    }
+    .pad-keys button.w { font-size: 1.02rem; }
+    .pad-keys button.op { color: var(--primary); font-weight: 600; font-size: 1.5rem; }
+    .pad-keys button.big { font-size: 1.45rem; } /* glyphs Newsreader draws small: ∞ ∈ ∪ ∩ ∫ → : */
+    .pad-keys button:hover { border-color: var(--primary); }
+    .pad-keys button:focus-visible { outline-offset: -3px; }
+    .pad-keys .pad-more {
+      grid-column: span 2;
+      background: none; border: 1px dashed var(--input-border); color: var(--muted);
+      font: 500 0.82rem 'Space Grotesk', system-ui, sans-serif;
+      display: flex; align-items: center; justify-content: center; gap: 0.35rem;
+    }
+    .pad-more .chev { display: inline-block; font-size: 0.7rem; }
+    .pad-more[aria-expanded="true"] .chev { transform: rotate(180deg); }
 
     textarea {
-      flex: 1; resize: none;
+      flex: 1; min-width: 0; resize: none;
       min-height: 44px; max-height: 160px;
-      border: 1px solid var(--line); border-radius: 12px;
+      border: 1px solid var(--input-border); border-radius: 12px;
       padding: 0.65rem 0.9rem;
-      font: 400 0.86rem 'Space Grotesk';
+      font: 400 1rem 'Space Grotesk'; /* under 16px, iPhone Safari zooms the page on focus */
       background: var(--card); color: var(--ink);
       outline: none;
     }
@@ -573,6 +759,86 @@
     .appnav button .icon { width: 18px; height: 18px; }
     .appnav button.on { color: var(--primary); }
     .appnav button.on .bar { background: var(--primary); }
+    .appnav .rail-mark { display: none; }
+    /* Phone, typing in the chat: the keyboard is up, so the tabs step aside
+       and the composer sits on the keyboard instead of above the tabs. */
+    @media (max-width: 767px) {
+      body:has(#input:focus) .appnav { display: none; }
+      body:has(#input:focus) { padding-bottom: 0; }
+      body:has(#input:focus) #composer { bottom: 0; }
+    }
+
+    /* ===== Tablet and up: the nav becomes a left rail, views sit beside it ===== */
+    @media (min-width: 768px) {
+      body { padding-bottom: 0; padding-left: 92px; }
+      header, main { max-width: 720px; }
+      header { padding: 1.4rem 2.5rem 0.9rem; }
+      main { padding: 0 2.5rem; }
+      #composer { bottom: 0; margin: 0 -2.5rem; }
+
+      .appnav {
+        top: 0; right: auto; width: 92px;
+        flex-direction: column; align-items: stretch;
+        padding: 20px 8px;
+        border-top: 0; border-right: 1px solid var(--line);
+        overflow-y: auto; /* short screens: the rail scrolls rather than clipping its last button */
+      }
+      [data-theme="dark"] .appnav { background: var(--strip); }
+      .appnav .rail-mark { display: block; align-self: center; flex: none; margin: 0 0 18px; }
+      .appnav .rail-mark img { width: 64px; height: 64px; object-fit: contain; }
+      .appnav .inner { flex-direction: column; gap: 6px; max-width: none; margin: 0; }
+      .appnav button {
+        flex: none; position: relative; justify-content: center; gap: 6px;
+        min-height: 68px; border-radius: 12px;
+        font: 500 13px 'Space Grotesk', system-ui, sans-serif; color: var(--muted);
+      }
+      .appnav button:hover { color: var(--ink); }
+      .appnav button .icon { width: 22px; height: 22px; stroke-width: 1.7; }
+      /* The current page wears a small gold bead instead of the phone's underline. */
+      .appnav button .bar {
+        position: absolute; top: 10px; left: calc(50% + 10px);
+        width: 8px; height: 10px; border-radius: 45% / 50%;
+      }
+      .appnav button.on { background: var(--wash); color: var(--ink); }
+      [data-theme="dark"] .appnav button.on { background: var(--card); }
+      .appnav button.on .bar { background: var(--h-bead); }
+      .appnav button:focus-visible { outline: 3px solid var(--primary); outline-offset: -3px; }
+
+      /* Topic rows go to one line: name, thread, mastery word, count. */
+      .trow-home {
+        grid-template-columns: minmax(0, 1fr) auto 6.5rem 3rem;
+        grid-template-areas: "nm thr st num";
+        column-gap: 10px; min-height: 56px; padding: 8px 8px 8px 16px;
+      }
+      .mastery-word { padding-left: 6px; }
+    }
+
+    /* ===== Wide: home in two columns; other views keep a readable column ===== */
+    @media (min-width: 1024px) {
+      header, main { max-width: 1240px; }
+      header { padding-inline: 48px; }
+      main { padding: 0 48px; }
+      main > .view:not(#view-home), .exam-bar { width: 100%; max-width: 640px; margin-inline: auto; }
+
+      #view-home.active {
+        display: grid;
+        grid-template-columns: minmax(300px, 0.82fr) minmax(0, 1.18fr);
+        grid-template-areas: "stats stats" "ask practise" "foot foot";
+        column-gap: clamp(40px, 5vw, 88px);
+      }
+      #home-stats { grid-area: stats; justify-content: flex-end; }
+      .ask { grid-area: ask; align-self: center; padding-bottom: 40px; }
+      .ask h1 { font-size: 62px; margin-top: 8px; }
+      .practise-sec { grid-area: practise; margin-top: 0; }
+      .home-foot { grid-area: foot; }
+      .acts button { flex: 0 0 auto; padding: 0 20px; white-space: nowrap; }
+      /* Keep the thread near the name, as in the reference, instead of pinned right. */
+      .trow-home { grid-template-columns: minmax(12rem, 16rem) auto minmax(6.5rem, 1fr) 3rem; }
+    }
+    @media (min-width: 1360px) {
+      .ask h1 { font-size: 76px; }
+      .snap { min-height: 76px; font-size: 19px; }
+    }
 
     /* ===== Icons / helpers ===== */
     .icon {
@@ -595,8 +861,12 @@
       background: rgba(20, 16, 8, 0.55);
       display: flex; align-items: center; justify-content: center;
       z-index: 60; padding: 1rem;
+      /* an Apple Pencil stroke on iPad otherwise selects text and pops up Copy / Look Up */
+      -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none;
     }
     .sketch-modal[hidden] { display: none; }
+    body:has(.sketch-modal:not([hidden])) { -webkit-user-select: none; user-select: none; }
     .sketch-card {
       background: var(--bg); border-radius: 18px; padding: 0.7rem;
       display: flex; flex-direction: column; gap: 0.6rem;
@@ -619,9 +889,9 @@
       touch-action: none; cursor: crosshair;
     }
 
-    @media (max-width: 380px) {
-      .home-hero h1 { font-size: 1.45rem; }
-      .seg { font-size: 0.72rem; }
+    @media (max-width: 360px) {
+      .ask h1 { font-size: 44px; }
+      .seg { font-size: 14px; padding: 0 10px; }
     }
   </style>
 </head>
@@ -641,6 +911,7 @@
     <symbol id="i-clipboard" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
     <symbol id="i-beads" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
     <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></symbol>
     <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
@@ -672,6 +943,7 @@
         <button id="recap" type="button" disabled title="Work through at least one problem first"><svg class="icon"><use href="#i-file"/></svg> Session recap</button>
         <button id="new-session" type="button" title="Clear this conversation and start fresh"><svg class="icon"><use href="#i-refresh"/></svg> New session</button>
         <button id="theme" type="button" title="Switch theme"><svg class="icon"><use href="#i-moon"/></svg> <span id="theme-label">Dark mode</span></button>
+        <a id="help-link" href="/about.html"><svg class="icon"><use href="#i-book"/></svg> About SumDeTing</a>
       </div>
     </div>
   </header>
@@ -686,37 +958,54 @@
 
     <!-- ============ HOME ============ -->
     <section id="view-home" class="view active" aria-label="Home">
-      <div class="home-hero">
-        <span class="float">
-          <img class="logo-light" src="sumdeting-icon-blue.png" alt="" aria-hidden="true" />
-          <img class="logo-dark" src="sumdeting-icon-cream.png" alt="" aria-hidden="true" />
-        </span>
-        <h1>Your Socratic study buddy, from Common Entrance to CXC.</h1>
-        <p>I guide you to the answer, bead by bead — I never hand it over.</p>
-      </div>
+      <p id="home-stats" class="tally">
+        <span id="stat-beads" hidden><b id="stat-beads-n">0</b> <span id="stat-beads-word">beads</span> this week</span>
+        <span id="stat-streak" hidden><b id="stat-streak-n">0</b>-day streak</span>
+      </p>
 
-      <div class="cta-stack">
-        <button id="practice-btn" type="button" class="cta-primary">Give me a problem</button>
-        <button id="snap-btn" type="button" class="cta-ghost">Snap a photo of a question</button>
-      </div>
+      <section class="ask" aria-labelledby="home-h">
+        <h1 id="home-h">Stuck?<br> I got you.</h1>
+        <p class="lede">I guide you to the answer, bead by bead. I&nbsp;never hand it&nbsp;over.</p>
+        <button id="snap-btn" class="snap" type="button">
+          <svg viewBox="0 0 28 28" aria-hidden="true"><path d="M4 9.5A2.5 2.5 0 0 1 6.5 7h3l2-3h5l2 3h3A2.5 2.5 0 0 1 24 9.5v11a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 4 20.5z"/><circle cx="14" cy="15" r="4.5"/></svg>
+          <span>Snap a photo<small>of the question in your book</small></span>
+        </button>
+        <form id="home-ask" class="home-type">
+          <label class="sr-only" for="home-ask-input">Type your maths question</label>
+          <input id="home-ask-input" type="text" placeholder="Or type it, like 3/4 of 120" autocomplete="off" enterkeyhint="send" />
+          <button type="submit" aria-label="Ask the tutor"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg></button>
+        </form>
+        <div class="alt">
+          <button id="home-draw" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg>Draw it</button>
+          <button id="home-say" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>Say it</button>
+        </div>
+      </section>
 
-      <div class="steps-card">
-        <div class="kicker">Every problem, bead by bead</div>
-        <div class="step"><span class="n">1</span><p>Bring a problem — type it, snap it, or grab a past paper.</p></div>
-        <div class="step"><span class="n">2</span><p>I ask the next question — you place the next bead.</p></div>
-        <div class="step gold"><span class="n">3</span><p>The string grows. You get there yourself.</p></div>
-      </div>
+      <section class="practise-sec" aria-labelledby="practise-h">
+        <h2 id="practise-h">Practise a topic</h2>
+        <p id="level-label" class="pick-label">Level</p>
+        <div id="level-tabs" class="seg-row" role="group" aria-labelledby="level-label"></div>
 
-      <div class="row-head"><b>Topics</b><span>tap one for a problem</span></div>
-      <div id="topic-grid" class="chips-row" role="group" aria-label="Choose a topic"></div>
+        <div id="unit-pick" hidden>
+          <p id="unit-label" class="pick-label">Unit</p>
+          <div id="unit-tabs" role="group" aria-labelledby="unit-label"></div>
+        </div>
 
-      <div class="row-head"><b>Your level</b></div>
-      <div id="level-tabs" class="seg-row" role="group" aria-label="Choose your level"></div>
+        <div id="paper-pick" hidden>
+          <p id="paper-label" class="pick-label">Paper style</p>
+          <div id="paper-tabs" role="group" aria-labelledby="paper-label"></div>
+        </div>
 
-      <div id="paper-pick" hidden>
-        <div class="row-head"><b>Paper</b><span>the style of each problem</span></div>
-        <div id="paper-tabs" class="seg-row" role="group" aria-label="Choose a paper to practise"></div>
-      </div>
+        <div id="next-step" class="upnext">
+          <p id="next-step-text">New here? Pick a topic below, or let me choose.</p>
+          <div class="acts">
+            <button id="pickup-btn" class="pick" type="button" hidden></button>
+            <button id="practice-btn" class="give" type="button" title="I'll pick a topic at your level">Give me a problem</button>
+          </div>
+        </div>
+
+        <ul id="topic-list" class="strings" aria-label="Topics at your level. Gold beads are problems you solved."></ul>
+      </section>
 
       <!-- Hidden selects: single source of truth for level/topic (kept for JS + saved prefs) -->
       <div class="practice" aria-label="Practice mode" hidden>
@@ -731,9 +1020,11 @@
         <select id="exam-duration" aria-label="Exam length"></select>
       </div>
 
-      <div class="home-foot">
-        Made in Barbados · Built with Claude on Amazon Bedrock · <a href="https://github.com/chrisfixesit/Sumdeting" rel="noopener">Source on GitHub</a>
-      </div>
+      <footer class="home-foot">
+        <p>Made in Barbados. Built with Claude on Amazon Bedrock.</p>
+        <p><a href="/about.html">About SumDeTing</a></p>
+        <p><a href="https://github.com/chrisfixesit/Sumdeting" rel="noopener">Source on GitHub</a></p>
+      </footer>
     </section>
 
     <!-- ============ STRING ============ -->
@@ -768,8 +1059,9 @@
     <div id="sr-live" class="sr-only" aria-live="polite" role="status"></div>
     <section id="view-chat" class="view" aria-label="Tutor chat">
       <div class="chat-top">
-        <img class="logo-light" src="sumdeting-icon-blue.png" alt="" aria-hidden="true" />
-        <img class="logo-dark" src="sumdeting-icon-cream.png" alt="" aria-hidden="true" />
+        <!-- the small mark: fewer, bolder symbols that stay readable at this size -->
+        <img class="logo-light" src="sumdeting-mark-blue.png" alt="" aria-hidden="true" />
+        <img class="logo-dark" src="sumdeting-mark-cream.png" alt="" aria-hidden="true" />
         <div class="t"><b>SumDeTing</b><span id="chat-context">Socratic tutor · I never hand the answer over</span></div>
       </div>
       <div id="chat">
@@ -778,18 +1070,6 @@
 
       <form id="composer">
         <div id="chips" class="chips" hidden></div>
-        <div id="mathbar" class="mathbar" aria-label="Insert a math symbol">
-          <span class="mathbar-label" aria-hidden="true">Symbols</span>
-          <button type="button" data-ins="²" title="Squared">x²</button>
-          <button type="button" data-ins="³" title="Cubed">x³</button>
-          <button type="button" data-ins="√" title="Square root">√</button>
-          <button type="button" data-ins="÷" title="Divided by">÷</button>
-          <button type="button" data-ins="×" title="Times">×</button>
-          <button type="button" data-ins="π" title="Pi">π</button>
-          <button type="button" data-ins="°" title="Degrees">°</button>
-          <button type="button" data-ins="≤" title="Less than or equal">≤</button>
-          <button type="button" data-ins="≥" title="Greater than or equal">≥</button>
-        </div>
         <div id="attachment" class="attachment-preview">
           <img id="attachment-img" alt="Attached problem photo" />
           <span>Photo attached</span>
@@ -797,11 +1077,20 @@
         </div>
         <div class="composer-row">
           <input id="file" type="file" accept="image/*" hidden />
-          <button id="photo" class="photo-btn" type="button" aria-label="Attach a photo of your problem" title="Attach a photo"><svg class="icon"><use href="#i-camera"/></svg></button>
-          <button id="sketch" class="photo-btn" type="button" aria-label="Draw your working by hand" title="Draw your working"><svg class="icon"><use href="#i-pencil"/></svg></button>
-          <button id="mic" class="photo-btn" type="button" aria-label="Speak your problem" title="Speak your problem"><svg class="icon"><use href="#i-mic"/></svg></button>
-          <textarea id="input" aria-label="Type your maths problem" placeholder="Type your working…"></textarea>
+          <div class="attach-wrap">
+            <button id="attach-btn" class="ib-btn attach-btn" type="button" aria-label="Add a photo, drawing or voice" aria-expanded="false" aria-controls="attach-menu"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+            <div id="attach-menu" class="attach-menu" hidden>
+              <button id="photo" type="button"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg><span>Photo of your problem</span></button>
+              <button id="sketch" type="button"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg><span>Draw your working</span></button>
+              <button id="mic" type="button"><svg class="icon" aria-hidden="true"><use href="#i-mic"/></svg><span id="mic-label">Speak your problem</span></button>
+            </div>
+          </div>
+          <textarea id="input" rows="1" aria-label="Type your maths problem" placeholder="Type your working…"></textarea>
+          <button id="pad-toggle" class="ib-btn pad-toggle" type="button" aria-label="Maths keys" aria-expanded="false" aria-controls="mathpad">∑</button>
           <button id="send" class="send-btn" type="submit" aria-label="Send"><svg class="icon"><use href="#i-send"/></svg></button>
+        </div>
+        <div id="mathpad" class="mathpad" hidden>
+          <div id="pad-keys" class="pad-keys"></div>
         </div>
       </form>
     </section>
@@ -836,6 +1125,10 @@
   </div>
 
   <nav class="appnav" aria-label="Main navigation">
+    <span class="rail-mark" aria-hidden="true">
+      <img class="logo-light" src="sumdeting-mark-blue.png" alt="" />
+      <img class="logo-dark" src="sumdeting-mark-cream.png" alt="" />
+    </span>
     <div class="inner">
       <button id="nav-home" class="on" type="button"><span class="bar"></span><svg class="icon"><use href="#i-home"/></svg><span>Home</span></button>
       <button id="nav-chat" type="button"><span class="bar"></span><svg class="icon"><use href="#i-pencil"/></svg><span>Tutor</span></button>
@@ -859,6 +1152,7 @@
     const attachmentImg = document.getElementById("attachment-img");
     const attachmentRemove = document.getElementById("attachment-remove");
     const practiceBtn = document.getElementById("practice-btn");
+    const pickupBtn = document.getElementById("pickup-btn");
     const recapBtn = document.getElementById("recap");
     const srLive = document.getElementById("sr-live");
 
@@ -1010,6 +1304,7 @@
       busy = state;
       send.disabled = state;
       practiceBtn.disabled = state;
+      pickupBtn.disabled = state;
       const recapReady = !state && history.length >= 2;
       recapBtn.disabled = !recapReady;
       recapBtn.title = recapReady
@@ -1193,15 +1488,6 @@
       }
     }
 
-    // ---- Math symbol toolbar (insert at cursor) ----
-
-    document.getElementById("mathbar").addEventListener("click", (e) => {
-      const ch = e.target.dataset?.ins;
-      if (!ch) return;
-      input.setRangeText(ch, input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length, "end");
-      input.focus();
-    });
-
     // ---- Remember practice level / topic / exam length ----
 
     const PREFS_KEY = "mathmentor.prefs.v1";
@@ -1267,17 +1553,48 @@
       },
       CAPE: {
         exam: "CAPE Pure Mathematics",
-        topics: [
-          "Algebra", "Functions & Graphs", "Trigonometry", "Coordinate Geometry & Vectors",
-          "Sequences & Series", "Calculus", "Complex Numbers & Matrices", "Statistics & Probability",
-        ],
-        topic: "Algebra",
+        // Each unit has its own syllabus, so the topics follow the chosen unit.
+        units: {
+          "Unit 1": {
+            topics: ["Logic & Proof", "Algebra", "Functions & Graphs", "Trigonometry", "Coordinate Geometry & Vectors", "Calculus"],
+            topic: "Algebra",
+          },
+          "Unit 2": {
+            topics: ["Complex Numbers", "Further Calculus", "Sequences & Series", "Counting & Probability", "Matrices", "Differential Equations"],
+            topic: "Complex Numbers",
+          },
+        },
+        styles: { standard: "Paper 2 (25 marks)", easier: "Paper 1 multiple-choice (1 mark)", harder: "Paper 2 (25 marks)" },
+        papers: {
+          "Paper 1": { standard: "Paper 1 multiple-choice (1 mark)" },
+          "Paper 2": { standard: "Paper 2 (25 marks)" },
+          "Paper 3": { standard: "Paper 3/B (20 marks)" },
+        },
         durations: [["30", "30 min", "short set"], ["90", "1h 30m", "Paper 1"], ["150", "2h 30m", "Paper 2"]],
         duration: "90",
       },
     };
     const DEFAULT_LEVEL = "CSEC";
-    const levelSetup = () => LEVEL_SETUP[levelSel.value] ?? LEVEL_SETUP[DEFAULT_LEVEL];
+    const levelBase = () => LEVEL_SETUP[levelSel.value] ?? LEVEL_SETUP[DEFAULT_LEVEL];
+
+    // A level with units (CAPE) takes its topics from the chosen unit. Like the
+    // paper choice, the unit is kept on this device per profile, not synced.
+    const UNIT_KEY = "mathmentor.unit.v1";
+    function storedUnit() {
+      try { return localStorage.getItem(storageKey(UNIT_KEY)); } catch { return null; }
+    }
+    function unitChoice() {
+      const units = levelBase().units;
+      if (!units) return null;
+      const u = storedUnit();
+      return units[u] ? u : Object.keys(units)[0];
+    }
+    const levelSetup = () => {
+      const base = levelBase();
+      return base.units ? { ...base, ...base.units[unitChoice()] } : base;
+    };
+    // The level as the tutor sees it, with the unit where there is one ("CAPE Unit 1").
+    const levelName = () => [levelSel.value, unitChoice()].filter(Boolean).join(" ");
 
     // Fill the topic and length selects for the current level, keeping the
     // wanted values when that level offers them.
@@ -1293,6 +1610,13 @@
       let p = null;
       try { p = JSON.parse(localStorage.getItem(storageKey(PREFS_KEY))); } catch { /* ignore */ }
       levelSel.value = LEVEL_SETUP[p?.level] ? p.level : DEFAULT_LEVEL;
+      // No unit chosen on this device yet (say, prefs synced from another one):
+      // take the unit the saved topic belongs to.
+      const units = levelBase().units;
+      const unitOfTopic = units && Object.keys(units).find((u) => units[u].topics.includes(p?.topic));
+      if (unitOfTopic && !units[storedUnit()]) {
+        try { localStorage.setItem(storageKey(UNIT_KEY), unitOfTopic); } catch { /* ignore */ }
+      }
       applyLevel(p?.topic, p?.duration);
     }
     loadPrefs();
@@ -1462,7 +1786,11 @@
       const m = loadMastery();
       masteryEl.textContent = "";
       const bits = [];
-      if (m.streak.count > 1) bits.push(`${m.streak.count}-day streak`);
+      const H = window.SumHome;
+      if (H) {
+        const live = H.liveStreak(m.streak, new Date().toISOString().slice(0, 10));
+        if (H.showStreak(live)) bits.push(`${live}-day streak`);
+      }
       const t = currentTopic && m.topics[currentTopic];
       if (t && t.attempted) bits.push(`${currentTopic}: ${t.solved} solved of ${t.attempted} tried`);
       masteryEl.textContent = bits.join(" · ");
@@ -1473,14 +1801,11 @@
         b.className = "retry-chip";
         b.textContent = `Practice ${topic} again`;
         b.title = "You found this topic tricky recently — a quick round helps it stick";
-        b.addEventListener("click", () => {
-          const sel = document.getElementById("topic");
-          if ([...sel.options].some((o) => o.value === topic)) sel.value = topic;
-          practiceBtn.click();
-        });
+        b.addEventListener("click", () => practise(topic));
         masteryEl.appendChild(b);
       }
       masteryEl.hidden = bits.length === 0 && masteryEl.childElementCount === 0;
+      renderHome();
     }
 
     // Runs after every completed tutor reply.
@@ -1512,7 +1837,9 @@
       input.value = "";
 
       await converse(
-        text || "Here is a photo of my problem. Please transcribe it and help me work through it.",
+        text || (image.handwritten
+          ? "Here is my problem, handwritten. Please write out what it says and help me work through it."
+          : "Here is a photo of my problem. Please transcribe it and help me work through it."),
         { image, restoreOnError: true }
       );
     });
@@ -1609,7 +1936,7 @@
         recognizer.interimResults = true;
         recognizer.continuous = false;
         const base = input.value ? input.value.trimEnd() + " " : "";
-        micBtn.classList.add("rec");
+        setRecording(true);
         recognizer.onresult = (e) => {
           input.value = base + Array.from(e.results).map((r) => r[0].transcript).join("");
         };
@@ -1624,11 +1951,118 @@
         };
         recognizer.onend = () => {
           recognizer = null;
-          micBtn.classList.remove("rec");
+          setRecording(false);
           input.focus();
         };
         recognizer.start();
       });
+    }
+
+    // ---- + menu: photo, draw and voice live behind the + button ----
+
+    const attachBtn = document.getElementById("attach-btn");
+    const attachMenu = document.getElementById("attach-menu");
+
+    /** Show listening on the mic item and on + (the menu is closed while it listens). */
+    function setRecording(on) {
+      micBtn.classList.toggle("rec", on);
+      attachBtn.classList.toggle("rec", on);
+      document.getElementById("mic-label").textContent = on ? "Stop listening" : "Speak your problem";
+      attachBtn.setAttribute("aria-label", on ? "Add a photo, drawing or voice (listening)" : "Add a photo, drawing or voice");
+    }
+
+    function openAttach() {
+      attachMenu.hidden = false;
+      attachBtn.setAttribute("aria-expanded", "true");
+      attachMenu.querySelector("button:not([hidden])")?.focus();
+    }
+    function closeAttach(refocus = true) {
+      if (attachMenu.hidden) return;
+      attachMenu.hidden = true;
+      attachBtn.setAttribute("aria-expanded", "false");
+      if (refocus) attachBtn.focus();
+    }
+    attachBtn.addEventListener("click", () => (attachMenu.hidden ? openAttach() : closeAttach()));
+    // Each item's own handler runs first (photo, sketch, mic), then the menu closes.
+    // A choice that opens something of its own (the sketch pad) keeps focus there.
+    attachMenu.addEventListener("click", (e) => {
+      const item = e.target.closest("button");
+      if (item) closeAttach(item.id !== "sketch");
+    });
+    attachMenu.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeAttach(); return; }
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      const items = [...attachMenu.querySelectorAll("button:not([hidden])")];
+      const i = items.indexOf(document.activeElement);
+      items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+    });
+    attachBtn.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeAttach();
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (!attachMenu.hidden && !e.target.closest(".attach-wrap")) closeAttach(false);
+    });
+
+    // ---- Maths pad: keys chosen by the level and the topic in progress ----
+
+    const padToggle = document.getElementById("pad-toggle");
+    const mathpad = document.getElementById("mathpad");
+    const padKeysEl = document.getElementById("pad-keys");
+    const PAD_OPS = new Set(["+", "−", "×", "÷", "=", "±", "≤", "≥", "≠"]);
+    const PAD_BIG = new Set(["∞", "∈", "∪", "∩", "∫", "→", ":", "Σ"]);
+    let padAll = false;
+
+    function renderPad() {
+      const { padKeys, ALL_PAD_KEYS, keyInsert, keyLabel } = window.SumHome;
+      const mine = padKeys(levelSel.value, currentTopic || topicSel.value);
+      const keys = padAll ? [...new Set([...mine, ...ALL_PAD_KEYS])] : mine;
+      const buttons = keys.map((label) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = label;
+        b.dataset.ins = keyInsert(label);
+        b.setAttribute("aria-label", keyLabel(label));
+        if (/^[a-z/]{2,}$/i.test(label)) b.className = "w";
+        else if (PAD_OPS.has(label)) b.className = "op";
+        else if (PAD_BIG.has(label)) b.className = "big";
+        return b;
+      });
+      const more = document.createElement("button");
+      more.type = "button";
+      more.id = "pad-more";
+      more.className = "pad-more";
+      more.setAttribute("aria-expanded", String(padAll));
+      more.innerHTML = 'More <span class="chev" aria-hidden="true">▾</span>';
+      padKeysEl.replaceChildren(...buttons, more);
+    }
+
+    padToggle.addEventListener("click", () => {
+      const open = mathpad.hidden;
+      if (open) { padAll = false; renderPad(); }
+      mathpad.hidden = !open;
+      padToggle.setAttribute("aria-expanded", String(open));
+    });
+    // Keep the cursor (and the phone keyboard) in the text box while tapping keys.
+    padKeysEl.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("button[data-ins]") && document.activeElement === input) e.preventDefault();
+    });
+    padKeysEl.addEventListener("click", (e) => {
+      const key = e.target.closest("button");
+      if (!key) return;
+      if (key.id === "pad-more") {
+        padAll = !padAll;
+        renderPad();
+        document.getElementById("pad-more").focus();
+        return;
+      }
+      const ins = key.dataset.ins;
+      input.setRangeText(ins, input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length, "end");
+      // Taps and clicks go back to the text box; Enter or Space on a key (detail 0) stays on the key.
+      if (e.detail > 0) input.focus();
+    });
+    for (const sel of [levelSel, topicSel]) {
+      sel.addEventListener("change", () => { if (!mathpad.hidden) renderPad(); });
     }
 
     // ---- Read aloud (speech synthesis, LaTeX stripped) ----
@@ -1716,8 +2150,10 @@
     let skDrawing = false;
     let skErasing = false;
     let skDrawn = false;
+    let skScale = 1; // canvas pixels per CSS pixel, set when the pad opens
 
     document.getElementById("sketch").addEventListener("click", () => {
+      window.getSelection()?.removeAllRanges();
       sketchModal.hidden = false;
       requestAnimationFrame(() => {
         const rect = skCanvas.getBoundingClientRect();
@@ -1726,6 +2162,7 @@
         skCanvas.height = Math.round(rect.height * dpr);
         skCtx = skCanvas.getContext("2d");
         skCtx.scale(dpr, dpr);
+        skScale = dpr;
         skCtx.fillStyle = "#ffffff";
         skCtx.fillRect(0, 0, rect.width, rect.height);
         skCtx.lineCap = "round";
@@ -1741,6 +2178,7 @@
 
     skCanvas.addEventListener("pointerdown", (e) => {
       if (!skCtx) return;
+      e.preventDefault();
       skCanvas.setPointerCapture(e.pointerId);
       skDrawing = true;
       skCtx.beginPath();
@@ -1757,6 +2195,11 @@
     const skStop = () => { skDrawing = false; };
     skCanvas.addEventListener("pointerup", skStop);
     skCanvas.addEventListener("pointercancel", skStop);
+    // iPad Safari starts a text selection from touch events, which pointer
+    // events can't cancel, so stop them on the canvas itself.
+    for (const type of ["touchstart", "touchmove"]) {
+      skCanvas.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+    }
 
     function skSetTool(erase) {
       skErasing = erase;
@@ -1768,11 +2211,50 @@
 
     document.getElementById("sk-clear").addEventListener("click", () => {
       if (!skCtx) return;
-      const rect = skCanvas.getBoundingClientRect();
+      // the whole bitmap, not the on-screen size, which shrinks if the iPad rotates
+      skCtx.save();
+      skCtx.setTransform(1, 0, 0, 1, 0, 0);
       skCtx.fillStyle = "#ffffff";
-      skCtx.fillRect(0, 0, rect.width, rect.height);
+      skCtx.fillRect(0, 0, skCanvas.width, skCanvas.height);
+      skCtx.restore();
       skDrawn = false;
     });
+
+    // [minX, minY, maxX, maxY] of the ink in canvas pixels, read from the
+    // bitmap itself so erasing, Clear and a rotated iPad are all accounted for.
+    // null when the pad is blank.
+    function skInkBox() {
+      const { width, height } = skCanvas;
+      const px = skCtx.getImageData(0, 0, width, height).data;
+      let x0 = width, y0 = height, x1 = -1, y1 = -1;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const i = (y * width + x) * 4;
+          if (px[i] < 250 || px[i + 1] < 250 || px[i + 2] < 250) {
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+      }
+      return x1 < 0 ? null : [x0, y0, x1 + 1, y1 + 1];
+    }
+
+    // Send only the part with writing on it. A small sum on a big blank pad
+    // gets shrunk before the tutor sees it, and it then misreads x as z or r.
+    function skCropped([x0, y0, x1, y1]) {
+      const pad = 24 * skScale;
+      const left = Math.max(0, Math.floor(x0 - pad)), top = Math.max(0, Math.floor(y0 - pad));
+      const out = document.createElement("canvas");
+      out.width = Math.max(1, Math.min(skCanvas.width, Math.ceil(x1 + pad)) - left);
+      out.height = Math.max(1, Math.min(skCanvas.height, Math.ceil(y1 + pad)) - top);
+      const ctx = out.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, out.width, out.height);
+      ctx.drawImage(skCanvas, left, top, out.width, out.height, 0, 0, out.width, out.height);
+      return out;
+    }
 
     document.getElementById("sk-cancel").addEventListener("click", () => {
       sketchModal.hidden = true;
@@ -1782,9 +2264,11 @@
     });
 
     document.getElementById("sk-send").addEventListener("click", () => {
-      if (!skDrawn) { sketchModal.hidden = true; return; }
-      const dataUrl = skCanvas.toDataURL("image/jpeg", 0.85);
+      const ink = skDrawn ? skInkBox() : null;
+      if (!ink) { sketchModal.hidden = true; return; }
+      const dataUrl = skCropped(ink).toDataURL("image/jpeg", 0.85);
       pendingImage = {
+        handwritten: true,
         format: "jpeg",
         data: dataUrl.split(",")[1],
         previewUrl: dataUrl,
@@ -1815,7 +2299,7 @@
       const minutes = Number(document.getElementById("exam-duration").value);
       // Name the paper when the chosen length is one ("CSEC Paper 1").
       const note = levelSetup().durations.find(([min]) => min === durationSel.value)?.[2] ?? "";
-      const level = /^Paper/.test(note) ? `${levelSel.value} ${note}` : levelSel.value;
+      const level = /^Paper/.test(note) ? `${levelName()} ${note}` : levelName();
       const ok = await converse(
         `Exam mode has STARTED (${level}, ${minutes} minutes). Act as a quiet invigilator: no hints, no teaching. Only tell me briefly whether each answer I submit is correct or incorrect, until I say the exam is over.`,
         { displayText: `Starting a ${minutes}-minute ${level} exam` }
@@ -1854,9 +2338,12 @@
 
     // ---- Practice mode ----
 
-    practiceBtn.addEventListener("click", async () => {
-      const level = document.getElementById("level").value;
-      const topic = document.getElementById("topic").value;
+    // Ask the tutor for one practice problem on `topic` at the current level.
+    async function practise(topic) {
+      if (busy) return;
+      const level = levelName();
+      topicSel.value = topic;
+      topicSel.dispatchEvent(new Event("change")); // persists prefs
       // Asking for a fresh problem abandons the current one — log it as
       // unsolved so the tricky-topics logic can resurface the topic later.
       if (activeProblem) {
@@ -1869,9 +2356,14 @@
       );
       if (ok) {
         currentTopic = topic;
+        if (!mathpad.hidden) renderPad(); // the #topic change above ran while currentTopic was the old one
         activeProblem = { topic, level, userTurns: 0, hints: 0 };
         recordActivity(topic, false); // counts as attempted
       }
+    }
+    practiceBtn.addEventListener("click", () => practise(window.SumHome.randomTopic(levelSetup().topics)));
+    pickupBtn.addEventListener("click", () => {
+      if (pickupBtn.dataset.topic) practise(pickupBtn.dataset.topic);
     });
 
     // ---- Session recap (printable) ----
@@ -1995,6 +2487,29 @@
       fileInput.click();
     });
 
+    // ---- Home: type, draw or say a question ----
+
+    const homeAskInput = document.getElementById("home-ask-input");
+    document.getElementById("home-ask").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = homeAskInput.value.trim();
+      if (!text || busy) return; // mid-reply: keep the question in the box rather than drop it
+      homeAskInput.value = "";
+      input.value = text;
+      goView("chat");
+      form.requestSubmit(); // the composer's own submit handler sends it
+    });
+    document.getElementById("home-draw").addEventListener("click", () => {
+      goView("chat");
+      document.getElementById("sketch").click();
+    });
+    const homeSay = document.getElementById("home-say");
+    homeSay.hidden = micBtn.hidden; // no speech recognition in this browser
+    homeSay.addEventListener("click", () => {
+      goView("chat");
+      micBtn.click();
+    });
+
     // ---- Level segments ----
 
     const LEVELS = Object.keys(LEVEL_SETUP);
@@ -2003,12 +2518,39 @@
       const b = document.createElement("button");
       b.type = "button";
       b.className = "seg";
-      b.textContent = lv === "CSEC" ? "CSEC / CXC" : lv;
+      b.textContent = lv;
       b.addEventListener("click", () => {
         levelSel.value = lv;
         levelSel.dispatchEvent(new Event("change")); // persists prefs, then renderLevel
       });
       levelTabs.appendChild(b);
+    }
+
+    // ---- Unit choice (levels with units only) ----
+
+    const unitPick = document.getElementById("unit-pick");
+    const unitTabs = document.getElementById("unit-tabs");
+    function renderUnitTabs() {
+      const units = levelBase().units;
+      unitPick.hidden = !units;
+      unitTabs.textContent = "";
+      if (!units) return;
+      const chosen = unitChoice();
+      for (const name of Object.keys(units)) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = name === chosen ? "seg on" : "seg";
+        b.dataset.unit = name;
+        b.textContent = name;
+        b.setAttribute("aria-pressed", String(name === chosen));
+        b.addEventListener("click", () => {
+          try { localStorage.setItem(storageKey(UNIT_KEY), name); } catch { /* ignore */ }
+          applyLevel(topicSel.value, durationSel.value);
+          topicSel.dispatchEvent(new Event("change")); // persists the unit's topic
+          renderLevel();
+        });
+        unitTabs.appendChild(b);
+      }
     }
 
     // ---- Paper choice (levels with papers only) ----
@@ -2045,7 +2587,7 @@
       }
     }
 
-    // ---- Topic chips ----
+    // ---- Topic list (TOPIC_SHORT is only for the tutor's header line) ----
 
     const TOPIC_SHORT = {
       "Number & Place Value": "Number",
@@ -2063,26 +2605,123 @@
       "Sequences & Series": "Sequences",
       "Calculus": "Calculus",
       "Complex Numbers & Matrices": "Complex numbers",
+      "Logic & Proof": "Logic",
+      "Complex Numbers": "Complex numbers",
+      "Further Calculus": "Calculus II",
+      "Counting & Probability": "Probability",
+      "Differential Equations": "Diff. equations",
       "Vectors & Matrices": "Vectors",
     };
-    const topicGrid = document.getElementById("topic-grid");
     const chatContext = document.getElementById("chat-context");
-    function renderTopicChips() {
-      topicGrid.textContent = "";
-      for (const opt of topicSel.options) {
-        const topic = opt.value;
+    const topicList = document.getElementById("topic-list");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let beadsAnimated = false; // the bead fill plays once, on the first render
+
+    // One row per topic of the level: name, a thread of five beads, the
+    // mastery word and the count. `upNextTopic` gets the gold edge and tag.
+    function renderTopicList(m, upNextTopic) {
+      const H = window.SumHome;
+      const animate = !beadsAnimated && !reduceMotion.matches;
+      beadsAnimated = true;
+      topicList.textContent = "";
+      levelSetup().topics.forEach((topic, row) => {
+        const solved = H.beadCount(m.topics?.[topic]?.solved);
+        const word = H.masteryWord(H.masteryState(solved, m.topics?.[topic]?.attempted));
+        const li = document.createElement("li");
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "tchip";
-        b.textContent = TOPIC_SHORT[topic] || topic;
+        b.className = topic === upNextTopic ? "trow-home next" : "trow-home";
+        b.dataset.topic = topic;
+        const upNextName = topic === upNextTopic ? ", up next" : "";
+        b.setAttribute("aria-label", `${topic}, ${word}, ${solved} of 5 beads${upNextName}`);
+
+        const nm = document.createElement("span");
+        nm.className = "nm";
+        const name = document.createElement("span");
+        name.className = "topic-name";
+        name.textContent = topic;
+        nm.appendChild(name);
+        if (topic === upNextTopic) {
+          const tag = document.createElement("span");
+          tag.className = "tag";
+          tag.textContent = "Up next";
+          nm.appendChild(tag);
+        }
+
+        const beads = document.createElement("span");
+        beads.className = "beads";
+        beads.setAttribute("aria-hidden", "true");
+        for (let i = 0; i < 5; i++) {
+          const bead = document.createElement("i");
+          if (i < solved) {
+            bead.className = animate ? "on anim" : "on";
+            if (animate) bead.style.setProperty("--d", `${120 + row * 45 + i * 70}ms`);
+          }
+          beads.appendChild(bead);
+        }
+
+        const st = document.createElement("span");
+        st.className = "mastery-word";
+        st.textContent = word;
+        const count = document.createElement("span");
+        count.className = "count";
+        count.textContent = `${solved} of 5`;
+
+        b.append(nm, beads, st, count);
         b.addEventListener("click", () => {
-          topicSel.value = topic;
-          topicSel.dispatchEvent(new Event("change")); // persists prefs
-          chatContext.textContent = `${TOPIC_SHORT[topic] || topic} · ${levelSel.value}`;
-          practiceBtn.click();
+          if (busy) return; // leave the header alone while a reply is in flight
+          chatContext.textContent = `${TOPIC_SHORT[topic] || topic} · ${levelName()}`;
+          practise(topic);
         });
-        topicGrid.appendChild(b);
+        li.appendChild(b);
+        topicList.appendChild(li);
+      });
+    }
+
+    // The home page for the current level: header stats, next step, topic list.
+    // home-core.mjs (a module) loads after this script, so this is a no-op
+    // until DOMContentLoaded.
+    const nextStepText = document.getElementById("next-step-text");
+    function renderHome() {
+      renderPaperTabs();
+      const H = window.SumHome;
+      if (!H) return;
+      const m = loadMastery();
+      const today = new Date().toISOString().slice(0, 10);
+
+      const weekly = beadsThisWeek(m);
+      document.getElementById("stat-beads").hidden = weekly === 0;
+      document.getElementById("stat-beads-n").textContent = weekly;
+      document.getElementById("stat-beads-word").textContent = weekly === 1 ? "bead" : "beads";
+      const streak = H.liveStreak(m.streak, today);
+      document.getElementById("stat-streak").hidden = !H.showStreak(streak);
+      document.getElementById("stat-streak-n").textContent = streak;
+
+      const step = H.nextStep(levelSetup().topics, m.topics);
+      const line = H.nextStepLine(step);
+      if (step.kind === "done") {
+        // "Every topic mastered at this level. Try a timed exam?": the question links to the Exam view.
+        const cut = line.indexOf(". ") + 2;
+        const a = document.createElement("a");
+        a.href = "#exam";
+        a.textContent = line.slice(cut);
+        a.addEventListener("click", (e) => {
+          e.preventDefault();
+          document.getElementById("nav-practice").click();
+        });
+        nextStepText.replaceChildren(line.slice(0, cut), a);
+      } else {
+        nextStepText.textContent = line;
       }
+      pickupBtn.hidden = step.kind !== "pickup";
+      if (step.kind === "pickup") {
+        pickupBtn.textContent = `Pick up ${step.topic}`;
+        pickupBtn.dataset.topic = step.topic;
+      } else {
+        delete pickupBtn.dataset.topic;
+      }
+
+      renderTopicList(m, step.kind === "pickup" ? step.topic : null);
     }
 
     // ---- Exam duration rows ----
@@ -2110,15 +2749,18 @@
     // Everything that follows the chosen level: tabs, topics, exam lengths,
     // the exam blurb and the past-papers card (CSEC Mathematics papers only).
     function renderLevel() {
-      levelTabs.querySelectorAll(".seg").forEach((x, i) => x.classList.toggle("on", LEVELS[i] === levelSel.value));
-      renderTopicChips();
-      renderPaperTabs();
+      levelTabs.querySelectorAll(".seg").forEach((x, i) => {
+        x.classList.toggle("on", LEVELS[i] === levelSel.value);
+        x.setAttribute("aria-pressed", String(LEVELS[i] === levelSel.value));
+      });
+      renderUnitTabs();
       renderDurationRows();
       document.getElementById("exam-sub").textContent =
         `Timed practice under real ${levelSetup().exam} conditions. No hints while the clock runs — just like the real thing.`;
       document.getElementById("papers-open").hidden = levelSel.value !== "CSEC";
       renderString();
       renderMastery();
+      renderHome();
     }
     levelSel.addEventListener("change", renderLevel);
     renderLevel();
@@ -2147,7 +2789,8 @@
       const m = loadMastery();
       const weekly = beadsThisWeek(m);
       document.getElementById("string-count").textContent = weekly;
-      document.getElementById("string-streak").textContent = m.streak.count;
+      const H = window.SumHome;
+      document.getElementById("string-streak").textContent = H ? H.liveStreak(m.streak, new Date().toISOString().slice(0, 10)) : 0;
       const grid = document.getElementById("string-beads");
       grid.textContent = "";
       const slots = Math.min(Math.max(weekly, 21), 42);
@@ -2165,9 +2808,9 @@
         const name = document.createElement("span");
         name.textContent = opt.value;
         const status = document.createElement("b");
-        if ((t?.solved ?? 0) >= 5) { status.textContent = "mastered"; status.className = "s-done"; }
-        else if (t?.solved || t?.attempted) { status.textContent = "in progress"; status.className = "s-mid"; }
-        else { status.textContent = "not started"; status.className = "s-new"; }
+        const state = H ? H.masteryState(t?.solved ?? 0, t?.attempted ?? 0) : "not-started";
+        status.textContent = H ? H.masteryWord(state) : "Not started";
+        status.className = state === "mastered" ? "s-done" : state === "not-started" ? "s-new" : "s-mid";
         row.append(name, status);
         list.appendChild(row);
       }
@@ -2194,6 +2837,7 @@
       renderMastery();
     });
   </script>
+  <script type="module" src="home-core.mjs"></script>
   <script type="module" src="account-ui.mjs"></script>
 </body>
 </html>

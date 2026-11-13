@@ -6,15 +6,19 @@ A Bajan AI math tutor that refuses to just give you the answer. SumDeTing uses C
 
 Built for Barbadian students: the tutor knows the local journey from Common Entrance (BSSEE) through CSEC/CXC Mathematics to CAPE, encourages in a warm Bajan voice while keeping every mathematical step in clear standard English, and uses everyday Barbadian contexts (BBD prices, bus fares, cricket) in its examples.
 
-**Stack:** Claude (Amazon Bedrock Converse API) · AWS Lambda (Function URL) · S3 + CloudFront (OAC) · OpenTofu (in tofu-or-not-tofu) · Docker (hardened local runtime)
+**Stack:** Claude (Amazon Bedrock Converse API) · AWS Lambda (Function URLs) · S3 + CloudFront (OAC) · AWS WAF · DynamoDB · Amazon SES · OpenTofu (in tofu-or-not-tofu) · Docker (hardened local runtime)
 
 One codebase, two runtimes: `backend/tutor.mjs` powers both the serverless Lambda deployment and a hardened Docker container for local development.
 
 ## Architecture
 
+[![SumDeTing on AWS: CloudFront with WAF in front of S3, the tutor and account Lambdas, Bedrock, DynamoDB and SES](docs/sumdeting-architecture.png)](docs/sumdeting-architecture.png)
+
+The full AWS diagram above is generated from the tofu stack. Its source is [`docs/sumdeting-architecture.drawio`](docs/sumdeting-architecture.drawio), and the PNG embeds it too, so either opens for editing in draw.io. The request flow in short:
+
 ```mermaid
 flowchart LR
-    U[Student's browser] -->|HTTPS| CF[CloudFront]
+    U[Student's browser] -->|HTTPS| CF[CloudFront · AWS WAF]
     CF --> S3[(S3: static web app)]
     CF -->|POST /api · SigV4 via OAC| FU[Lambda Function URL · IAM auth]
     FU --> L[Lambda: tutor handler]
@@ -72,11 +76,11 @@ The end-to-end suite starts its own server with `ACCOUNT_DEV=1` on port 8099. Be
 
 ## Deploy to AWS
 
-Infrastructure isn't in this repo. It's managed in [chrisfixesit/tofu-or-not-tofu](https://github.com/chrisfixesit/tofu-or-not-tofu) under `accounts/eportfolio-prod/sumdeting`: the three Lambdas' configuration, the `sumdeting-accounts` table, SES, the buckets, CloudFront, the WAF, alarms and the budget. The DNS records live in that repo's `management/dns`. Infrastructure changes are PRs there; merging applies them.
+Infrastructure isn't in this repo. It is managed in [chrisfixesit/tofu-or-not-tofu](https://github.com/chrisfixesit/tofu-or-not-tofu) under `accounts/eportfolio-prod/sumdeting`, and that repo's `docs/stacks/eportfolio-prod--sumdeting.md` describes every resource and why it is built that way. Changes go through a PR there; merging it applies. The `246labs.cloud` DNS records (the site alias, certificate validation, SES DKIM) live in that repo's management account, not in the stack.
 
 Code and site files ship through `.github/workflows/deploy.yml` on merge to `main` (behind the `production` environment approval). It updates the three Lambdas from one zip, uploads the site, and invalidates CloudFront. It refuses to deploy while `web/privacy.html` is still a draft (see the launch runbook).
 
-Cost: serverless throughout; a few cents per study session with Claude Haiku.
+Cost: serverless throughout; a few cents per study session with Claude Haiku 4.5. The WAF adds about $6 a month. An account-wide AWS budget of $30 a month emails at 80% of actual spend and when the forecast passes 100%; it alerts, it doesn't stop anything.
 
 ## Features
 
@@ -92,7 +96,9 @@ Cost: serverless throughout; a few cents per study session with Claude Haiku.
 - The Lambda Function URL requires IAM auth; only this CloudFront distribution can call it (Origin Access Control, SigV4).
 - The Lambda role can invoke one Bedrock model and nothing else. The model ID comes from configuration, never from the request.
 - Every request is size-capped (turns, characters, photos) before the model is called, and model replies are sanitized with DOMPurify before they reach the page.
-- Security headers (CSP locked to `'self'`, HSTS, `frame-ancestors 'none'`) are set at CloudFront.
+- Security headers (CSP locked to `'self'`, HSTS, `nosniff`, `frame-ancestors 'none'`) are set at CloudFront, on the site and on `/api`.
+- AWS WAF watches the tutor's request rate against a limit of 500 requests to `/api` per 5 minutes per IP, enough for a busy class behind one school address. The rule decodes and normalizes the path first, so encoded variants like `/%61pi` still count. It is in count mode for now: it records IPs that go over the limit but doesn't block them. Blocking will be switched on after a week of real classes shows no school gets close.
+- CloudWatch alarms (Lambda errors and throttles, Bedrock failures, account API failures, a stopped janitor) email the maintainer through SNS.
 - The code is audited with Cloudflare's [security-audit skill](https://github.com/cloudflare/security-audit-skill); findings are fixed in the open.
 
 Found a vulnerability? Please open a private [security advisory](https://github.com/chrisfixesit/Sumdeting/security/advisories/new) rather than a public issue.

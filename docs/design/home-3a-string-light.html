@@ -1,0 +1,287 @@
+<!doctype html>
+<!--
+  SumDeTing home, concept 3a: STRING (light theme)
+
+  IDEA
+  The abacus is gone. Each topic is a plain row: its name, a short thread of five small
+  beads (gold = earned, outlined = still to earn), the mastery word and the count. No frame,
+  no boxes; hairlines only. One moment: on load, the earned beads fill gold along each thread.
+  (Wireframes below show the old abacus; that area is now the treatment described above.)
+
+  COLOUR (approved dark theme + one material)
+    navy        #0A1A3D  page
+    navy-raised #112554  secondary buttons, field
+    line        #1F3670  hairlines
+    cream       #F4EEE0  text
+    muted       #A9B3CF  secondary text (8.4:1 on navy)
+    gold        #F4C143  primary action, earned beads (navy text on it)
+    derived: panel #071330 (inside the frame), resting bead #5B6D9E (3.4:1 vs panel),
+             field border #5B6D9E (3:1+ on navy), wire steel #E6E9F0 > #5B6377
+
+  TYPE
+    Fraunces   headline opsz 144 / wght 600 / SOFT 50 (soft, friendly, not bookish)
+               numbers & counts opsz 24 / wght 600; section titles opsz 48 / wght 500
+    Space Grotesk  UI 16/24 regular, buttons 17 medium, topic names 16 medium
+    Scale (1.25): 13 · 16 · 20 · 25 · 31 · 39 · 49 · 61(laptop headline)
+
+  LAYOUT  (left aligned throughout; the abacus is the only "object")
+    phone 390                      wide 1180 / 1440
+    +----------------------+       +--+---------------------+--------------------------+
+    | SumDeTing   12 beads |       |o | SumDeTing           | Level [CE][CSEC][AM][CAPE]|
+    | Stuck? Show me       |       |  | Stuck? Show me      | +======================+ |
+    | de sum.              |       |H | de sum.             | |Fractions  ●----●●●●●| |
+    | [ Snap a photo     ] |       |T | I guide you...      | |Percent    ●●●---●●  | |
+    | [ Type it ......  >] |       |S | [ Snap a photo    ] | |Algebra    ●●---●●●  | |
+    | [Draw it] [Say it ]  |       |E | [ Type it ....  > ] | | ...  wood frame      | |
+    |----------------------|       |  | [Draw it] [Say it]  | +======================+ |
+    | Level chips (scroll) |       |  |                     | 12 beads, 4-day streak   |
+    | Practise a topic     |       |  |                     | [Give me a problem]      |
+    | +==================+ |       +--+---------------------+--------------------------+
+    | | wood abacus      | |       rail = nav (Home, Tutor, String, Exam)
+    | +==================+ |
+    | [Home Tutor Str Exam]|  bottom tab bar on phone only
+    +----------------------+
+    portrait 820: rail + single column, abacus full width (bigger beads).
+
+  PRINCIPLES
+    - Spend boldness on the abacus only. Everything around it is flat navy and type.
+    - Beads read as objects: radial shading, a specular highlight, a contact shadow.
+    - One moment: earned beads slide right once on load (skipped under reduced motion).
+    - Counts are always also written in words; beads never carry meaning alone.
+-->
+<html lang="en-BB">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SumDeTing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..800,0..100&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* light theme. Role names kept from the dark file: --navy = page, --cream = text, --gold = accent */
+  --navy:#F4EEE0; --raised:#FBF7EC; --line:#E1D8C1; --wash:#EAE2CF; --cream:#15181E; --body:#3A3A34;
+  --muted:#5E5A4C; --faint:#66625A; --gold:#0B39A8; --ink:#15181E; --brand-gold:#F4A900; --gold-edge:#C98A00;
+  --bead:#A86B00; --bead-lo:#7F5100; --rest:#857E6C; --field:#857E6C; --soft-border:#CFC5AC;
+  --bw:22px; --bh:32px; --row:66px;
+  --sans:"Space Grotesk",system-ui,sans-serif; --serif:"Fraunces",Georgia,serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--navy);color:var(--cream);font:400 16px/1.5 var(--sans);min-height:100vh}
+button,input{font:inherit;color:inherit}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:3px solid var(--gold);outline-offset:3px;border-radius:6px}
+
+/* ---------- shell ---------- */
+.app{display:block;padding-bottom:76px}
+.nav{position:fixed;z-index:5;left:0;right:0;bottom:0;height:68px;background:var(--raised);border-top:1px solid var(--line);
+  display:flex;justify-content:space-around;align-items:stretch;padding:0 4px env(safe-area-inset-bottom)}
+.nav a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:44px;
+  color:var(--muted);text-decoration:none;font-size:13px;font-weight:500;position:relative}
+.nav svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.nav a[aria-current]{color:var(--cream)}
+.nav a[aria-current]::before{content:"";position:absolute;top:6px;left:calc(50% + 12px);width:8px;height:10px;border-radius:45%/50%;
+  background:radial-gradient(ellipse at 38% 30%,#fff6d6 0 12%,transparent 40%),radial-gradient(ellipse at 50% 50%,#D99A1A,var(--bead) 55%,var(--bead-lo))}
+.nav .mark{display:none}
+
+main{padding:0 20px;max-width:640px;margin:0 auto}
+
+/* ---------- header ---------- */
+.top{display:flex;align-items:center;justify-content:space-between;padding:14px 0 6px}
+.word{font-family:var(--serif);font-variation-settings:"opsz" 48,"SOFT" 50;font-weight:600;font-size:22px;letter-spacing:-.01em;margin:0}
+.tally{font-size:13px;color:var(--muted);display:flex;gap:12px}
+.tally b{font-family:var(--serif);font-variation-settings:"opsz" 24;font-weight:600;color:var(--cream);font-size:15px}
+
+/* ---------- stuck entry ---------- */
+.ask h2{font-family:var(--serif);font-variation-settings:"opsz" 144,"SOFT" 50;font-weight:600;
+  font-size:50px;line-height:1;letter-spacing:-.025em;margin:14px 0 16px}
+.ask .lede{color:var(--body);margin:0 0 18px;max-width:40ch;text-wrap:pretty}
+.snap{display:flex;align-items:center;gap:14px;width:100%;min-height:64px;padding:0 22px;border:0;border-radius:14px;
+  background:var(--brand-gold);color:var(--ink);font-weight:600;font-size:18px;cursor:pointer;text-align:left;
+  box-shadow:0 1px 0 rgba(255,255,255,.45) inset,0 -3px 0 var(--gold-edge) inset,0 1px 2px rgba(80,55,0,.18)}
+.snap svg{width:28px;height:28px;flex:none;stroke:var(--ink);fill:none;stroke-width:1.8}
+.snap small{display:block;font-weight:400;font-size:14px;opacity:.85}
+.snap:active{transform:translateY(1px)}
+.type{margin-top:12px;display:flex;align-items:stretch;border:1.5px solid var(--field);border-radius:12px;background:var(--raised);overflow:hidden}
+.type:focus-within{border-color:var(--gold)}
+.type input{flex:1;min-width:0;border:0;background:none;padding:0 16px;min-height:52px;font-size:16px}
+.type input::placeholder{color:var(--muted);opacity:1}
+.type input:focus{outline:none}
+.type button{border:0;background:none;width:52px;display:grid;place-items:center;cursor:pointer;color:var(--cream)}
+.type button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.alt{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.alt button{display:flex;align-items:center;justify-content:center;gap:9px;min-height:48px;border-radius:12px;
+  border:1px solid var(--soft-border);background:var(--raised);font-weight:500;cursor:pointer}
+.alt svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.alt button:hover,.type button:hover{background:var(--wash)}
+
+/* ---------- practice ---------- */
+.practice{margin-top:40px}
+.ph{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.ph h2{font-family:var(--serif);font-variation-settings:"opsz" 48,"SOFT" 30;font-weight:500;font-size:25px;margin:0;letter-spacing:-.01em}
+.levels{border:0;padding:0;margin:14px 0 18px;min-width:0}
+.levels legend{font-size:14px;color:var(--muted);padding:0;margin-bottom:8px}
+.chips{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chips input{position:absolute;opacity:0;pointer-events:none}
+.chips label{flex:none;display:flex;align-items:center;justify-content:center;min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--soft-border);background:var(--raised);
+  color:var(--muted);font-weight:500;font-size:15px;cursor:pointer;white-space:nowrap}
+.chips input:checked+label{background:var(--ink);color:var(--navy);border-color:var(--ink)}
+.chips input:focus-visible+label{outline:3px solid var(--gold);outline-offset:2px}
+
+/* topic progress: 3a-string */
+footer{border-top:0;margin-top:8px}
+.strings{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.strings li{border-bottom:1px solid var(--line)}
+.t{display:grid;grid-template-columns:1fr auto;grid-template-areas:"nm thr" "meta meta";align-items:center;column-gap:16px;row-gap:2px;
+  width:100%;min-height:64px;padding:10px 4px 10px 14px;border:0;background:none;text-align:left;cursor:pointer;position:relative}
+.t:hover{background:rgba(21,24,30,.035)}
+.t:focus-visible{outline-offset:-3px}
+.t.next{background:var(--raised);box-shadow:inset 3px 0 0 var(--gold)}
+.nm{grid-area:nm;font-weight:500;font-size:16px}
+.meta{grid-area:meta;display:flex;gap:10px;align-items:baseline}
+.st{font-size:14px;color:var(--muted)}
+.num{font-family:var(--serif);font-variation-settings:"opsz" 24;font-weight:600;font-size:15px;color:var(--cream)}
+.thr{grid-area:thr;position:relative;display:flex;gap:5px;align-items:center;padding:0 12px}
+.thr::before{content:"";position:absolute;left:0;right:0;top:50%;height:1.5px;margin-top:-.75px;background:var(--rest);opacity:.7}
+.thr::after{content:"";position:absolute;right:-3px;top:50%;width:5px;height:5px;margin-top:-2.5px;border-radius:50%;background:var(--muted)}
+.bd{position:relative;width:14px;height:14px;border-radius:50%;background:var(--navy);box-shadow:inset 0 0 0 1.5px var(--rest)}
+.bd.on{background:radial-gradient(circle at 34% 30%,#FFE9AE 0 11%,#DC9C00 30%,var(--bead) 66%,var(--bead-lo));box-shadow:0 1px 1.5px rgba(80,50,0,.35)}
+.bd.on.anim{animation:fillb .38s cubic-bezier(.3,1.4,.5,1) both;animation-delay:var(--d)}
+@keyframes fillb{from{background:var(--navy);box-shadow:inset 0 0 0 1.5px var(--rest);transform:scale(.75)}}
+.tag{display:inline-block;margin-left:8px;font-size:12px;font-weight:600;color:#FFFFFF;background:var(--gold);border-radius:4px;padding:1px 6px;vertical-align:2px;white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.anim{animation:none!important}}
+.upnext{margin:0 0 18px}
+.upnext p{margin:0 0 10px;color:var(--muted);font-size:15px}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pick,.give{min-height:48px;padding:0 10px;font-size:15px;border-radius:12px;font-weight:600;cursor:pointer}
+.pick{border:1.5px solid var(--gold);background:transparent;color:var(--gold)}
+.pick:hover{background:rgba(11,57,168,.07)}
+.give{border:1px solid var(--soft-border);background:var(--raised);color:var(--cream);font-weight:500}
+.give:hover{background:var(--wash)}
+.tag{display:inline-block;margin-left:8px;font-size:12px;font-weight:600;color:#FFFFFF;background:var(--gold);border-radius:4px;padding:1px 6px;vertical-align:2px}
+
+footer{color:var(--muted);font-size:14px;padding:36px 0 24px;margin-top:36px;border-top:1px solid var(--line)}
+footer p{margin:0 0 4px}
+footer a{color:var(--gold);text-underline-offset:3px}
+
+/* ---------- tablet + up: rail ---------- */
+@media (min-width:768px){
+  .app{padding:0 0 0 92px}
+  .nav{top:0;right:auto;width:92px;height:auto;flex-direction:column;justify-content:flex-start;gap:6px;padding:20px 8px;border-top:0;border-right:1px solid var(--line)}
+  .nav a{flex:none;min-height:68px;border-radius:12px}
+  .nav a[aria-current]{background:var(--wash)}
+  .nav a[aria-current]::before{top:10px;left:calc(50% + 13px)}
+  .nav .mark{display:block;align-self:center;margin:0 0 18px}
+  main{max-width:720px;padding:0 40px}
+  .top{padding-top:28px}
+  .ask h2{font-size:68px}
+  .alt{grid-template-columns:1fr 1fr}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .t{grid-template-columns:15rem 8rem 1fr 4rem;grid-template-areas:"nm thr st num";min-height:60px;padding:8px 8px 8px 18px}
+  .meta{display:contents}
+  .st{grid-area:st;padding-left:12px;white-space:nowrap}
+  .num{grid-area:num;text-align:right}
+  .bd{width:16px;height:16px}
+}
+
+/* ---------- wide: two columns ---------- */
+@media (min-width:1100px){
+  main{max-width:none;padding:0 48px 0 52px;display:grid;grid-template-columns:minmax(330px,0.82fr) minmax(560px,1.18fr);
+    grid-template-areas:"top top" "ask practice" "foot foot";column-gap:clamp(40px,5vw,88px)}
+  .top{grid-area:top}
+  .ask{grid-area:ask;align-self:center;padding-bottom:40px}
+  .practice{grid-area:practice;margin-top:0}
+  footer{grid-area:foot}
+  .ask h2{margin-top:8px}
+  .levels{margin:0 0 16px}
+  .ph{margin-bottom:6px}
+  .ask h2{font-size:62px}
+  .acts{display:flex}
+  .pick,.give{padding:0 20px;font-size:16px;white-space:nowrap}
+  .t{min-height:56px;grid-template-columns:13.5rem 8rem 1fr auto;column-gap:10px}
+}
+@media (min-width:1360px){
+  .ask h2{font-size:76px}
+  .upnext{display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .upnext p{margin:0}
+  .snap{min-height:76px;font-size:19px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="nav" aria-label="Main">
+    <svg class="mark" width="40" height="28" viewBox="0 0 40 28" aria-hidden="true">
+      <defs><radialGradient id="mg" cx="42%" cy="34%" r="70%"><stop offset="0" stop-color="#FFD66B"/><stop offset=".5" stop-color="#F4A900"/><stop offset="1" stop-color="#A86B00"/></radialGradient></defs>
+      <rect x="0" y="12.5" width="40" height="3" rx="1.5" fill="#857E6C"/>
+      <ellipse cx="20" cy="14" rx="9" ry="12.5" fill="url(#mg)"/>
+    </svg>
+    <a href="#" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-5h4v5"/></svg>Home</a>
+    <a href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v10H10l-4 4v-4H5z"/></svg>Tutor</a>
+    <a href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18"/><circle cx="7" cy="12" r="2.5"/><circle cx="12" cy="12" r="2.5"/><circle cx="17" cy="12" r="2.5"/></svg>String</a>
+    <a href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 2"/><path d="M10 3h4"/></svg>Exam</a>
+  </nav>
+
+  <main>
+    <header class="top">
+      <h1 class="word">SumDeTing</h1>
+      <p class="tally" style="margin:0"><span><b>12</b> beads this week</span><span><b>4</b>-day streak</span></p>
+    </header>
+
+    <section class="ask" aria-labelledby="ask-h">
+      <h2 id="ask-h">Stuck?<br> I got you.</h2>
+      <p class="lede">I guide you to the answer, bead by bead. I&nbsp;never hand it&nbsp;over.</p>
+      <button class="snap" type="button">
+        <svg viewBox="0 0 28 28" aria-hidden="true"><path d="M4 9.5A2.5 2.5 0 0 1 6.5 7h3l2-3h5l2 3h3A2.5 2.5 0 0 1 24 9.5v11a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 4 20.5z"/><circle cx="14" cy="15" r="4.5"/></svg>
+        <span>Snap a photo<small>of the question in your book</small></span>
+      </button>
+      <form class="type" onsubmit="return false">
+        <label class="sr" for="q">Type it</label>
+        <input id="q" name="q" type="text" placeholder="Or type it, like 3/4 of 120" autocomplete="off">
+        <button type="submit" aria-label="Send question"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg></button>
+      </form>
+      <div class="alt">
+        <button type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg>Draw it</button>
+        <button type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>Say it</button>
+      </div>
+    </section>
+
+    <section class="practice" aria-labelledby="pr-h">
+      <div class="ph"><h2 id="pr-h">Practise a topic</h2></div>
+      <fieldset class="levels">
+        <legend>Level</legend>
+        <div class="chips">
+          <input type="radio" name="lvl" id="l1"><label for="l1">Common Entrance</label>
+          <input type="radio" name="lvl" id="l2" checked><label for="l2">CSEC</label>
+          <input type="radio" name="lvl" id="l3"><label for="l3">Additional Maths</label>
+          <input type="radio" name="lvl" id="l4"><label for="l4">CAPE</label>
+        </div>
+      </fieldset>
+
+      <div class="upnext">
+        <p>Two more beads and Algebra is mastered.</p>
+        <div class="acts"><button class="pick" type="button">Pick up Algebra</button><button class="give" type="button">Give me a problem</button></div>
+      </div>
+      <ul class="strings" aria-label="CSEC topics. Gold beads are steps you got right.">
+          <li><button class="t" type="button"><span class="nm">Fractions &amp; Decimals</span><span class="thr" aria-hidden="true"><i class="bd on anim" style="--d:120ms"></i><i class="bd"></i><i class="bd"></i><i class="bd"></i><i class="bd"></i></span><span class="meta"><span class="st">Attempted</span><span class="num">1 of 5<span class="sr"> beads. Start practice</span></span></span></button></li>
+          <li><button class="t" type="button"><span class="nm">Percentages &amp; Money</span><span class="thr" aria-hidden="true"><i class="bd on anim" style="--d:165ms"></i><i class="bd on anim" style="--d:235ms"></i><i class="bd"></i><i class="bd"></i><i class="bd"></i></span><span class="meta"><span class="st">Attempted</span><span class="num">2 of 5<span class="sr"> beads. Start practice</span></span></span></button></li>
+          <li><button class="t next" type="button"><span class="nm">Algebra <span class="tag">Up next</span></span><span class="thr" aria-hidden="true"><i class="bd on anim" style="--d:210ms"></i><i class="bd on anim" style="--d:280ms"></i><i class="bd on anim" style="--d:350ms"></i><i class="bd"></i><i class="bd"></i></span><span class="meta"><span class="st">Familiar</span><span class="num">3 of 5<span class="sr"> beads. Start practice</span></span></span></button></li>
+          <li><button class="t" type="button"><span class="nm">Geometry &amp; Mensuration</span><span class="thr" aria-hidden="true"><i class="bd"></i><i class="bd"></i><i class="bd"></i><i class="bd"></i><i class="bd"></i></span><span class="meta"><span class="st">Not started</span><span class="num">0 of 5<span class="sr"> beads. Start practice</span></span></span></button></li>
+          <li><button class="t" type="button"><span class="nm">Ratio &amp; Proportion</span><span class="thr" aria-hidden="true"><i class="bd"></i><i class="bd"></i><i class="bd"></i><i class="bd"></i><i class="bd"></i></span><span class="meta"><span class="st">Not started</span><span class="num">0 of 5<span class="sr"> beads. Start practice</span></span></span></button></li>
+          <li><button class="t" type="button"><span class="nm">Statistics &amp; Probability</span><span class="thr" aria-hidden="true"><i class="bd on anim" style="--d:345ms"></i><i class="bd on anim" style="--d:415ms"></i><i class="bd on anim" style="--d:485ms"></i><i class="bd on anim" style="--d:555ms"></i><i class="bd"></i></span><span class="meta"><span class="st">Familiar</span><span class="num">4 of 5<span class="sr"> beads. Start practice</span></span></span></button></li>
+          <li><button class="t" type="button"><span class="nm">Functions &amp; Graphs</span><span class="thr" aria-hidden="true"><i class="bd"></i><i class="bd"></i><i class="bd"></i><i class="bd"></i><i class="bd"></i></span><span class="meta"><span class="st">Not started</span><span class="num">0 of 5<span class="sr"> beads. Start practice</span></span></span></button></li>
+          <li><button class="t" type="button"><span class="nm">Trigonometry</span><span class="thr" aria-hidden="true"><i class="bd"></i><i class="bd"></i><i class="bd"></i><i class="bd"></i><i class="bd"></i></span><span class="meta"><span class="st">Not started</span><span class="num">0 of 5<span class="sr"> beads. Start practice</span></span></span></button></li>
+      </ul>
+
+    </section>
+
+    <footer>
+      <p>Made in Barbados. Built with Claude on Amazon Bedrock.</p>
+      <p><a href="https://github.com/">Source on GitHub</a></p>
+    </footer>
+  </main>
+</div>
+</body>
+</html>
