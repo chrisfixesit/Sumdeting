@@ -165,8 +165,6 @@ export function closeAllDialogs() {
   while (stack.length) stack.at(-1).close(undefined);
 }
 
-export const dialogOpen = () => stack.length > 0;
-
 // ---- Notice toast ----
 
 let noticeEl = null;
