@@ -54,7 +54,7 @@ PROBLEMS = [
     ("CSEC", "Consumer Arithmetic", "$5000 is invested at 4% per annum compound "
      "interest, compounded annually. Find the interest earned after 2 years.",
      ["$408"], "$400"),
-    ("CSEC", "Algebra", "Make r the subject of the formula V = (1/3)πr²h.",
+    ("CSEC", "Algebra", "Make r the subject of the formula V = (1/3)πr²h, where r > 0.",
      ["r = √(3V/(πh))"], "r = √(V/(3πh))"),
     ("CSEC", "Coordinate Geometry", "Find the gradient of the line through (−2, 5) and "
      "(4, −7).", ["−2"], "2"),
@@ -169,7 +169,7 @@ TRAPS = [
       ("A⁻¹ has rows (−3, 1) and (5, −2)", False, "sign of the whole matrix")]),
     ("CAPE Unit 2", "Differential Equations", "Solve dy/dx = y/x given that y = 2 when "
      "x = 1.", [("ln y = ln x + ln 2, so y = 2x", True, "separation of variables")]),
-    ("CSEC", "Algebra", "Make r the subject of the formula V = (1/3)πr²h.",
+    ("CSEC", "Algebra", "Make r the subject of the formula V = (1/3)πr²h, where r > 0.",
      [("r = √(3V) / √(πh)", True, "split surd")]),
     ("CSEC", "Probability", "A bag holds 5 red and 3 blue balls. Two are taken out without "
      "replacement. Find the probability that both are red, giving your answer as a fraction "
@@ -213,6 +213,8 @@ def run(case):
 
 def main():
     runs = int(os.environ.get("RUNS", "1"))
+    if runs < 1:
+        raise SystemExit("RUNS must be 1 or more")
     work = [c for _ in range(runs) for c in cases()]
     print(f"Maths eval against {API}: {len(PROBLEMS) + len(TRAPS)} problems, "
           f"{len(work)} replies\n")
@@ -238,8 +240,9 @@ def main():
     errors = [r for r in results if r["error"]]
     misses = [r for r in results if not r["correct"] and not r["error"]]
     if errors:
-        print(f"\n{len(errors)} request(s) failed (not scored as maths): "
-              + ", ".join(r["id"] for r in errors))
+        print(f"\n{len(errors)} request(s) failed (not scored as maths):")
+        for r in errors:
+            print(f"  {r['id']} {r['kind']}: {r['reply'][:200] or '[empty reply]'}")
     for r in misses:
         label = "FALSE ACCEPT (✅ on a wrong answer)" if r["kind"].endswith("wrong") \
             else "FALSE REJECT (no ✅ on a right answer)"
