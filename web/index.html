@@ -139,9 +139,10 @@
     .wordmark b { color: var(--primary); font-weight: 600; }
 
     .menu-wrap { position: relative; }
+    /* 44px tap target around the 36px tile, like the account button. */
     #menu-btn {
-      width: 36px; height: 36px; border: 0; border-radius: 10px;
-      background: var(--wash); color: var(--primary);
+      width: 44px; height: 44px; padding: 4px; border: 0; border-radius: 14px;
+      background: var(--wash) content-box; color: var(--primary);
       font-size: 16px; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
     }
@@ -474,7 +475,9 @@
     .sheet-grab { width: 40px; height: 4px; border-radius: 2px; background: var(--bead-off); margin: 0 auto 1rem; }
     .sheet-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; }
     .sheet-head h3 { font: 600 1.2rem 'Fraunces', serif; color: var(--ink); }
+    /* 44px tap target; the negative margins keep the row and text where they were. */
     .sheet-head button {
+      min-width: 44px; min-height: 44px; padding: 0 0.5rem; margin: -12px -0.5rem -12px 0;
       background: none; border: 0; cursor: pointer;
       font: 600 0.82rem 'Space Grotesk'; color: var(--primary);
     }
