@@ -2144,6 +2144,25 @@
       speechSynthesis.speak(new SpeechSynthesisUtterance(spoken));
     }
 
+    // ---- Modal dialogs (sketch pad, past papers sheet) ----
+    // Like the account dialogs (account-dom.mjs): while one is open the page behind
+    // it is inert, and Tab and Shift+Tab wrap inside it.
+
+    function setModalOpen(dialog, open) {
+      dialog.hidden = !open;
+      for (const el of document.querySelectorAll("body > header, body > main, body > nav")) el.inert = open;
+    }
+    function trapTab(dialog) {
+      dialog.addEventListener("keydown", (e) => {
+        if (e.key !== "Tab") return;
+        const items = [...dialog.querySelectorAll("a[href], button:not([disabled])")].filter((el) => el.offsetParent);
+        const first = items[0];
+        const last = items.at(-1);
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      });
+    }
+
     // ---- Handwriting canvas (draw working, attach as a photo) ----
 
     const sketchModal = document.getElementById("sketch-modal");
@@ -2160,17 +2179,18 @@
     // (the + menu item, or home's "Draw it" once the Tutor view is showing).
     let skOpener = null;
     function closeSketch() {
-      sketchModal.hidden = true;
+      setModalOpen(sketchModal, false);
       (skOpener?.offsetParent ? skOpener : attachBtn).focus();
     }
     sketchModal.addEventListener("keydown", (e) => {
       if (e.key === "Escape") { e.preventDefault(); closeSketch(); }
     });
+    trapTab(sketchModal);
 
     document.getElementById("sketch").addEventListener("click", () => {
       window.getSelection()?.removeAllRanges();
       skOpener = document.activeElement;
-      sketchModal.hidden = false;
+      setModalOpen(sketchModal, true);
       skPen.focus();
       requestAnimationFrame(() => {
         const rect = skCanvas.getBoundingClientRect();
@@ -2290,7 +2310,7 @@
       };
       attachmentImg.src = dataUrl;
       attachment.classList.add("active");
-      sketchModal.hidden = true;
+      setModalOpen(sketchModal, false);
       input.focus();
     });
 
@@ -2804,10 +2824,10 @@
     const papersOpen = document.getElementById("papers-open");
     const papersClose = document.getElementById("papers-close");
     function closePapers() {
-      papersSheet.hidden = true;
+      setModalOpen(papersSheet, false);
       papersOpen.focus();
     }
-    papersOpen.addEventListener("click", () => { papersSheet.hidden = false; papersClose.focus(); });
+    papersOpen.addEventListener("click", () => { setModalOpen(papersSheet, true); papersClose.focus(); });
     papersClose.addEventListener("click", closePapers);
     papersSheet.addEventListener("click", (e) => {
       if (e.target === papersSheet) closePapers();
@@ -2815,6 +2835,7 @@
     papersSheet.addEventListener("keydown", (e) => {
       if (e.key === "Escape") { e.preventDefault(); closePapers(); }
     });
+    trapTab(papersSheet);
 
     // ---- Your string ----
 

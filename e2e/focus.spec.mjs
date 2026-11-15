@@ -34,6 +34,35 @@ test("sketch dialog takes focus, closes on Escape and returns focus to the + but
   expect(await focusedId(page)).toBe("attach-btn");
 });
 
+// Tab and Shift+Tab wrap inside an open dialog, the page behind it is inert, and
+// Escape still closes it after focus has crossed both ends.
+async function expectFocusTrapped(page, dialog) {
+  const isInert = () => page.evaluate(() => ["header", "main", "nav"].every((s) => document.querySelector(`body > ${s}`).inert));
+  expect(await isInert()).toBe(true);
+  await page.keyboard.press("Shift+Tab");
+  expect(await focusInside(page, dialog)).toBe(true);
+  await page.keyboard.press("Tab");
+  expect(await focusInside(page, dialog)).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(dialog)).toBeHidden();
+  expect(await isInert()).toBe(false);
+}
+
+test("papers sheet keeps Tab inside and makes the page behind it inert", async ({ page }) => {
+  await page.locator("#nav-practice").click();
+  await page.locator("#papers-open").click();
+  await expectFocusTrapped(page, "#papers-sheet");
+  expect(await focusedId(page)).toBe("papers-open");
+});
+
+test("sketch dialog keeps Tab inside and makes the page behind it inert", async ({ page }) => {
+  await page.locator("#nav-chat").click();
+  await page.locator("#attach-btn").click();
+  await page.locator("#sketch").click();
+  await expectFocusTrapped(page, "#sketch-modal");
+  expect(await focusedId(page)).toBe("attach-btn");
+});
+
 test("header menu sets aria-expanded, takes focus, closes on Escape and returns focus", async ({ page }) => {
   const btn = page.locator("#menu-btn");
   await expect(btn).toHaveAttribute("aria-expanded", "false");
