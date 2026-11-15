@@ -26,7 +26,8 @@ function offenders(text) {
   const out = [];
   for (const line of text.split(/\n+/)) {
     for (const sentence of line.split(/(?<=[.!?:])\s+/)) {
-      const words = sentence.replace(ALLOW_RE, "$1").trim().split(/\s+/).slice(1);
+      // Swap each allowed name for a lowercase placeholder, so word positions don't move.
+      const words = sentence.replace(ALLOW_RE, "$1x").trim().split(/\s+/).slice(1);
       if (words.some((w) => /^[^\p{L}]*\p{Lu}/u.test(w))) out.push(sentence.trim());
     }
   }
@@ -54,6 +55,9 @@ test("the allow-list check flags title case and passes proper nouns", () => {
   expect(offenders("CSEC Past Papers 2004–2025")).toEqual(["CSEC Past Papers 2004–2025"]);
   expect(offenders("Practise for Common Entrance with SumDeTing")).toEqual([]);
   expect(offenders("Exam mode. Pick a paper")).toEqual([]);
+  // An allowed name in first place must not shift the next word into first place.
+  expect(offenders("CSEC Past papers 2004–2025")).toEqual(["CSEC Past papers 2004–2025"]);
+  expect(offenders("Common Entrance Topics")).toEqual(["Common Entrance Topics"]);
 });
 
 test("Home, Tutor, String and Exam use sentence case at every level", async ({ page }) => {
