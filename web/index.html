@@ -615,6 +615,17 @@
     }
     .msg .copy-btn:hover { opacity: 1; }
 
+    /* Increase Contrast (prefers-contrast: more): faint edges and the copy icon
+       reach 3:1, using the field border colour in each theme. */
+    @media (prefers-contrast: more) {
+      :root { --h-soft: var(--input-border); }
+      /* Lighter than dark --input-border so the edge still clears 3:1 on the
+         hover fill (--h-hover #18306A): 3.4:1 there, 4.0:1 on --card. */
+      :root[data-theme="dark"] { --h-soft: #6B84C2; }
+      .msg .copy-btn { opacity: 0.75; }
+      .papers-card { border-color: var(--input-border); }
+    }
+
     /* Quick-reply chips */
     .chips { display: flex; flex-wrap: wrap; gap: 0.45rem; padding: 0 0 0.55rem; }
     .chips[hidden] { display: none; }
