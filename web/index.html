@@ -57,6 +57,7 @@
       --blue: #0B39A8;
       --gold: #F4A900;
       --gold-soft: #F4C143;
+      --gold-text: #8A5A00;      /* gold for text: 5.5:1 on --card (bright --gold is 1.86:1; keep it for beads) */
       --bead-off: #C9BE9f;
       --danger: #B4462E;
       --danger-line: #E0BDB0;
@@ -88,6 +89,7 @@
       --gold: #F4C143;
       --gold-soft: #F4C143;
       --gold-pale: #FFE29A;
+      --gold-text: var(--gold-pale);
       --bead-off: #2E4580;
       --danger: #FF9F87;
       --danger-line: #6E3530;
@@ -521,8 +523,7 @@
     .trow span { font: 500 0.82rem 'Space Grotesk'; color: var(--ink); }
     .trow b { font: 600 0.75rem 'Space Grotesk'; }
     .trow .s-done { color: var(--primary); }
-    .trow .s-mid { color: var(--gold); }
-    [data-theme="dark"] .trow .s-mid { color: var(--gold-pale); }
+    .trow .s-mid { color: var(--gold-text); }
     .trow .s-new { color: var(--faint); }
     .mastery { display: block; font: 400 0.75rem 'Space Grotesk'; color: var(--muted); margin: 0.75rem 0 0; }
     .mastery b { color: var(--ink); }
