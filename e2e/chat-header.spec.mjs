@@ -108,6 +108,33 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
       await expect(title(page)).toHaveText("Tutor");
     });
 
+    test("a request that fails after New session does not bring back the old heading", async ({ page }) => {
+      let releaseTrig;
+      const trigHeld = new Promise((r) => { releaseTrig = r; });
+      await page.route("**/api/chat", async (route) => {
+        const asked = JSON.stringify(route.request().postDataJSON());
+        if (!asked.includes("Trigonometry")) return route.fulfill({ json: { reply: "Here is a problem for you." } });
+        await trigHeld; // held until after New session, then it fails
+        return route.fulfill({ status: 500, json: { error: "Tutor unavailable" } });
+      });
+      page.on("dialog", (d) => d.accept()); // "Start a fresh session?"
+      await page.goto("/");
+
+      await page.locator('#topic-list .trow-home[data-topic="Algebra"]').click();
+      await expect(page.locator("#chat .msg.tutor").last()).toHaveText("Here is a problem for you.");
+      await page.locator("#nav-home").click();
+      await page.locator('#topic-list .trow-home[data-topic="Trigonometry"]').click();
+      const trig = await page.evaluate(() => TOPIC_SHORT.Trigonometry || "Trigonometry");
+      await expect(title(page)).toHaveText(`${trig} · CSEC`);
+
+      await page.locator("#menu-btn").click();
+      await page.locator("#new-session").click();
+      releaseTrig();
+      await expect(page.locator("#chat .msg.error")).toHaveCount(1);
+      await page.locator("#nav-chat").click();
+      await expect(title(page)).toHaveText("Tutor");
+    });
+
     for (const theme of ["light", "dark"]) {
       test(`the Tutor view has no axe violations in ${theme}`, async ({ page }) => {
         await page.addInitScript((t) => localStorage.setItem("sumdeting.theme", t), theme);
