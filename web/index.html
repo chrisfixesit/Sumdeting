@@ -941,7 +941,7 @@
     </div>
     <div id="account-slot"></div>
     <div class="menu-wrap">
-      <button id="menu-btn" type="button" aria-label="Menu" aria-haspopup="true">☰</button>
+      <button id="menu-btn" type="button" aria-label="Menu" aria-haspopup="true" aria-expanded="false" aria-controls="menu">☰</button>
       <div id="menu" hidden>
         <button id="speak" class="speak-btn" type="button" title="Read the tutor's replies aloud" aria-pressed="false"><svg class="icon"><use href="#i-speaker"/></svg> <span id="speak-label">Read aloud</span></button>
         <button id="recap" type="button" disabled title="Work through at least one problem first"><svg class="icon"><use href="#i-file"/></svg> Session recap</button>
@@ -1134,7 +1134,7 @@
       <img class="logo-dark" src="sumdeting-mark-cream.png" alt="" />
     </span>
     <div class="inner">
-      <button id="nav-home" class="on" type="button"><span class="bar"></span><svg class="icon"><use href="#i-home"/></svg><span>Home</span></button>
+      <button id="nav-home" class="on" type="button" aria-current="page"><span class="bar"></span><svg class="icon"><use href="#i-home"/></svg><span>Home</span></button>
       <button id="nav-chat" type="button"><span class="bar"></span><svg class="icon"><use href="#i-pencil"/></svg><span>Tutor</span></button>
       <button id="nav-string" type="button"><span class="bar"></span><svg class="icon"><use href="#i-beads"/></svg><span>String</span></button>
       <button id="nav-practice" type="button"><span class="bar"></span><svg class="icon"><use href="#i-clock"/></svg><span>Exam</span></button>
@@ -2144,6 +2144,25 @@
       speechSynthesis.speak(new SpeechSynthesisUtterance(spoken));
     }
 
+    // ---- Modal dialogs (sketch pad, past papers sheet) ----
+    // Like the account dialogs (account-dom.mjs): while one is open the page behind
+    // it is inert, and Tab and Shift+Tab wrap inside it.
+
+    function setModalOpen(dialog, open) {
+      dialog.hidden = !open;
+      for (const el of document.querySelectorAll("body > header, body > main, body > nav")) el.inert = open;
+    }
+    function trapTab(dialog) {
+      dialog.addEventListener("keydown", (e) => {
+        if (e.key !== "Tab") return;
+        const items = [...dialog.querySelectorAll("a[href], button:not([disabled])")].filter((el) => el.offsetParent);
+        const first = items[0];
+        const last = items.at(-1);
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      });
+    }
+
     // ---- Handwriting canvas (draw working, attach as a photo) ----
 
     const sketchModal = document.getElementById("sketch-modal");
@@ -2156,9 +2175,23 @@
     let skDrawn = false;
     let skScale = 1; // canvas pixels per CSS pixel, set when the pad opens
 
+    // Focus goes back to whatever opened the pad, or to + when that has been hidden
+    // (the + menu item, or home's "Draw it" once the Tutor view is showing).
+    let skOpener = null;
+    function closeSketch() {
+      setModalOpen(sketchModal, false);
+      (skOpener?.offsetParent ? skOpener : attachBtn).focus();
+    }
+    sketchModal.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); closeSketch(); }
+    });
+    trapTab(sketchModal);
+
     document.getElementById("sketch").addEventListener("click", () => {
       window.getSelection()?.removeAllRanges();
-      sketchModal.hidden = false;
+      skOpener = document.activeElement;
+      setModalOpen(sketchModal, true);
+      skPen.focus();
       requestAnimationFrame(() => {
         const rect = skCanvas.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
@@ -2260,16 +2293,14 @@
       return out;
     }
 
-    document.getElementById("sk-cancel").addEventListener("click", () => {
-      sketchModal.hidden = true;
-    });
+    document.getElementById("sk-cancel").addEventListener("click", closeSketch);
     sketchModal.addEventListener("click", (e) => {
-      if (e.target === sketchModal) sketchModal.hidden = true;
+      if (e.target === sketchModal) closeSketch();
     });
 
     document.getElementById("sk-send").addEventListener("click", () => {
       const ink = skDrawn ? skInkBox() : null;
-      if (!ink) { sketchModal.hidden = true; return; }
+      if (!ink) { closeSketch(); return; }
       const dataUrl = skCropped(ink).toDataURL("image/jpeg", 0.85);
       pendingImage = {
         handwritten: true,
@@ -2279,7 +2310,7 @@
       };
       attachmentImg.src = dataUrl;
       attachment.classList.add("active");
-      sketchModal.hidden = true;
+      setModalOpen(sketchModal, false);
       input.focus();
     });
 
@@ -2432,9 +2463,12 @@
     function goView(v) {
       for (const name of VIEWS) {
         document.getElementById("view-" + name).classList.toggle("active", name === v);
-        document.getElementById("nav-" + name).classList.toggle("on", name === v);
+        const nav = document.getElementById("nav-" + name);
+        nav.classList.toggle("on", name === v);
+        if (name === v) nav.setAttribute("aria-current", "page");
+        else nav.removeAttribute("aria-current");
       }
-      if (typeof menuEl !== "undefined") menuEl.hidden = true;
+      if (typeof menuEl !== "undefined") closeMenu(false);
       if (v === "string") renderString();
       if (v === "chat") scrollToBottom(false);
       else window.scrollTo({ top: 0 });
@@ -2447,12 +2481,27 @@
 
     const menuEl = document.getElementById("menu");
     const menuBtn = document.getElementById("menu-btn");
+    // Same pattern as the + attach menu: focus moves in, Escape closes and refocuses.
+    function openMenu() {
+      menuEl.hidden = false;
+      menuBtn.setAttribute("aria-expanded", "true");
+      menuEl.querySelector("button:not(:disabled), a")?.focus();
+    }
+    function closeMenu(refocus = true) {
+      if (menuEl.hidden) return;
+      menuEl.hidden = true;
+      menuBtn.setAttribute("aria-expanded", "false");
+      if (refocus) menuBtn.focus();
+    }
     menuBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      menuEl.hidden = !menuEl.hidden;
+      menuEl.hidden ? openMenu() : closeMenu();
+    });
+    menuEl.parentElement.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); closeMenu(); }
     });
     document.addEventListener("click", (e) => {
-      if (!menuEl.hidden && !menuEl.contains(e.target)) menuEl.hidden = true;
+      if (!menuEl.hidden && !menuEl.contains(e.target)) closeMenu(false);
     });
 
     // ---- Theme toggle (chalk light / espresso dark, remembered) ----
@@ -2772,11 +2821,21 @@
     // ---- Past papers bottom sheet ----
 
     const papersSheet = document.getElementById("papers-sheet");
-    document.getElementById("papers-open").addEventListener("click", () => { papersSheet.hidden = false; });
-    document.getElementById("papers-close").addEventListener("click", () => { papersSheet.hidden = true; });
+    const papersOpen = document.getElementById("papers-open");
+    const papersClose = document.getElementById("papers-close");
+    function closePapers() {
+      setModalOpen(papersSheet, false);
+      papersOpen.focus();
+    }
+    papersOpen.addEventListener("click", () => { setModalOpen(papersSheet, true); papersClose.focus(); });
+    papersClose.addEventListener("click", closePapers);
     papersSheet.addEventListener("click", (e) => {
-      if (e.target === papersSheet) papersSheet.hidden = true;
+      if (e.target === papersSheet) closePapers();
     });
+    papersSheet.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); closePapers(); }
+    });
+    trapTab(papersSheet);
 
     // ---- Your string ----
 
