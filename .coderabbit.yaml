@@ -23,8 +23,8 @@ reviews:
   merge_risk_instructions: >
     High: the tutor SYSTEM_PROMPT or model settings in backend/tutor.mjs,
     validateMessages limits, the Function URL auth or CloudFront OAC, IAM, and
-    the CSP, DOMPurify or SRI setup. Moderate: other backend logic and infra that
-    doesn't touch IAM. Low: web copy, styling, docs and tests.
+    the CSP, DOMPurify or SRI setup. Moderate: other backend logic and the
+    deploy workflow. Low: web copy, styling, docs and tests.
   high_level_summary: true
   poem: false
   review_status: true
@@ -65,15 +65,6 @@ reviews:
         Don't log message content or images (students' homework), and keep error
         responses generic. Check both the streaming and buffered handlers stay in
         step.
-    - path: "infra/**/*.tf"
-      instructions: >
-        The Function URL must keep authorization_type = "AWS_IAM" and only accept
-        CloudFront via Origin Access Control; flag anything that makes the API
-        publicly invokable. Keep reserved concurrency and the monthly budget alert.
-        Bedrock IAM must stay scoped to the configured model and inference profile,
-        not bedrock:* on "*". S3 keeps its public access block. When model_id
-        changes, ask whether the model is enabled in the account (a Sonnet switch
-        was reverted for this).
     - path: "web/**/*.html"
       instructions: >
         Model output is rendered with marked and must pass through DOMPurify before
