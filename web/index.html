@@ -1949,6 +1949,7 @@
       if (examTimer) { clearInterval(examTimer); examTimer = null; examBar.classList.remove("active"); examBtn.disabled = false; }
       chat.querySelectorAll(".msg").forEach((el, i) => { if (i > 0) el.remove(); }); // keep the greeting
       activeProblem = null;
+      chatTitle.textContent = "Tutor";
       pendingImage = null;
       attachment.classList.remove("active");
       chipsEl.hidden = true;
@@ -2419,6 +2420,8 @@
       if (busy) return; // leave the header alone while a reply is in flight
       const level = levelName();
       // Every way into practice comes through here, so the chat heading always names it.
+      // If the request fails, the heading goes back to what is still on screen.
+      const prevTitle = chatTitle.textContent;
       chatTitle.textContent = `${TOPIC_SHORT[topic] || topic} · ${level}`;
       topicSel.value = topic;
       topicSel.dispatchEvent(new Event("change")); // persists prefs
@@ -2437,6 +2440,8 @@
         if (!mathpad.hidden) renderPad(); // the #topic change above ran while currentTopic was the old one
         activeProblem = { topic, level, userTurns: 0, hints: 0 };
         recordActivity(topic, false); // counts as attempted
+      } else {
+        chatTitle.textContent = prevTitle;
       }
     }
     practiceBtn.addEventListener("click", () => practise(window.SumHome.randomTopic(levelSetup().topics)));

@@ -66,6 +66,43 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
       await expect(title(page)).toHaveText(`${short} · CSEC`);
     });
 
+    test("a practice request that fails leaves the heading as it was", async ({ page }) => {
+      let fail = true;
+      await page.route("**/api/chat", (route) => (fail
+        ? route.fulfill({ status: 500, json: { error: "Tutor unavailable" } })
+        : route.fulfill({ json: { reply: "Here is a problem for you." } })));
+      await page.goto("/");
+
+      // Nothing running yet: a failed start goes back to "Tutor".
+      await page.locator('#topic-list .trow-home[data-topic="Algebra"]').click();
+      await expect(page.locator("#chat .msg.error")).toHaveCount(1);
+      await expect(title(page)).toHaveText("Tutor");
+
+      // Practising Algebra: a failed start on another topic keeps "Algebra · CSEC".
+      fail = false;
+      await page.locator("#nav-home").click();
+      await page.locator('#topic-list .trow-home[data-topic="Algebra"]').click();
+      await expect(title(page)).toHaveText("Algebra · CSEC");
+      fail = true;
+      await page.locator("#nav-home").click();
+      await page.locator('#topic-list .trow-home[data-topic="Trigonometry"]').click();
+      await expect(page.locator("#chat .msg.error")).toHaveCount(2);
+      await expect(title(page)).toHaveText("Algebra · CSEC");
+    });
+
+    test("New session puts the heading back to Tutor", async ({ page }) => {
+      await stubTutor(page);
+      page.on("dialog", (d) => d.accept()); // "Start a fresh session?"
+      await page.goto("/");
+      await page.locator('#topic-list .trow-home[data-topic="Algebra"]').click();
+      await expect(title(page)).toHaveText("Algebra · CSEC");
+
+      await page.locator("#menu-btn").click();
+      await page.locator("#new-session").click();
+      await page.locator("#nav-chat").click();
+      await expect(title(page)).toHaveText("Tutor");
+    });
+
     for (const theme of ["light", "dark"]) {
       test(`the Tutor view has no axe violations in ${theme}`, async ({ page }) => {
         await page.addInitScript((t) => localStorage.setItem("sumdeting.theme", t), theme);
