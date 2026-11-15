@@ -37,15 +37,16 @@ test("sketch dialog takes focus, closes on Escape and returns focus to the + but
 // Tab and Shift+Tab wrap inside an open dialog, the page behind it is inert, and
 // Escape still closes it after focus has crossed both ends.
 async function expectFocusTrapped(page, dialog) {
-  const isInert = () => page.evaluate(() => ["header", "main", "nav"].every((s) => document.querySelector(`body > ${s}`).inert));
-  expect(await isInert()).toBe(true);
+  // header, main and nav, each checked on its own so a partial restore fails.
+  const inert = () => page.evaluate(() => ["header", "main", "nav"].map((s) => document.querySelector(`body > ${s}`).inert));
+  expect(await inert()).toEqual([true, true, true]);
   await page.keyboard.press("Shift+Tab");
   expect(await focusInside(page, dialog)).toBe(true);
   await page.keyboard.press("Tab");
   expect(await focusInside(page, dialog)).toBe(true);
   await page.keyboard.press("Escape");
   await expect(page.locator(dialog)).toBeHidden();
-  expect(await isInert()).toBe(false);
+  expect(await inert()).toEqual([false, false, false]);
 }
 
 test("papers sheet keeps Tab inside and makes the page behind it inert", async ({ page }) => {
