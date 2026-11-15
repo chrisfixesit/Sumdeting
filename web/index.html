@@ -556,9 +556,8 @@
       padding: 0.4rem 0 0.85rem;
       border-bottom: 1px solid var(--line);
     }
-    .chat-top img { width: 26px; height: 26px; object-fit: contain; }
     .chat-top .t { flex: 1; }
-    .chat-top .t b { display: block; font: 600 1.05rem 'Fraunces', serif; color: var(--ink); }
+    .chat-top .t h2 { margin: 0; font: 600 1.05rem 'Fraunces', serif; color: var(--ink); }
     .chat-top .t span { font: 400 0.7rem 'Space Grotesk'; color: var(--faint); }
 
     #chat {
@@ -1099,10 +1098,9 @@
     <div id="sr-live" class="sr-only" aria-live="polite" role="status"></div>
     <section id="view-chat" class="view" aria-label="Tutor chat">
       <div class="chat-top">
-        <!-- the small mark: fewer, bolder symbols that stay readable at this size -->
-        <img class="logo-light" src="sumdeting-mark-blue.png" alt="" aria-hidden="true" />
-        <img class="logo-dark" src="sumdeting-mark-cream.png" alt="" aria-hidden="true" />
-        <div class="t"><b>SumDeTing</b><span id="chat-context">Socratic tutor · I never hand the answer over</span></div>
+        <!-- No logo here: the app header already carries the brand. The heading is
+             what the student is working on: "Tutor", or the topic and level. -->
+        <div class="t"><h2 id="chat-title">Tutor</h2><span>Socratic tutor · I never hand the answer over</span></div>
       </div>
       <div id="chat">
         <div class="msg tutor">Hi! I'm SumDeTing. Whether it's Common Entrance practice or CSEC Maths, type your problem, tap + to add a photo of it, grab a past paper from the Exam page, or hit "Give me a problem", and we'll work through it together, bead by bead.</div>
@@ -2418,8 +2416,10 @@
 
     // Ask the tutor for one practice problem on `topic` at the current level.
     async function practise(topic) {
-      if (busy) return;
+      if (busy) return; // leave the header alone while a reply is in flight
       const level = levelName();
+      // Every way into practice comes through here, so the chat heading always names it.
+      chatTitle.textContent = `${TOPIC_SHORT[topic] || topic} · ${level}`;
       topicSel.value = topic;
       topicSel.dispatchEvent(new Event("change")); // persists prefs
       // Asking for a fresh problem abandons the current one — log it as
@@ -2720,7 +2720,7 @@
       "Differential Equations": "Diff. equations",
       "Vectors & Matrices": "Vectors",
     };
-    const chatContext = document.getElementById("chat-context");
+    const chatTitle = document.getElementById("chat-title");
     const topicList = document.getElementById("topic-list");
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let beadsAnimated = false; // the bead fill plays once, on the first render
@@ -2776,11 +2776,7 @@
         count.textContent = `${solved} of 5`;
 
         b.append(nm, beads, st, count);
-        b.addEventListener("click", () => {
-          if (busy) return; // leave the header alone while a reply is in flight
-          chatContext.textContent = `${TOPIC_SHORT[topic] || topic} · ${levelName()}`;
-          practise(topic);
-        });
+        b.addEventListener("click", () => practise(topic));
         li.appendChild(b);
         topicList.appendChild(li);
       });
