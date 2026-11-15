@@ -174,6 +174,16 @@
     #menu button:last-child { border-bottom: 0; }
     #menu button:disabled { opacity: 0.4; cursor: default; }
     #menu button .icon { color: var(--primary); }
+    /* Appearance: Light / Dark / Match device, a segmented row like the level picker. */
+    #menu .appearance { padding: 0.6rem 0.75rem 0.7rem; border-bottom: 1px solid var(--card-border); }
+    #appearance-label { display: block; margin: 0 0 0.4rem 0.25rem; font: 500 0.75rem 'Space Grotesk'; color: var(--muted); }
+    #menu .appearance-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 2px; border-radius: 999px; background: var(--wash); }
+    #menu .appearance-seg button {
+      min-height: 44px; padding: 0 0.25rem; justify-content: center;
+      border: 0; border-radius: 999px;
+    }
+    /* Selected: the same filled ink pill as the level picker (.seg.on). */
+    #menu .appearance-seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); font-weight: 600; }
     .speak-btn.on { color: var(--primary); font-weight: 600; }
 
     main {
@@ -957,7 +967,14 @@
         <button id="speak" class="speak-btn" type="button" title="Read the tutor's replies aloud" aria-pressed="false"><svg class="icon"><use href="#i-speaker"/></svg> <span id="speak-label">Read aloud</span></button>
         <button id="recap" type="button" disabled title="Work through at least one problem first"><svg class="icon"><use href="#i-file"/></svg> Session recap</button>
         <button id="new-session" type="button" title="Clear this conversation and start fresh"><svg class="icon"><use href="#i-refresh"/></svg> New session</button>
-        <button id="theme" type="button" title="Switch theme"><svg class="icon"><use href="#i-moon"/></svg> <span id="theme-label">Dark mode</span></button>
+        <div class="appearance" role="group" aria-labelledby="appearance-label">
+          <span id="appearance-label">Appearance</span>
+          <div class="appearance-seg">
+            <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+            <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
+            <button type="button" data-theme-choice="device" aria-pressed="true" aria-label="Match device" title="Follow your device's light or dark setting">Device</button>
+          </div>
+        </div>
         <a id="help-link" href="/about.html"><svg class="icon"><use href="#i-book"/></svg> About SumDeTing</a>
       </div>
     </div>
@@ -2515,34 +2532,46 @@
       if (!menuEl.hidden && !menuEl.contains(e.target)) closeMenu(false);
     });
 
-    // ---- Theme toggle (chalk light / espresso dark, remembered) ----
+    // ---- Appearance (chalk light / royal navy dark / match device) ----
+    // A Light or Dark choice is remembered; "device" forgets it and follows the
+    // device's setting, live. Kept in memory too, so it works without storage.
 
     const THEME_KEY = "sumdeting.theme";
-    const themeBtn = document.getElementById("theme");
     const themeMedia = window.matchMedia("(prefers-color-scheme: dark)");
+    const themeChoices = [...document.querySelectorAll("[data-theme-choice]")];
 
     function applyTheme(t) {
       document.documentElement.dataset.theme = t;
-      themeBtn.querySelector("use").setAttribute("href", t === "dark" ? "#i-sun" : "#i-moon");
-      document.getElementById("theme-label").textContent = t === "dark" ? "Light mode" : "Dark mode";
       document.getElementById("meta-theme")?.setAttribute("content", t === "dark" ? "#0A1A3D" : "#F4EEE0");
     }
 
-    let storedTheme = null;
-    try { storedTheme = localStorage.getItem(THEME_KEY); } catch { /* ignore */ }
-    applyTheme(storedTheme || (themeMedia.matches ? "dark" : "light"));
+    let themeChoice = "device";
+    try {
+      const s = localStorage.getItem(THEME_KEY);
+      if (s === "light" || s === "dark") themeChoice = s;
+    } catch { /* ignore */ }
 
-    themeMedia.addEventListener("change", (e) => {
-      let s = null;
-      try { s = localStorage.getItem(THEME_KEY); } catch { /* ignore */ }
-      if (!s) applyTheme(e.matches ? "dark" : "light");
+    function setThemeChoice(choice) {
+      themeChoice = choice;
+      applyTheme(choice === "device" ? (themeMedia.matches ? "dark" : "light") : choice);
+      for (const b of themeChoices) b.setAttribute("aria-pressed", String(b.dataset.themeChoice === choice));
+    }
+    setThemeChoice(themeChoice);
+
+    themeMedia.addEventListener("change", () => {
+      if (themeChoice === "device") setThemeChoice("device");
     });
 
-    themeBtn.addEventListener("click", () => {
-      const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-      try { localStorage.setItem(THEME_KEY, next); } catch { /* ignore */ }
-      applyTheme(next);
-    });
+    for (const b of themeChoices) {
+      b.addEventListener("click", () => {
+        const choice = b.dataset.themeChoice;
+        try {
+          if (choice === "device") localStorage.removeItem(THEME_KEY);
+          else localStorage.setItem(THEME_KEY, choice);
+        } catch { /* ignore */ }
+        setThemeChoice(choice);
+      });
+    }
 
     // ---- Home: "Snap a photo" shortcut ----
 
