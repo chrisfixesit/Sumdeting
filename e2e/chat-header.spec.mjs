@@ -68,9 +68,12 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
 
     test("a practice request that fails leaves the heading as it was", async ({ page }) => {
       let fail = true;
-      await page.route("**/api/chat", (route) => (fail
-        ? route.fulfill({ status: 500, json: { error: "Tutor unavailable" } })
-        : route.fulfill({ json: { reply: "Here is a problem for you." } })));
+      // A slow successful reply, so the test has to wait for it rather than for the heading.
+      await page.route("**/api/chat", async (route) => {
+        if (fail) return route.fulfill({ status: 500, json: { error: "Tutor unavailable" } });
+        await new Promise((r) => setTimeout(r, 300));
+        return route.fulfill({ json: { reply: "Here is a problem for you." } });
+      });
       await page.goto("/");
 
       // Nothing running yet: a failed start goes back to "Tutor".
@@ -83,6 +86,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
       await page.locator("#nav-home").click();
       await page.locator('#topic-list .trow-home[data-topic="Algebra"]').click();
       await expect(title(page)).toHaveText("Algebra · CSEC");
+      // The heading changes before the reply arrives, so wait for the reply itself.
+      await expect(page.locator("#chat .msg.tutor").last()).toHaveText("Here is a problem for you.");
       fail = true;
       await page.locator("#nav-home").click();
       await page.locator('#topic-list .trow-home[data-topic="Trigonometry"]').click();
