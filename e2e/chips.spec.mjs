@@ -58,13 +58,15 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
   });
 }
 
-for (const theme of ["light", "dark"]) {
-  test.describe(`390x844 ${theme}`, () => {
-    test.use({ viewport: { width: 390, height: 844 } });
+for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+  for (const theme of ["light", "dark"]) {
+    test.describe(`${viewport.width}x${viewport.height} ${theme}`, () => {
+      test.use({ viewport });
 
-    test("chat with the chips showing has no axe violations", async ({ page }) => {
-      await showChips(page, theme);
-      expect((await new AxeBuilder({ page }).withTags(TAGS).analyze()).violations).toEqual([]);
+      test("chat with the chips showing has no axe violations", async ({ page }) => {
+        await showChips(page, theme);
+        expect((await new AxeBuilder({ page }).withTags(TAGS).analyze()).violations).toEqual([]);
+      });
     });
-  });
+  }
 }
