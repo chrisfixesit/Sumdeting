@@ -136,7 +136,8 @@ jobs:
           for f in dist/*.mjs; do modules+=("/$(basename "$f")"); done
           id=$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" \
             --paths "/" "/index.html" "/manifest.webmanifest" "/vendor/fonts/*" \
-            "/account*" "${modules[@]}" "/privacy.html" "/about.html" --query Invalidation.Id --output text)
+            "/account*" "${modules[@]}" "/privacy.html" "/about.html" \
+            "/sumdeting-*" "/apple-touch-icon.png" "/og-image.png" --query Invalidation.Id --output text)
           aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION" --id "$id"
 
   smoke:

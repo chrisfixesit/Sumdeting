@@ -8,13 +8,13 @@
   "theme_color": "#1c3ba8",
   "icons": [
     {
-      "src": "/apple-touch-icon.png",
+      "src": "/apple-touch-icon.png?v=2",
       "sizes": "180x180",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/sumdeting-app-light.png",
+      "src": "/sumdeting-app-light.png?v=2",
       "sizes": "1024x1024",
       "type": "image/png",
       "purpose": "any"
