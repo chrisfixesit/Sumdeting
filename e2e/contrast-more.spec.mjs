@@ -77,6 +77,16 @@ for (const theme of ["light", "dark"]) {
       }
     });
 
+    test("hovered outlined buttons keep a 3:1 edge against the hover fill", async ({ page }) => {
+      await open(page, theme, true);
+      for (const loc of [page.locator("#home-draw"), page.locator("#practice-btn")]) {
+        await loc.scrollIntoViewIfNeeded();
+        await loc.hover();
+        const { border, own } = await edge(loc);
+        expect(contrast(parseRgb(border), parseRgb(own))).toBeGreaterThanOrEqual(3);
+      }
+    });
+
     test("papers card edge reaches 3:1 against the page", async ({ page }) => {
       await open(page, theme, true);
       await page.locator("#nav-practice").click();
