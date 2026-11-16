@@ -1903,6 +1903,13 @@
     }
     input.addEventListener("input", autogrow);
     form.addEventListener("submit", () => requestAnimationFrame(autogrow));
+    // Phone, typing: a press that moved focus off the text box would bring the tabs back and shift
+    // the composer mid-tap, so the click missed Send, ∑ or +. Keep focus put, as the pad keys do.
+    for (const type of ["pointerdown", "mousedown"]) {
+      form.addEventListener(type, (e) => {
+        if (document.activeElement === input && e.target.closest("#send, #pad-toggle, #attach-btn")) e.preventDefault();
+      });
+    }
 
     // ---- Session persistence (survives refreshes; photos aren't stored) ----
 
