@@ -1,6 +1,7 @@
 import { applyEvents, mergeProgress } from "./progress.mjs";
 import { LEVELS } from "./profiles.mjs";
 import { httpError } from "./http.mjs";
+import { ConditionFailed } from "./table.mjs";
 
 const MAX_EVENTS = 100;
 const MAX_TOPICS = 100;
@@ -151,15 +152,37 @@ async function authorise(ctx) {
   const kind = await repo.getAccess(ctx.account.id, profileId);
   if (!kind) throw httpError("not_found");
   if (kind !== "owner" && kind !== "guardian") throw httpError("forbidden");
-  const profile = await repo.getProfile(profileId);
-  if (!profile) throw httpError("not_found");
-  if (profile.consentStatus === "awaiting_parent") throw httpError("awaiting_parent");
-  return profileId;
+  const found = await repo.getProfileWithVersion(profileId);
+  if (!found) throw httpError("not_found");
+  if (found.profile.consentStatus === "awaiting_parent") throw httpError("awaiting_parent");
+  return { pid: profileId, kind, profileVersion: found.version };
+}
+
+const MAX_WRITE_TRIES = 5;
+
+/**
+ * Write progress only while the access check still holds (issue #21). The write is
+ * conditional, in one transaction, on the profile's META version and the caller's
+ * access kind seen by authorise(). If either changed in between, authorise() runs
+ * again: a deleted profile, withdrawn or reverted consent, or revoked access then
+ * gets the same 404/403 a fresh request would, which the client's queue drops. A
+ * harmless change (a rename) or a concurrent progress write just retries.
+ */
+async function writeProgress(ctx, fn) {
+  for (let attempt = 0; attempt < MAX_WRITE_TRIES; attempt++) {
+    const { pid, kind, profileVersion } = await authorise(ctx);
+    try {
+      return await ctx.deps.repo.updateProgress(pid, fn, { accountId: ctx.account.id, kind, profileVersion });
+    } catch (err) {
+      if (!(err instanceof ConditionFailed || err?.name === "ConditionFailed")) throw err;
+    }
+  }
+  throw new Error("Progress update conflict: too many concurrent writes");
 }
 
 export function register(router) {
   router.route("POST", "/progress/get", async (ctx) => {
-    const pid = await authorise(ctx);
+    const { pid } = await authorise(ctx);
     const { progress } = await ctx.deps.repo.getProgress(pid);
     return { progress: publicProgress(progress) };
   });
@@ -169,9 +192,8 @@ export function register(router) {
     if (!Array.isArray(events) || events.length < 1 || events.length > MAX_EVENTS) throw bad();
     const latest = latestDay(ctx.deps.now());
     const clean = events.map((ev) => cleanEvent(ev, latest)).filter(Boolean);
-    const pid = await authorise(ctx);
     let applied = 0;
-    const next = await ctx.deps.repo.updateProgress(pid, (p) => {
+    const next = await writeProgress(ctx, (p) => {
       const kept = withinTopicCap(p, clean);
       applied = kept.length;
       return capProgress(p, applyEvents(p, kept));
@@ -187,8 +209,7 @@ export function register(router) {
     const { mergeId } = ctx.req.body;
     if (!isStr(mergeId, 64) || mergeId.length < 1) throw bad();
     const clean = { mastery: cleanMastery(local.mastery, latestDay(ctx.deps.now())), prefs: cleanPrefs(local.prefs) };
-    const pid = await authorise(ctx);
-    const next = await ctx.deps.repo.updateProgress(pid, (p) => {
+    const next = await writeProgress(ctx, (p) => {
       if ((p.appliedEventIds ?? []).includes(mergeId)) return p;
       const merged = capProgress(p, mergeProgress(p, clean));
       merged.appliedEventIds = [...merged.appliedEventIds, mergeId].slice(-200);
