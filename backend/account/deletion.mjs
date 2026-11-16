@@ -1,5 +1,5 @@
 import { httpError, clearCookie, COOKIE_NAME } from "./http.mjs";
-import { revertIfLastConsentGiver } from "./consent.mjs";
+import { revertIfLastConsentGiver, finishPendingConsentReverts } from "./consent.mjs";
 import { AccountChanged } from "./repo.mjs";
 
 const DAY_MS = 86400e3;
@@ -133,6 +133,11 @@ export async function runJanitor({ repo, mailer, now = () => Date.now() }) {
       return false;
     }
   };
+
+  // Reverts a failure left part-done (see consent.mjs), before anything reads consent state.
+  await finishPendingConsentReverts(deps, (profile, err) =>
+    console.error(`Janitor: pending consent revert ${profile.id} failed`, err)
+  );
 
   // Consent never given within the grace period.
   for (const profile of await repo.listProfiles()) {
