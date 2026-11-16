@@ -181,5 +181,74 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
       // Still just the abandoned outcome: Algebra wasn't restored as an open problem.
       expect((await algebra(again)).hist.map((h) => h.ok)).toEqual([0]);
     });
+
+    test("a streamed reply that arrives after New session doesn't scroll or save", async ({ page }) => {
+      let release;
+      const held = new Promise((r) => { release = r; });
+      await page.route("**/api/chat", async (route) => {
+        await held;
+        route.fulfill({ contentType: "text/plain; charset=utf-8", body: PROBLEM });
+      });
+      page.on("dialog", (d) => d.accept());
+      await page.goto("/");
+      await page.locator('#topic-list .trow-home[data-topic="Algebra"]').click();
+      await page.locator("#menu-btn").click();
+      await page.locator("#new-session").click(); // back to the home page, at the top
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+      const landed = page.waitForResponse("**/api/chat");
+      release();
+      await (await landed).finished();
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+      expect(await snapshot(page)).toBeNull();
+    });
   });
 }
+
+// Snapshots that disagree with themselves load as plain "Tutor": the restored
+// heading, topic and problem must describe one coherent practice, or none of it is used.
+const SINGLE = { width: 390, height: 844 };
+const algebraProblem = { topic: "Algebra", level: "CSEC", userTurns: 1, hints: 0 };
+for (const [name, practice] of [
+  ["a topic that isn't the problem's", { title: "Trigonometry · CSEC", topic: "Algebra", problem: { ...algebraProblem, topic: "Trigonometry" } }],
+  ["a heading that isn't the problem's", { title: "Geometry · CSEC", topic: "Algebra", problem: algebraProblem }],
+  ["an unknown topic", { title: "<b>x</b> · CSEC", topic: "<b>x</b>", problem: null }],
+]) {
+  test(`a snapshot with ${name} loads as Tutor`, async ({ page }) => {
+    await page.setViewportSize(SINGLE);
+    await stubTutor(page);
+    await seedSnapshot(page, { t: Date.now(), messages: oldMessages, practice });
+    await page.goto("/");
+    await expect(lastTutor(page)).toHaveText(PROBLEM);
+    await expect(title(page)).toHaveText("Tutor");
+    await answer(page, "x = 4");
+    await expect(lastTutor(page)).toHaveText(CORRECT);
+    const topics = await page.evaluate((k) => JSON.parse(localStorage.getItem(k) || "{}").topics ?? {}, MASTERY);
+    expect(topics.Algebra ?? null).toBeNull();
+    expect(topics.Trigonometry ?? null).toBeNull();
+  });
+}
+
+test("a CAPE unit practice (level with a unit) restores after a reload", async ({ page }) => {
+  await page.setViewportSize(SINGLE);
+  await stubTutor(page);
+  await page.goto("/");
+  await page.locator("#level-tabs").getByRole("button", { name: "CAPE", exact: true }).click();
+  await page.locator("#unit-tabs").getByRole("button", { name: "Unit 2", exact: true }).click();
+  await page.locator('#topic-list .trow-home[data-topic="Complex Numbers"]').click();
+  await expect(lastTutor(page)).toHaveText(PROBLEM);
+  const heading = await title(page).innerText();
+  expect(heading).toMatch(/ · CAPE Unit 2$/);
+  await page.reload();
+  await expect(title(page)).toHaveText(heading);
+  expect(await page.evaluate(() => activeProblem?.topic)).toBe("Complex Numbers");
+});
+
+test("a coherent snapshot after a ✅ (topic named, no open problem) still restores", async ({ page }) => {
+  await page.setViewportSize(SINGLE);
+  await stubTutor(page);
+  await seedSnapshot(page, { t: Date.now(), messages: oldMessages, practice: { title: "Algebra · CSEC", topic: "Algebra", problem: null } });
+  await page.goto("/");
+  await expect(title(page)).toHaveText("Algebra · CSEC");
+});

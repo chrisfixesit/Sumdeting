@@ -1493,6 +1493,8 @@
           let lastRender = 0;
           for (;;) {
             const { done, value } = await reader.read();
+            // Checked after every chunk, so a stale stream can't even scroll the new view.
+            if (session !== chatSession) { reader.cancel().catch(() => {}); return false; }
             if (done) break;
             full += decoder.decode(value, { stream: true });
             // Live markdown: re-render at most ~6x/sec (skipping frames in
@@ -1504,7 +1506,6 @@
               scrollToBottom(false);
             }
           }
-          if (session !== chatSession) return false;
           renderRich(bubble, full);
           addCopy(bubble, full);
           scrollToBottom(false);
@@ -1940,16 +1941,25 @@
       } catch { /* private mode / quota — session just won't persist */ }
     }
 
-    // Older snapshots have no `practice`; anything missing or malformed stays at
-    // the defaults ("Tutor", no topic, no active problem).
+    // Restore the practice only as one coherent state, the way practise() writes it:
+    // a known topic and level, the heading "<short topic> · <level>", and an open
+    // problem (if any) on that same topic and level. Older snapshots have no
+    // `practice`; those, and anything that doesn't fit, keep the defaults
+    // ("Tutor", no topic, no active problem).
     function restorePractice(p) {
-      if (!p || typeof p !== "object") return;
-      if (typeof p.title === "string" && p.title) chatTitle.textContent = p.title.slice(0, 80);
-      if (typeof p.topic === "string" && p.topic) currentTopic = p.topic;
+      if (!p || typeof p !== "object" || typeof p.title !== "string" || typeof p.topic !== "string") return;
+      const levels = new Set(Object.entries(LEVEL_SETUP).flatMap(([name, s]) =>
+        s.units ? Object.keys(s.units).map((u) => `${name} ${u}`) : [name]));
+      const topics = new Set(Object.values(LEVEL_SETUP).flatMap((s) =>
+        s.units ? Object.values(s.units).flatMap((u) => u.topics) : s.topics));
+      const prefix = `${TOPIC_SHORT[p.topic] || p.topic} · `;
+      const level = p.title.startsWith(prefix) ? p.title.slice(prefix.length) : null;
+      if (!topics.has(p.topic) || !levels.has(level)) return;
       const a = p.problem;
-      if (a && typeof a.topic === "string" && typeof a.level === "string") {
-        activeProblem = { topic: a.topic, level: a.level, userTurns: a.userTurns | 0, hints: a.hints | 0 };
-      }
+      if (a && (a.topic !== p.topic || a.level !== level)) return;
+      currentTopic = p.topic;
+      chatTitle.textContent = p.title;
+      if (a) activeProblem = { topic: a.topic, level: a.level, userTurns: a.userTurns | 0, hints: a.hints | 0 };
     }
 
     function clearSession() {
