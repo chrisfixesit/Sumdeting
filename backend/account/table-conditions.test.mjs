@@ -144,3 +144,29 @@ test("memory: a check op with no condition is refused, like DynamoDB, and nothin
   );
   assert.ok(await table.get("B", "X"), "nothing applied");
 });
+
+// Values that set no condition in either table: the check is refused, and the delete before it is not applied.
+const NO_CONDITION = [
+  { ifVersion: undefined }, { ifVersion: null }, { ifVersion: -1 }, { ifVersion: NaN },
+  { ifExists: false }, { ifNotExists: false }, { ifAttr: null }, { ifExists: undefined, ifAttr: undefined },
+];
+
+test("memory and dynamo: a check whose conditions have no effect is refused, and nothing is applied", async () => {
+  for (const conditions of NO_CONDITION) {
+    const label = JSON.stringify(conditions, (k, v) => (v === undefined ? "undefined" : Number.isNaN(v) ? "NaN" : v));
+    const { table } = await seeded();
+    await assert.rejects(
+      table.transact([{ delete: { pk: "B", sk: "X" } }, { check: { pk: "A", sk: "META" }, ...conditions }]),
+      TypeError,
+      `memory ${label}`
+    );
+    assert.ok(await table.get("B", "X"), `memory ${label}: nothing applied`);
+    const dynamo = fakeDynamo();
+    await assert.rejects(
+      dynamo.table.transact([{ delete: { pk: "B", sk: "X" } }, { check: { pk: "A", sk: "META" }, ...conditions }]),
+      TypeError,
+      `dynamo ${label}`
+    );
+    assert.equal(dynamo.sent.length, 0, `dynamo ${label}: nothing sent`);
+  }
+});

@@ -17,6 +17,10 @@ const requireTtl = (ttl) => {
   if (typeof ttl !== "number") throw new TypeError("add() requires a numeric ttl");
 };
 
+/** True when the conditions constrain anything: the rules both tables evaluate. */
+const hasCondition = ({ ifNotExists, ifVersion, ifExists, ifAttr } = {}) =>
+  Boolean(ifNotExists || ifVersion === 0 || ifVersion > 0 || ifExists || ifAttr);
+
 /** True when the item's ttl (epoch seconds) has passed at `nowMs`. */
 const isExpired = (item, nowMs) =>
   typeof item.ttl === "number" && item.ttl * 1000 <= nowMs;
@@ -77,11 +81,8 @@ export function createMemoryTable({ now = () => Date.now() } = {}) {
       return collect((i) => i.pk.startsWith(pkPrefix));
     },
     async transact(ops) {
-      for (const op of ops) {
-        const { ifNotExists, ifVersion, ifExists, ifAttr } = op;
-        if (op.check && !(ifNotExists || ifVersion !== undefined || ifExists || ifAttr)) {
-          throw new TypeError("a check op needs a condition");
-        }
+      if (ops.some((op) => op.check && !hasCondition(op))) {
+        throw new TypeError("a check op needs a condition");
       }
       for (const op of ops) check(op.put ?? op.delete ?? op.check, op);
       for (const op of ops) {
@@ -284,9 +285,8 @@ export function createDynamoTable({
       const TransactItems = ops.map((op) => {
         if (op.put) return { Put: { TableName: tableName, Item: op.put, ...conditionOf(op) } };
         if (op.delete) return { Delete: { TableName: tableName, Key: op.delete, ...conditionOf(op) } };
-        const condition = conditionOf(op);
-        if (!condition.ConditionExpression) throw new TypeError("a check op needs a condition");
-        return { ConditionCheck: { TableName: tableName, Key: op.check, ...condition } };
+        if (!hasCondition(op)) throw new TypeError("a check op needs a condition");
+        return { ConditionCheck: { TableName: tableName, Key: op.check, ...conditionOf(op) } };
       });
       try {
         await doc.send(new lib.TransactWriteCommand({ TransactItems }));
