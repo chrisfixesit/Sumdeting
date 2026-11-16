@@ -33,12 +33,15 @@ export async function revertIfLastConsentGiver(deps, accountId, pid) {
   if (rows.some((r) => r.accountId !== accountId && r.consentGiver === true)) return false;
   // One write reverts consent and marks the transition with its own id, so a
   // failure in any later step leaves it for a retry or the janitor to finish.
-  await repo.updateProfile(pid, {
-    consentStatus: "awaiting_parent",
-    awaitingSince: now(),
-    consentRevert: randomUUID(),
-  });
-  return finishConsentRevert(deps, pid);
+  const marker = randomUUID();
+  if (await repo.markConsentRevert(pid, marker, now())) return finishConsentRevert(deps, pid);
+  // Another departure got there first. Its revert is finished by that worker, a
+  // retry or the janitor; this one only checks again if consent is back.
+  const current = await repo.getProfile(pid);
+  if (current?.consentStatus === "active" && !current.consentRevert) {
+    return revertIfLastConsentGiver(deps, accountId, pid);
+  }
+  return current?.consentStatus === "awaiting_parent";
 }
 
 /**

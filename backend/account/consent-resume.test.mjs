@@ -308,3 +308,75 @@ test("a retention deletion that fails mid-revert inside the guarded cascade is f
   assert.equal(await app.repo.getAccount(mumAcct.id), null);
   await assertCleanEndState(app, pid, before);
 });
+
+for (const resume of ["a retry", "the janitor"]) {
+  test(`two overlapping departures never leave the profile without an invite or a marker (${resume} finishes)`, async () => {
+    const { app, pid, mumAcct } = await approved();
+    const before = app.outbox.length;
+    const gate = () => {
+      let open;
+      const p = new Promise((r) => (open = r));
+      return { p, open };
+    };
+    const bRead = gate(), aMarked = gate(), bInvited = gate(), aFailed = gate();
+    const isConsentInvite = (ops) => ops.some((op) => op.put?.sk === "I" && op.put.kind === "consent");
+    // B passed the active check before A marked; its first write waits for A's marker.
+    let bFirst = true;
+    const firstB = async () => {
+      if (!bFirst) return;
+      bFirst = false;
+      bRead.open();
+      await aMarked.p;
+    };
+    const tableB = {
+      ...app.table,
+      async put(item, c) {
+        await firstB();
+        // B clears its marker only after A has failed.
+        if (item.sk === "META" && item.consentRevert === null) await aFailed.p;
+        return app.table.put(item, c);
+      },
+      async delete(pk, sk, c) {
+        await firstB();
+        return app.table.delete(pk, sk, c);
+      },
+      async transact(ops) {
+        await firstB();
+        await app.table.transact(ops);
+        if (isConsentInvite(ops)) bInvited.open();
+      },
+    };
+    // A marks, waits for B's invite, then fails creating its own, once.
+    let aCreateFailed = false;
+    const tableA = {
+      ...app.table,
+      async put(item, c) {
+        await app.table.put(item, c);
+        if (item.sk === "META" && item.consentRevert) aMarked.open();
+      },
+      async delete(pk, sk, c) {
+        if (sk === "PROGRESS") await bInvited.p;
+        return app.table.delete(pk, sk, c);
+      },
+      async transact(ops) {
+        if (!aCreateFailed && isConsentInvite(ops)) {
+          aCreateFailed = true;
+          throw new Error("injected failure on invite create");
+        }
+        return app.table.transact(ops);
+      },
+    };
+    const b = revertIfLastConsentGiver(depsOver(app, tableB), mumAcct.id, pid).finally(() => bInvited.open());
+    await bRead.p;
+    const a = revertIfLastConsentGiver(depsOver(app, tableA), mumAcct.id, pid).finally(() => aFailed.open());
+    const [ra] = await Promise.allSettled([a, b]);
+    assert.equal(ra.status, "rejected");
+    assert.ok(aCreateFailed);
+    if (resume === "the janitor") {
+      await runJanitor({ repo: app.repo, mailer: app.mailer, now: () => app.clock.t });
+    } else {
+      await revertIfLastConsentGiver(depsOver(app, app.table), mumAcct.id, pid);
+    }
+    await assertCleanEndState(app, pid, before);
+  });
+}
