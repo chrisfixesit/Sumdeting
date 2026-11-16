@@ -20,7 +20,7 @@ export async function sendConsentRequest(deps, parentEmail, childFirstName) {
 export async function revertIfLastConsentGiver(deps, accountId, pid) {
   const { repo, now } = deps;
   const profile = await repo.getProfile(pid);
-  if (profile?.consentRevert === "pending") return finishConsentRevert(deps, profile);
+  if (profile?.consentRevert === "pending") return finishConsentRevert(deps, pid);
   if (!profile || profile.under13 !== true || profile.consentStatus !== "active") return false;
   const rows = await repo.listAccessForProfile(pid);
   const mine = rows.find((r) => r.accountId === accountId);
@@ -28,12 +28,12 @@ export async function revertIfLastConsentGiver(deps, accountId, pid) {
   if (rows.some((r) => r.accountId !== accountId && r.consentGiver === true)) return false;
   // One write reverts consent and marks the transition, so a failure in any
   // later step leaves it for a retry or the janitor to finish.
-  const marked = await repo.updateProfile(pid, {
+  await repo.updateProfile(pid, {
     consentStatus: "awaiting_parent",
     awaitingSince: now(),
     consentRevert: "pending",
   });
-  return finishConsentRevert(deps, marked);
+  return finishConsentRevert(deps, pid);
 }
 
 /**
@@ -41,10 +41,11 @@ export async function revertIfLastConsentGiver(deps, accountId, pid) {
  * no-op once gone, and the consent invite is replaced, not added to. Only the
  * email can repeat, if clearing the marker fails after it was sent.
  */
-async function finishConsentRevert(deps, profile) {
+async function finishConsentRevert(deps, pid) {
   const { repo } = deps;
-  const pid = profile.id;
-  // Skipped when the parent approved again before this finished.
+  // Read fresh: a caller's copy can be stale, and the parent may have approved again.
+  const profile = await repo.getProfile(pid);
+  if (profile?.consentRevert !== "pending") return false;
   if (profile.consentStatus === "awaiting_parent") {
     await repo.deleteProgress(pid);
     if (profile.parentEmail) {
@@ -70,11 +71,8 @@ export async function finishPendingConsentReverts(deps, onError) {
   for (const listed of await deps.repo.listProfiles()) {
     if (listed.consentRevert !== "pending") continue;
     try {
-      // The scan can be stale; act only on a consistent read.
-      const profile = await deps.repo.getProfile(listed.id);
-      if (profile?.consentRevert !== "pending") continue;
-      await finishConsentRevert(deps, profile);
-      finished++;
+      // The scan can be stale; finishConsentRevert acts only on a consistent read.
+      if (await finishConsentRevert(deps, listed.id)) finished++;
     } catch (err) {
       onError(listed, err);
     }

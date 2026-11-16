@@ -167,3 +167,27 @@ test("a parent who re-approves while a revert is pending keeps consent; finishin
   assert.ok(!after.consentRevert);
   assert.equal(app.outbox.slice(before).filter((m) => m.kind === "consent_request").length, 0);
 });
+
+test("a parent who re-approves just after the marker is written keeps the child's progress", async () => {
+  const { app, pid, mumAcct } = await approved();
+  const before = app.outbox.length;
+  // Approval lands right after the revert's first write, before progress is deleted.
+  let approvedOnce = false;
+  const racing = {
+    ...app.table,
+    async put(item, conditions) {
+      await app.table.put(item, conditions);
+      if (!approvedOnce && item.sk === "META" && item.consentRevert === "pending") {
+        approvedOnce = true;
+        await app.repo.updateProfile(pid, { consentStatus: "active" });
+      }
+    },
+  };
+  await revertIfLastConsentGiver(depsOver(app, racing), mumAcct.id, pid);
+  assert.ok(approvedOnce);
+  const p = await app.repo.getProfile(pid);
+  assert.equal(p.consentStatus, "active");
+  assert.ok(!p.consentRevert);
+  assert.equal((await app.repo.getProgress(pid)).progress.topics.Algebra?.solved, 1, "progress kept");
+  assert.equal(app.outbox.slice(before).filter((m) => m.kind === "consent_request").length, 0);
+});
