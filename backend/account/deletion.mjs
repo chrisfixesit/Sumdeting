@@ -25,6 +25,8 @@ export async function deleteAccountCascade(repo, accountId, deps = { repo, now: 
   }
   if (account) {
     for (const invite of await repo.listInvitesForEmail(account.email)) {
+      // On a retry, that fresh consent invite may already exist: keep it while the child waits.
+      if (invite.kind === "consent" && (await awaitsParent(repo, invite))) continue;
       await repo.deleteInvite(invite.id);
     }
   }
@@ -38,6 +40,13 @@ export async function deleteAccountCascade(repo, accountId, deps = { repo, now: 
   }
   await repo.deleteAccountRecord(accountId);
 }
+
+const awaitsParent = async (repo, invite) => {
+  for (const pid of invite.profileIds ?? []) {
+    if ((await repo.getProfile(pid))?.consentStatus === "awaiting_parent") return true;
+  }
+  return false;
+};
 
 const lastActiveOf = (account) => account.lastActiveAt ?? account.createdAt;
 

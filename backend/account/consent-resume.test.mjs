@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { makeApp } from "./testkit.mjs";
 import { createRepo } from "./repo.mjs";
 import { revertIfLastConsentGiver } from "./consent.mjs";
-import { runJanitor } from "./deletion.mjs";
+import { runJanitor, deleteAccountCascade } from "./deletion.mjs";
 
 const tokenFrom = (mail) => /#signin=([\w-]+)/.exec(mail.text)[1];
 
@@ -105,7 +105,7 @@ const failurePoints = async () => {
 };
 
 for (const resume of ["a retry of the same call", "the janitor"]) {
-  test(`a revert that fails part-way is marked pending and ${resume} finishes it`, async () => {
+  test(`a revert that fails part-way is marked and ${resume} finishes it`, async () => {
     for (const failAt of await failurePoints()) {
       const { app, pid, mumAcct } = await approved();
       const before = app.outbox.length;
@@ -113,7 +113,7 @@ for (const resume of ["a retry of the same call", "the janitor"]) {
       await assert.rejects(revertIfLastConsentGiver(depsOver(app, failing.table), mumAcct.id, pid), /injected/);
       const mid = await app.repo.getProfile(pid);
       assert.equal(mid.consentStatus, "awaiting_parent", `write ${failAt}: consent is reverted at once`);
-      assert.equal(mid.consentRevert, "pending", `write ${failAt}: the transition is marked`);
+      assert.ok(mid.consentRevert, `write ${failAt}: the transition is marked`);
       if (resume === "the janitor") {
         await runJanitor({ repo: app.repo, mailer: app.mailer, now: () => app.clock.t });
       } else {
@@ -140,7 +140,7 @@ test("a failure clearing the marker re-sends the request at most once more, and 
   const { app, pid, mumAcct } = await approved();
   const before = app.outbox.length;
   await assert.rejects(revertIfLastConsentGiver(depsOver(app, failingOnce(app.table, n).table), mumAcct.id, pid), /injected/);
-  assert.equal((await app.repo.getProfile(pid)).consentRevert, "pending");
+  assert.ok((await app.repo.getProfile(pid)).consentRevert);
   assert.equal(await revertIfLastConsentGiver(depsOver(app, app.table), mumAcct.id, pid), true);
   const p = await app.repo.getProfile(pid);
   assert.ok(!p.consentRevert);
@@ -177,7 +177,7 @@ test("a parent who re-approves just after the marker is written keeps the child'
     ...app.table,
     async put(item, conditions) {
       await app.table.put(item, conditions);
-      if (!approvedOnce && item.sk === "META" && item.consentRevert === "pending") {
+      if (!approvedOnce && item.sk === "META" && item.consentRevert) {
         approvedOnce = true;
         await app.repo.updateProfile(pid, { consentStatus: "active" });
       }
@@ -190,4 +190,72 @@ test("a parent who re-approves just after the marker is written keeps the child'
   assert.ok(!p.consentRevert);
   assert.equal((await app.repo.getProgress(pid)).progress.topics.Algebra?.solved, 1, "progress kept");
   assert.equal(app.outbox.slice(before).filter((m) => m.kind === "consent_request").length, 0);
+});
+
+/** Fail the revert on its progress delete (after the marker), once. */
+function failOnProgressDelete(table) {
+  let failed = false;
+  return {
+    ...table,
+    async delete(pk, sk, conditions) {
+      if (!failed && sk === "PROGRESS") {
+        failed = true;
+        throw new Error("injected failure on progress delete");
+      }
+      return table.delete(pk, sk, conditions);
+    },
+  };
+}
+
+async function reapprove(app, mum, pid) {
+  const p = await app.repo.getProfile(pid);
+  await app.repo.createInvite({ kind: "consent", fromAccountId: p.ownerAccountId, toEmail: "mum@x.com", profileIds: [pid] });
+  await mum.unlock();
+  assert.equal((await mum.call("/consent/respond", { profileId: pid, approve: true })).status, 200);
+}
+
+test("a re-approved parent leaving again while the old marker remains still reverts the profile", async () => {
+  const { app, mum, pid, mumAcct } = await approved();
+  await assert.rejects(revertIfLastConsentGiver(depsOver(app, failOnProgressDelete(app.table)), mumAcct.id, pid), /injected/);
+  await reapprove(app, mum, pid);
+  const before = app.outbox.length;
+  // The parent removes their link again: they are the last consent-giver of an active profile.
+  assert.equal(await revertIfLastConsentGiver(depsOver(app, app.table), mumAcct.id, pid), true);
+  await assertCleanEndState(app, pid, before);
+});
+
+test("a stale finisher doesn't clear the marker of a newer revert", async () => {
+  const { app, mum, pid, mumAcct } = await approved();
+  // Revert A pauses at its progress delete. Meanwhile the parent re-approves, the
+  // old marker is finished, and revert B starts and fails after marking.
+  let paused = false;
+  const slowA = {
+    ...app.table,
+    async delete(pk, sk, conditions) {
+      if (!paused && sk === "PROGRESS") {
+        paused = true;
+        await reapprove(app, mum, pid);
+        await runJanitor({ repo: app.repo, mailer: app.mailer, now: () => app.clock.t });
+        await assert.rejects(revertIfLastConsentGiver(depsOver(app, failOnProgressDelete(app.table)), mumAcct.id, pid), /injected/);
+      }
+      return app.table.delete(pk, sk, conditions);
+    },
+  };
+  await revertIfLastConsentGiver(depsOver(app, slowA), mumAcct.id, pid);
+  assert.ok(paused);
+  const p = await app.repo.getProfile(pid);
+  assert.equal(p.consentStatus, "awaiting_parent");
+  assert.ok(p.consentRevert, "revert B is still marked, so it will be finished");
+});
+
+test("a cascade retried after the janitor finished its revert keeps the new consent invite", async () => {
+  const { app, pid, mumAcct } = await approved();
+  const failing = depsOver(app, failOnProgressDelete(app.table));
+  await assert.rejects(deleteAccountCascade(failing.repo, mumAcct.id, failing), /injected/);
+  await runJanitor({ repo: app.repo, mailer: app.mailer, now: () => app.clock.t });
+  await deleteAccountCascade(app.repo, mumAcct.id, depsOver(app, app.table));
+  assert.equal(await app.repo.getAccount(mumAcct.id), null);
+  assert.equal((await app.repo.getProfile(pid)).consentStatus, "awaiting_parent");
+  const invites = (await app.repo.listInvitesForEmail("mum@x.com")).filter((i) => i.kind === "consent");
+  assert.deepEqual(invites.map((i) => i.profileIds), [[pid]], "the parent can still approve");
 });

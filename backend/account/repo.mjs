@@ -223,6 +223,12 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
       const item = await update(profileKey(pid), "META", (i) => ({ ...i, ownerAccountId: accountId }));
       return item ? { id: pid, ...strip(item) } : null;
     },
+    /** Clear a consent revert's marker, only if it is still the one given (see consent.mjs). */
+    async clearConsentRevert(pid, marker) {
+      await update(profileKey(pid), "META", (i) =>
+        i.consentRevert === marker ? { ...i, consentRevert: null } : null
+      );
+    },
     /** Remove a profile's server-side progress (consent ended). */
     async deleteProgress(pid) {
       await table.delete(profileKey(pid), "PROGRESS");

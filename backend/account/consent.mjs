@@ -1,5 +1,6 @@
 // What happens to an under-13 profile when the parent who approved it leaves.
 // Kept free of other feature imports so links, profiles and deletion can all use it.
+import { randomUUID } from "node:crypto";
 
 const CONSENT_TOKEN_SEC = 7 * 24 * 3600;
 
@@ -19,19 +20,23 @@ export async function sendConsentRequest(deps, parentEmail, childFirstName) {
  */
 export async function revertIfLastConsentGiver(deps, accountId, pid) {
   const { repo, now } = deps;
-  const profile = await repo.getProfile(pid);
-  if (profile?.consentRevert === "pending") return finishConsentRevert(deps, pid);
+  let profile = await repo.getProfile(pid);
+  if (profile?.consentRevert) {
+    if (await finishConsentRevert(deps, pid)) return true;
+    // The parent approved again before it finished: this departure is checked as usual.
+    profile = await repo.getProfile(pid);
+  }
   if (!profile || profile.under13 !== true || profile.consentStatus !== "active") return false;
   const rows = await repo.listAccessForProfile(pid);
   const mine = rows.find((r) => r.accountId === accountId);
   if (mine?.consentGiver !== true) return false;
   if (rows.some((r) => r.accountId !== accountId && r.consentGiver === true)) return false;
-  // One write reverts consent and marks the transition, so a failure in any
-  // later step leaves it for a retry or the janitor to finish.
+  // One write reverts consent and marks the transition with its own id, so a
+  // failure in any later step leaves it for a retry or the janitor to finish.
   await repo.updateProfile(pid, {
     consentStatus: "awaiting_parent",
     awaitingSince: now(),
-    consentRevert: "pending",
+    consentRevert: randomUUID(),
   });
   return finishConsentRevert(deps, pid);
 }
@@ -39,13 +44,15 @@ export async function revertIfLastConsentGiver(deps, accountId, pid) {
 /**
  * The steps after the marker. Each is safe to repeat: progress deletion is a
  * no-op once gone, and the consent invite is replaced, not added to. Only the
- * email can repeat, if clearing the marker fails after it was sent.
+ * email can repeat, if clearing the marker fails after it was sent. Returns true
+ * when it finished a revert, false when there was none or consent is back.
  */
 async function finishConsentRevert(deps, pid) {
   const { repo } = deps;
   // Read fresh: a caller's copy can be stale, and the parent may have approved again.
   const profile = await repo.getProfile(pid);
-  if (profile?.consentRevert !== "pending") return false;
+  const marker = profile?.consentRevert;
+  if (!marker) return false;
   if (profile.consentStatus === "awaiting_parent") {
     await repo.deleteProgress(pid);
     if (profile.parentEmail) {
@@ -61,7 +68,8 @@ async function finishConsentRevert(deps, pid) {
       if (deps.mailer) await sendConsentRequest(deps, profile.parentEmail, profile.firstName);
     }
   }
-  await repo.updateProfile(pid, { consentRevert: null });
+  // Only this transition's marker: a newer revert may have replaced it meanwhile.
+  await repo.clearConsentRevert(pid, marker);
   return profile.consentStatus === "awaiting_parent";
 }
 
@@ -69,7 +77,7 @@ async function finishConsentRevert(deps, pid) {
 export async function finishPendingConsentReverts(deps, onError) {
   let finished = 0;
   for (const listed of await deps.repo.listProfiles()) {
-    if (listed.consentRevert !== "pending") continue;
+    if (!listed.consentRevert) continue;
     try {
       // The scan can be stale; finishConsentRevert acts only on a consistent read.
       if (await finishConsentRevert(deps, listed.id)) finished++;
