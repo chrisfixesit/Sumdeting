@@ -1,116 +1,137 @@
-// Condition-only transaction ops (issue #21, shared with #22 and #23):
-// { check: { pk, sk }, ifExists?: true, ifVersion?: number, ifAttr?: { name, equals } }
-// ifExists: the item exists and isn't expired. ifAttr: item[name] === equals.
-// The memory and DynamoDB tables must agree; DynamoDB is checked against the
-// TransactItems it would send, through a fake document client (no AWS calls).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createMemoryTable, createDynamoTable, ConditionFailed } from "./table.mjs";
 
-const T0 = Date.UTC(2026, 0, 1, 12);
+// Condition-only ops and conditional deletes (#21, #22, #23 share this shape).
+
+const T0 = Date.UTC(2026, 0, 1);
 
 async function seeded() {
-  const table = createMemoryTable({ now: () => T0 });
-  await table.put({ pk: "P#1", sk: "META", version: 3, status: "active" });
-  await table.put({ pk: "A#1", sk: "ACCESS#1", kind: "owner" });
-  await table.put({ pk: "X#1", sk: "OLD", version: 1, ttl: T0 / 1000 - 1 }); // expired
-  return table;
-}
-const write = { put: { pk: "P#1", sk: "PROGRESS", n: 1 } };
-const progress = (table) => table.get("P#1", "PROGRESS");
-
-test("memory: a check op that holds lets the transaction write", async () => {
-  const table = await seeded();
-  await table.transact([
-    { check: { pk: "P#1", sk: "META" }, ifVersion: 3 },
-    { check: { pk: "A#1", sk: "ACCESS#1" }, ifAttr: { name: "kind", equals: "owner" } },
-    { check: { pk: "P#1", sk: "META" }, ifExists: true },
-    write,
-  ]);
-  assert.equal((await progress(table)).n, 1);
-  assert.equal((await table.get("P#1", "META")).version, 3, "a check op writes nothing itself");
-});
-
-for (const [name, check] of [
-  ["ifVersion mismatch", { check: { pk: "P#1", sk: "META" }, ifVersion: 2 }],
-  ["ifVersion on a missing item", { check: { pk: "P#9", sk: "META" }, ifVersion: 1 }],
-  ["ifExists on a missing item", { check: { pk: "P#9", sk: "META" }, ifExists: true }],
-  ["ifExists on an expired item", { check: { pk: "X#1", sk: "OLD" }, ifExists: true }],
-  ["ifAttr with another value", { check: { pk: "A#1", sk: "ACCESS#1" }, ifAttr: { name: "kind", equals: "guardian" } }],
-  ["ifAttr on a missing item", { check: { pk: "A#9", sk: "ACCESS#1" }, ifAttr: { name: "kind", equals: "owner" } }],
-]) {
-  test(`memory: ${name} fails the whole transaction`, async () => {
-    const table = await seeded();
-    await assert.rejects(table.transact([check, write]), ConditionFailed);
-    assert.equal(await progress(table), null, "nothing written");
-  });
+  const clock = { t: T0 };
+  const table = createMemoryTable({ now: () => clock.t });
+  await table.put({ pk: "A", sk: "META", version: 3, state: "idle" });
+  await table.put({ pk: "B", sk: "X", n: 1 });
+  await table.put({ pk: "OLD", sk: "X", version: 1, state: "idle", ttl: T0 / 1000 + 60 });
+  return { table, clock };
 }
 
-test("memory: a check op needs a condition", async () => {
-  const table = await seeded();
-  await assert.rejects(table.transact([{ check: { pk: "P#1", sk: "META" } }, write]), TypeError);
-  assert.equal(await progress(table), null);
+test("check ifVersion: passes on match, and a mismatch applies nothing", async () => {
+  const { table } = await seeded();
+  await table.transact([{ check: { pk: "A", sk: "META" }, ifVersion: 3 }, { delete: { pk: "B", sk: "X" } }]);
+  assert.equal(await table.get("B", "X"), null);
+  await table.put({ pk: "B", sk: "X", n: 1 });
+  await assert.rejects(
+    table.transact([{ check: { pk: "A", sk: "META" }, ifVersion: 2 }, { delete: { pk: "B", sk: "X" } }]),
+    ConditionFailed
+  );
+  assert.ok(await table.get("B", "X"), "nothing applied");
+  assert.equal((await table.get("A", "META")).version, 3, "a check never writes");
 });
 
-/** A DynamoDB table over a fake document client that records each command's input. */
-function fakeDynamo(reply = async () => ({})) {
+test("check ifExists: fails for a missing item and for an expired one", async () => {
+  const { table, clock } = await seeded();
+  await table.transact([{ check: { pk: "OLD", sk: "X" }, ifExists: true }]);
+  await assert.rejects(table.transact([{ check: { pk: "NOPE", sk: "X" }, ifExists: true }]), ConditionFailed);
+  clock.t += 61e3;
+  await assert.rejects(table.transact([{ check: { pk: "OLD", sk: "X" }, ifExists: true }]), ConditionFailed);
+});
+
+test("check ifAttr: item[name] must equal the value; missing and expired items fail", async () => {
+  const { table, clock } = await seeded();
+  await table.transact([{ check: { pk: "A", sk: "META" }, ifAttr: { name: "state", equals: "idle" } }]);
+  await assert.rejects(
+    table.transact([{ check: { pk: "A", sk: "META" }, ifAttr: { name: "state", equals: "active" } }]),
+    ConditionFailed
+  );
+  await assert.rejects(
+    table.transact([{ check: { pk: "NOPE", sk: "X" }, ifAttr: { name: "state", equals: "idle" } }]),
+    ConditionFailed
+  );
+  clock.t += 61e3;
+  await assert.rejects(
+    table.transact([{ check: { pk: "OLD", sk: "X" }, ifAttr: { name: "state", equals: "idle" } }]),
+    ConditionFailed
+  );
+});
+
+test("transact delete honours ifVersion, ifExists and ifAttr", async () => {
+  const { table } = await seeded();
+  await assert.rejects(table.transact([{ delete: { pk: "A", sk: "META" }, ifVersion: 2 }]), ConditionFailed);
+  await assert.rejects(table.transact([{ delete: { pk: "NOPE", sk: "X" }, ifExists: true }]), ConditionFailed);
+  await assert.rejects(
+    table.transact([{ delete: { pk: "A", sk: "META" }, ifAttr: { name: "state", equals: "x" } }]),
+    ConditionFailed
+  );
+  assert.ok(await table.get("A", "META"));
+  await table.transact([{ delete: { pk: "A", sk: "META" }, ifVersion: 3 }]);
+  assert.equal(await table.get("A", "META"), null);
+});
+
+test("delete(pk, sk, conditions) honours the same conditions", async () => {
+  const { table } = await seeded();
+  await assert.rejects(table.delete("A", "META", { ifVersion: 9 }), ConditionFailed);
+  await assert.rejects(table.delete("NOPE", "X", { ifExists: true }), ConditionFailed);
+  await assert.rejects(table.delete("A", "META", { ifAttr: { name: "state", equals: "x" } }), ConditionFailed);
+  assert.ok(await table.get("A", "META"));
+  await table.delete("A", "META", { ifAttr: { name: "state", equals: "idle" } });
+  assert.equal(await table.get("A", "META"), null);
+  await table.delete("NOPE", "X"); // unconditional delete of a missing item is fine
+});
+
+// ---- DynamoDB parity: the commands sent ----
+
+function fakeDynamo() {
   const sent = [];
-  const client = { send: async (cmd) => { sent.push({ name: cmd.constructor.name, input: cmd.input }); return reply(cmd); } };
-  return { table: createDynamoTable({ tableName: "t", client, now: () => T0 }), sent };
+  const client = { send: async (cmd) => (sent.push(cmd), {}) };
+  const table = createDynamoTable({ tableName: "t", client, now: () => T0 });
+  return { table, sent };
 }
 
-test("dynamo: check ops become ConditionCheck TransactItems with matching conditions", async () => {
+test("dynamo: a check op becomes a ConditionCheck with the ttl-aware condition", async () => {
   const { table, sent } = fakeDynamo();
   await table.transact([
-    { check: { pk: "P#1", sk: "META" }, ifVersion: 3 },
-    { check: { pk: "A#1", sk: "ACCESS#1" }, ifAttr: { name: "kind", equals: "owner" } },
-    { check: { pk: "P#1", sk: "META" }, ifExists: true },
-    { ...write, ifVersion: 0 },
+    { check: { pk: "A", sk: "META" }, ifVersion: 3 },
+    { delete: { pk: "B", sk: "X" } },
   ]);
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0].name, "TransactWriteCommand");
-  const [ver, attr, exists, put] = sent[0].input.TransactItems;
-  const now = T0 / 1000;
-  const live = "(attribute_not_exists(#t) OR #t > :now)";
-  assert.deepEqual(ver, { ConditionCheck: {
-    TableName: "t", Key: { pk: "P#1", sk: "META" },
-    ConditionExpression: `#v = :v AND ${live}`,
-    ExpressionAttributeNames: { "#v": "version", "#t": "ttl" },
-    ExpressionAttributeValues: { ":v": 3, ":now": now },
-  } });
-  assert.deepEqual(attr, { ConditionCheck: {
-    TableName: "t", Key: { pk: "A#1", sk: "ACCESS#1" },
-    ConditionExpression: `#a = :a AND ${live}`,
-    ExpressionAttributeNames: { "#a": "kind", "#t": "ttl" },
-    ExpressionAttributeValues: { ":a": "owner", ":now": now },
-  } });
-  assert.deepEqual(exists, { ConditionCheck: {
-    TableName: "t", Key: { pk: "P#1", sk: "META" },
-    ConditionExpression: `attribute_exists(pk) AND ${live}`,
-    ExpressionAttributeNames: { "#t": "ttl" },
-    ExpressionAttributeValues: { ":now": now },
-  } });
-  assert.deepEqual(put.Put.Item, write.put);
-  assert.equal(put.Put.ConditionExpression, "attribute_not_exists(pk) OR #t <= :now");
+  const [check, del] = sent[0].input.TransactItems;
+  assert.deepEqual(check.ConditionCheck.Key, { pk: "A", sk: "META" });
+  assert.equal(check.ConditionCheck.TableName, "t");
+  assert.equal(check.ConditionCheck.ConditionExpression, "#v = :v AND (attribute_not_exists(#t) OR #t > :now)");
+  assert.deepEqual(check.ConditionCheck.ExpressionAttributeValues, { ":v": 3, ":now": T0 / 1000 });
+  assert.deepEqual(del, { Delete: { TableName: "t", Key: { pk: "B", sk: "X" } } });
 });
 
-test("dynamo: ifVersion alone keeps the existing condition string", async () => {
+test("dynamo: ifExists and ifAttr conditions treat expired items as absent", async () => {
   const { table, sent } = fakeDynamo();
-  await table.put({ pk: "P#1", sk: "PROGRESS", version: 2 }, { ifVersion: 1 });
+  await table.transact([
+    { check: { pk: "A", sk: "META" }, ifExists: true },
+    { delete: { pk: "B", sk: "X" }, ifAttr: { name: "state", equals: "idle" } },
+  ]);
+  const [check, del] = sent[0].input.TransactItems;
+  assert.equal(
+    check.ConditionCheck.ConditionExpression,
+    "attribute_exists(pk) AND (attribute_not_exists(#t) OR #t > :now)"
+  );
+  assert.equal(del.Delete.ConditionExpression, "#a = :a AND (attribute_not_exists(#t) OR #t > :now)");
+  assert.deepEqual(del.Delete.ExpressionAttributeNames, { "#a": "state", "#t": "ttl" });
+  assert.deepEqual(del.Delete.ExpressionAttributeValues, { ":a": "idle", ":now": T0 / 1000 });
+});
+
+test("dynamo: a check op with no condition is refused", async () => {
+  const { table } = fakeDynamo();
+  await assert.rejects(table.transact([{ check: { pk: "A", sk: "META" } }]), TypeError);
+});
+
+test("dynamo: conditional delete sends the condition and maps its failure to ConditionFailed", async () => {
+  const sent = [];
+  const client = {
+    send: async (cmd) => {
+      sent.push(cmd);
+      throw Object.assign(new Error("no"), { name: "ConditionalCheckFailedException" });
+    },
+  };
+  const table = createDynamoTable({ tableName: "t", client, now: () => T0 });
+  await assert.rejects(table.delete("A", "META", { ifVersion: 3 }), ConditionFailed);
+  assert.deepEqual(sent[0].input.Key, { pk: "A", sk: "META" });
   assert.equal(sent[0].input.ConditionExpression, "#v = :v AND (attribute_not_exists(#t) OR #t > :now)");
-});
-
-test("dynamo: a cancelled transaction from a failed check is a ConditionFailed", async () => {
-  const cancelled = Object.assign(new Error("cancelled"), {
-    name: "TransactionCanceledException",
-    CancellationReasons: [{ Code: "ConditionalCheckFailed" }, { Code: "None" }],
-  });
-  const { table } = fakeDynamo(async () => { throw cancelled; });
-  await assert.rejects(table.transact([{ check: { pk: "P#1", sk: "META" }, ifVersion: 3 }, write]), ConditionFailed);
-});
-
-test("dynamo: a check op needs a condition", async () => {
-  const { table, sent } = fakeDynamo();
-  await assert.rejects(table.transact([{ check: { pk: "P#1", sk: "META" } }, write]), TypeError);
-  assert.equal(sent.length, 0, "nothing sent");
 });
