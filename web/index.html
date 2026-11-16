@@ -616,11 +616,15 @@
 
     .msg img.attached { display: block; max-width: 100%; max-height: 220px; border-radius: 10px; margin-bottom: 0.5rem; }
 
+    /* Copy sits in its own row under the reply text, so it never covers a short
+       reply (#70). 44px tap target; the negative margins tuck it into the
+       bubble's padding so the row stays small. */
     .msg .copy-btn {
-      position: absolute; top: 0.25rem; right: 0.3rem;
-      background: none; border: none;
+      display: flex; align-items: center; justify-content: center;
+      width: 44px; height: 44px; margin: 0.1rem -0.75rem -0.7rem auto;
+      background: none; border: none; padding: 0;
       font-size: 0.75rem; color: inherit;
-      cursor: pointer; opacity: 0.35; padding: 0.15rem;
+      cursor: pointer; opacity: 0.35;
     }
     .msg .copy-btn:hover { opacity: 1; }
 
