@@ -104,6 +104,28 @@ test("sign-in after the janitor listed accounts: the stale idle read is not acte
   assert.equal(app.outbox.length, sent, "no email went out");
 });
 
+test("sign-in after the janitor's recheck, before its first destructive write: account is left intact", async (t) => {
+  const app = makeApp();
+  const setup = await idleOwner(app);
+  const info = t.mock.method(console, "info", () => {});
+  const sent = app.outbox.length;
+  const repo = {
+    ...app.repo,
+    async recheckIdleAccount(...args) {
+      const version = await app.repo.recheckIdleAccount(...args);
+      await app.repo.touchActive(setup.idle.id);
+      return version;
+    },
+  };
+
+  const r = await run(app, repo);
+
+  assert.equal(r.deletedAccounts, 0);
+  await assertIntact(app, setup);
+  assert.equal(app.outbox.length, sent, "no email went out");
+  assert.ok(info.mock.calls.some((c) => String(c.arguments[0]).includes(setup.idle.id)));
+});
+
 test("guard: a truly idle account is still handed over and deleted", async () => {
   const app = makeApp();
   const { idle, guarded, solo, guardian } = await idleOwner(app);
@@ -130,4 +152,41 @@ test("guard: a sign-in after the first write still ends fully deleted, not half-
   assert.equal(await app.repo.getAccess(guardian.id, guarded.id), "owner");
   assert.equal(await app.repo.getProfile(solo.id), null);
   assert.equal(await app.repo.getProgress(solo.id).then((p) => p.version), 0);
+});
+
+test("first write is a retried put (consent revert): a sign-in stops it, no retry slips through unguarded", async (t) => {
+  // The idle account is the only consent-giver on someone else's under-13 child, and owns nothing.
+  const app = makeApp();
+  const idle = await aged(app, "idle@x.com", 731, { warningSentAt: app.clock.t - 31 * DAY });
+  const owner = await aged(app, "o@x.com", 1);
+  const kid = await app.repo.createProfile(owner.id, {
+    ...PROFILE, under13: true, consentStatus: "active", parentEmail: "idle@x.com",
+  });
+  await app.repo.grantAccess(idle.id, kid.id, "guardian", { consentGiver: true });
+  await app.repo.updateProgress(kid.id, (progress) => ({ ...progress, seen: true }));
+  t.mock.method(console, "info", () => {});
+  const sent = app.outbox.length;
+  onFirstWrite(app.table, () => app.repo.touchActive(idle.id));
+
+  const r = await run(app);
+
+  assert.equal(r.deletedAccounts, 0);
+  assert.ok(await app.repo.getAccount(idle.id));
+  assert.equal((await app.repo.getProfile(kid.id)).consentStatus, "active", "consent is not reverted");
+  assert.equal((await app.repo.getProgress(kid.id)).progress.seen, true);
+  assert.equal(await app.repo.getAccess(idle.id, kid.id), "guardian");
+  assert.equal(app.outbox.length, sent, "no consent request went out");
+});
+
+test("first write is on the account item itself (owns nothing): a sign-in stops it; idle, it is deleted", async (t) => {
+  t.mock.method(console, "info", () => {});
+  for (const race of [true, false]) {
+    const app = makeApp();
+    const idle = await aged(app, "idle@x.com", 731, { warningSentAt: app.clock.t - 31 * DAY });
+    if (race) onFirstWrite(app.table, () => app.repo.touchActive(idle.id));
+    const r = await run(app);
+    assert.equal(r.deletedAccounts, race ? 0 : 1);
+    assert.equal(Boolean(await app.repo.getAccount(idle.id)), race);
+    assert.equal(Boolean(await app.repo.findAccountByEmail("idle@x.com")), race);
+  }
 });
