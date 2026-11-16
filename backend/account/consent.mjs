@@ -42,9 +42,10 @@ export async function revertIfLastConsentGiver(deps, accountId, pid) {
 }
 
 /**
- * The steps after the marker. Each is safe to repeat: progress deletion is a
- * no-op once gone, and the consent invite is replaced, not added to. Only the
- * email can repeat, if clearing the marker fails after it was sent. Returns true
+ * The steps after the marker. Each is safe to repeat, also by two workers at
+ * once: progress deletion is a no-op once gone, and the consent invite is
+ * replaced by one with a fixed id. Only the email can repeat: when clearing the
+ * marker fails after it was sent, or when two workers finish the same revert. Returns true
  * when it finished a revert, false when there was none or consent is back.
  */
 async function finishConsentRevert(deps, pid) {
@@ -56,10 +57,13 @@ async function finishConsentRevert(deps, pid) {
   if (profile.consentStatus === "awaiting_parent") {
     await repo.deleteProgress(pid);
     if (profile.parentEmail) {
+      // The invite's id is the marker, so workers finishing the same revert write
+      // the same invite and never delete each other's.
       for (const i of await repo.listInvitesForEmail(profile.parentEmail)) {
-        if (i.kind === "consent" && i.profileIds?.includes(pid)) await repo.deleteInvite(i.id);
+        if (i.kind === "consent" && i.profileIds?.includes(pid) && i.id !== marker) await repo.deleteInvite(i.id);
       }
       await repo.createInvite({
+        id: marker,
         kind: "consent",
         fromAccountId: profile.ownerAccountId,
         toEmail: profile.parentEmail,

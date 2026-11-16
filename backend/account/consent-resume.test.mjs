@@ -259,3 +259,35 @@ test("a cascade retried after the janitor finished its revert keeps the new cons
   const invites = (await app.repo.listInvitesForEmail("mum@x.com")).filter((i) => i.kind === "consent");
   assert.deepEqual(invites.map((i) => i.profileIds), [[pid]], "the parent can still approve");
 });
+
+test("two workers finishing the same revert leave the parent an invite", async () => {
+  const { app, pid, mumAcct } = await approved();
+  await assert.rejects(revertIfLastConsentGiver(depsOver(app, failOnProgressDelete(app.table)), mumAcct.id, pid), /injected/);
+  // Worker B fails while creating its invite, once.
+  let failedCreate = false;
+  const failingCreate = {
+    ...app.table,
+    async transact(ops) {
+      if (!failedCreate && ops.some((op) => op.put?.sk === "I" && op.put.kind === "consent")) {
+        failedCreate = true;
+        throw new Error("injected failure on invite create");
+      }
+      return app.table.transact(ops);
+    },
+  };
+  // Worker A has created its invite and is sending the email when B runs.
+  let ranB = false;
+  const pausingMailer = {
+    async send(...args) {
+      if (!ranB) {
+        ranB = true;
+        await assert.rejects(revertIfLastConsentGiver(depsOver(app, failingCreate), mumAcct.id, pid), /injected/);
+      }
+      return app.mailer.send(...args);
+    },
+  };
+  await revertIfLastConsentGiver({ ...depsOver(app, app.table), mailer: pausingMailer }, mumAcct.id, pid);
+  assert.ok(ranB && failedCreate);
+  const invites = (await app.repo.listInvitesForEmail("mum@x.com")).filter((i) => i.kind === "consent");
+  assert.deepEqual(invites.map((i) => i.profileIds), [[pid]], "the parent can still approve");
+});

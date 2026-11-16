@@ -429,8 +429,8 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
     },
 
     // ---- Invites ----
-    async createInvite({ kind, fromAccountId, toEmail, profileIds }) {
-      const id = randomUUID();
+    /** `id` is optional: a caller that may repeat the creation passes a fixed one. */
+    async createInvite({ id = randomUUID(), kind, fromAccountId, toEmail, profileIds }) {
       const ttl = sec(now() + INVITE_MS);
       const invite = { kind, fromAccountId, toEmail, profileIds, ttl };
       await table.transact([
