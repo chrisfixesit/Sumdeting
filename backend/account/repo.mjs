@@ -111,6 +111,23 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
         return { ...rest, lastActiveAt: t };
       });
     },
+    /**
+     * Retention sweep's atomic recheck before deleting an idle account. Writes the
+     * account back with a version bump only if its last activity is still `lastActive`;
+     * returns false if a sign-in got there first. A sign-in after this sees a version
+     * conflict and retries; the sweep then carries on with the deletion.
+     */
+    async claimIdleAccount(id, lastActive) {
+      const item = await table.get(accountKey(id), "META");
+      if (!item || (item.lastActiveAt ?? item.createdAt) !== lastActive) return false;
+      try {
+        await table.put({ ...item, version: (item.version ?? 0) + 1 }, { ifVersion: item.version ?? 0 });
+        return true;
+      } catch (err) {
+        if (isConflict(err)) return false;
+        throw err;
+      }
+    },
     async listAccounts() {
       const items = await table.scan("ACCOUNT#");
       return items

@@ -166,6 +166,11 @@ export async function runJanitor({ repo, mailer, now = () => Date.now() }) {
       const warnedLongEnough =
         typeof account.warningSentAt === "number" && t - account.warningSentAt >= WARN_LEAD_DAYS * DAY_MS;
       if (idleDays > RETENTION_DAYS && warnedLongEnough) {
+        // A sign-in since the list was read (or racing this) keeps the account.
+        if (!(await repo.claimIdleAccount(account.id, lastActive))) {
+          console.info(`Janitor: account ${account.id} became active; skipped`);
+          return;
+        }
         await handOverToActiveGuardians(repo, account.id, t);
         await deleteAccountCascade(repo, account.id, deps);
         result.deletedAccounts++;
