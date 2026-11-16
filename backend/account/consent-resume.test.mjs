@@ -291,3 +291,20 @@ test("two workers finishing the same revert leave the parent an invite", async (
   const invites = (await app.repo.listInvitesForEmail("mum@x.com")).filter((i) => i.kind === "consent");
   assert.deepEqual(invites.map((i) => i.profileIds), [[pid]], "the parent can still approve");
 });
+
+test("a retention deletion that fails mid-revert inside the guarded cascade is finished by the next janitor run", async () => {
+  const { app, pid, mumAcct } = await approved();
+  const DAY = 86400e3;
+  await app.repo.updateAccount(mumAcct.id, { lastActiveAt: app.clock.t - 731 * DAY, warningSentAt: app.clock.t - 31 * DAY });
+  const before = app.outbox.length;
+  // Run 1: the revert's marker is the guarded cascade's first write; the progress delete after it fails.
+  const failingRepo = createRepo(failOnProgressDelete(app.table), { now: () => app.clock.t });
+  const first = await runJanitor({ repo: failingRepo, mailer: app.mailer, now: () => app.clock.t });
+  assert.equal(first.deletedAccounts, 0);
+  assert.ok((await app.repo.getProfile(pid)).consentRevert, "the guarded first write committed the marker");
+  // Run 2 finishes the revert, then retries the retention deletion.
+  const second = await runJanitor({ repo: app.repo, mailer: app.mailer, now: () => app.clock.t });
+  assert.equal(second.deletedAccounts, 1);
+  assert.equal(await app.repo.getAccount(mumAcct.id), null);
+  await assertCleanEndState(app, pid, before);
+});
