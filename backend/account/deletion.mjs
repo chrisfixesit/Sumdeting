@@ -1,5 +1,5 @@
 import { httpError, clearCookie, COOKIE_NAME } from "./http.mjs";
-import { revertIfLastConsentGiver } from "./consent.mjs";
+import { revertIfLastConsentGiver, finishPendingConsentReverts } from "./consent.mjs";
 import { AccountChanged } from "./repo.mjs";
 
 const DAY_MS = 86400e3;
@@ -25,6 +25,8 @@ export async function deleteAccountCascade(repo, accountId, deps = { repo, now: 
   }
   if (account) {
     for (const invite of await repo.listInvitesForEmail(account.email)) {
+      // On a retry, that fresh consent invite may already exist: keep it while the child waits.
+      if (invite.kind === "consent" && (await awaitsParent(repo, invite))) continue;
       await repo.deleteInvite(invite.id);
     }
   }
@@ -38,6 +40,13 @@ export async function deleteAccountCascade(repo, accountId, deps = { repo, now: 
   }
   await repo.deleteAccountRecord(accountId);
 }
+
+const awaitsParent = async (repo, invite) => {
+  for (const pid of invite.profileIds ?? []) {
+    if ((await repo.getProfile(pid))?.consentStatus === "awaiting_parent") return true;
+  }
+  return false;
+};
 
 const lastActiveOf = (account) => account.lastActiveAt ?? account.createdAt;
 
@@ -133,6 +142,11 @@ export async function runJanitor({ repo, mailer, now = () => Date.now() }) {
       return false;
     }
   };
+
+  // Reverts a failure left part-done (see consent.mjs), before anything reads consent state.
+  await finishPendingConsentReverts(deps, (profile, err) =>
+    console.error(`Janitor: pending consent revert ${profile.id} failed`, err)
+  );
 
   // Consent never given within the grace period.
   for (const profile of await repo.listProfiles()) {

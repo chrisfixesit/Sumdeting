@@ -223,6 +223,25 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
       const item = await update(profileKey(pid), "META", (i) => ({ ...i, ownerAccountId: accountId }));
       return item ? { id: pid, ...strip(item) } : null;
     },
+    /**
+     * Start a consent revert: back to awaiting_parent, marked with `marker`. The
+     * write is version-checked on the profile it decides from, so it happens only
+     * while the profile is active with no revert in flight. Returns whether it did.
+     */
+    async markConsentRevert(pid, marker, awaitingSince) {
+      const item = await update(profileKey(pid), "META", (i) =>
+        i.consentStatus === "active" && !i.consentRevert
+          ? { ...i, consentStatus: "awaiting_parent", awaitingSince, consentRevert: marker }
+          : null
+      );
+      return item?.consentRevert === marker;
+    },
+    /** Clear a consent revert's marker, only if it is still the one given (see consent.mjs). */
+    async clearConsentRevert(pid, marker) {
+      await update(profileKey(pid), "META", (i) =>
+        i.consentRevert === marker ? { ...i, consentRevert: null } : null
+      );
+    },
     /** Remove a profile's server-side progress (consent ended). */
     async deleteProgress(pid) {
       await table.delete(profileKey(pid), "PROGRESS");
@@ -423,8 +442,8 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
     },
 
     // ---- Invites ----
-    async createInvite({ kind, fromAccountId, toEmail, profileIds }) {
-      const id = randomUUID();
+    /** `id` is optional: a caller that may repeat the creation passes a fixed one. */
+    async createInvite({ id = randomUUID(), kind, fromAccountId, toEmail, profileIds }) {
       const ttl = sec(now() + INVITE_MS);
       const invite = { kind, fromAccountId, toEmail, profileIds, ttl };
       await table.transact([
