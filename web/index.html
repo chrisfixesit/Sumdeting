@@ -1451,6 +1451,9 @@
 
       setBusy(true);
       const bubble = addMessage("tutor", "Thinking…", { extraClass: "thinking" });
+      // A New session while this runs makes it stale: its reply or error belongs to
+      // the cleared session and must not touch the new chat, history or snapshot.
+      const session = chatSession;
 
       try {
         const body = JSON.stringify({ messages: buildPayload() });
@@ -1469,6 +1472,7 @@
         if (contentType.includes("application/json")) {
           // Error payload, or a buffered (non-streaming) backend
           const data = await res.json();
+          if (session !== chatSession) return false;
           if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
           bubble.classList.remove("thinking");
           renderRich(bubble, data.reply);
@@ -1489,6 +1493,8 @@
           let lastRender = 0;
           for (;;) {
             const { done, value } = await reader.read();
+            // Checked after every chunk, so a stale stream can't even scroll the new view.
+            if (session !== chatSession) { reader.cancel().catch(() => {}); return false; }
             if (done) break;
             full += decoder.decode(value, { stream: true });
             // Live markdown: re-render at most ~6x/sec (skipping frames in
@@ -1511,6 +1517,7 @@
         }
         return true;
       } catch (err) {
+        if (session !== chatSession) return false;
         bubble.remove();
         addMessage("tutor", `Something went wrong: ${err.message}. Please try again.`, { extraClass: "error" });
         history.pop();
@@ -1526,7 +1533,7 @@
         }
         return false;
       } finally {
-        setBusy(false);
+        if (session === chatSession) setBusy(false); // New session already reset it
       }
     }
 
@@ -1871,6 +1878,7 @@
       } else {
         recordActivity(null, false); // streak only
       }
+      saveSession(); // again, now that a ✅ may have closed the problem
       showChips();
     }
 
@@ -1920,13 +1928,38 @@
     const STORAGE_KEY = "mathmentor.session.v1";
     const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
+    // The practice in progress travels with the messages under the same 24h expiry:
+    // the chat heading, the current topic and the active problem (with its hint and
+    // turn counts), so a correct answer after a reload still credits that problem.
     function saveSession() {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
           t: Date.now(),
           messages: history.map((m) => ({ role: m.role, content: m.content })),
+          practice: { title: chatTitle.textContent, topic: currentTopic, problem: activeProblem },
         }));
       } catch { /* private mode / quota — session just won't persist */ }
+    }
+
+    // Restore the practice only as one coherent state, the way practise() writes it:
+    // a known topic and level, the heading "<short topic> · <level>", and an open
+    // problem (if any) on that same topic and level. Older snapshots have no
+    // `practice`; those, and anything that doesn't fit, keep the defaults
+    // ("Tutor", no topic, no active problem).
+    function restorePractice(p) {
+      if (!p || typeof p !== "object" || typeof p.title !== "string" || typeof p.topic !== "string") return;
+      const levels = new Set(Object.entries(LEVEL_SETUP).flatMap(([name, s]) =>
+        s.units ? Object.keys(s.units).map((u) => `${name} ${u}`) : [name]));
+      const topics = new Set(Object.values(LEVEL_SETUP).flatMap((s) =>
+        s.units ? Object.values(s.units).flatMap((u) => u.topics) : s.topics));
+      const prefix = `${TOPIC_SHORT[p.topic] || p.topic} · `;
+      const level = p.title.startsWith(prefix) ? p.title.slice(prefix.length) : null;
+      if (!topics.has(p.topic) || !levels.has(level)) return;
+      const a = p.problem;
+      if (a && (a.topic !== p.topic || a.level !== level)) return;
+      currentTopic = p.topic;
+      chatTitle.textContent = p.title;
+      if (a) activeProblem = { topic: a.topic, level: a.level, userTurns: a.userTurns | 0, hints: a.hints | 0 };
     }
 
     function clearSession() {
@@ -1947,6 +1980,7 @@
         }
         history.push({ role: m.role, content: m.content });
       }
+      restorePractice(saved.practice);
       addMessage("tutor", "Continuing where you left off. Press “New session” any time to start fresh.", { extraClass: "notice" });
       goView("chat");
       setBusy(false);
@@ -1964,6 +1998,7 @@
       if (examTimer) { clearInterval(examTimer); examTimer = null; examBar.classList.remove("active"); examBtn.disabled = false; }
       chat.querySelectorAll(".msg").forEach((el, i) => { if (i > 0) el.remove(); }); // keep the greeting
       activeProblem = null;
+      currentTopic = null;
       chatTitle.textContent = "Tutor";
       pendingImage = null;
       attachment.classList.remove("active");
@@ -2438,27 +2473,33 @@
       // If the request fails, the heading goes back to what is still on screen.
       const prevTitle = chatTitle.textContent;
       const session = chatSession;
-      chatTitle.textContent = `${TOPIC_SHORT[topic] || topic} · ${level}`;
-      topicSel.value = topic;
-      topicSel.dispatchEvent(new Event("change")); // persists prefs
       // Asking for a fresh problem abandons the current one — log it as
-      // unsolved so the tricky-topics logic can resurface the topic later.
+      // unsolved so the tricky-topics logic can resurface the topic later —
+      // and save that now, so the app opened mid-request can't reopen it.
       if (activeProblem) {
         recordOutcome(activeProblem.topic, false, activeProblem.hints, activeProblem.userTurns);
         activeProblem = null;
+        saveSession();
       }
+      chatTitle.textContent = `${TOPIC_SHORT[topic] || topic} · ${level}`;
+      topicSel.value = topic;
+      topicSel.dispatchEvent(new Event("change")); // persists prefs
       const ok = await converse(
         `Practice mode: please give me ONE ${level} practice problem on ${topic}. Wait for my attempt before guiding me, and remember not to give me the answer.${difficultyGuidance(topic)}`,
         { displayText: `Practice please: ${level}, ${topic}` }
       );
+      // New session while this was in flight: the request belongs to the cleared
+      // session, so it must not set the heading, the problem or the snapshot.
+      if (session !== chatSession) return;
       if (ok) {
         currentTopic = topic;
         if (!mathpad.hidden) renderPad(); // the #topic change above ran while currentTopic was the old one
         activeProblem = { topic, level, userTurns: 0, hints: 0 };
         recordActivity(topic, false); // counts as attempted
-      } else if (session === chatSession) {
+      } else {
         chatTitle.textContent = prevTitle;
       }
+      saveSession(); // the snapshot carries the new practice state too
     }
     practiceBtn.addEventListener("click", () => practise(window.SumHome.randomTopic(levelSetup().topics)));
     pickupBtn.addEventListener("click", () => {

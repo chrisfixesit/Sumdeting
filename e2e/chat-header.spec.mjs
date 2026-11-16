@@ -129,10 +129,13 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
 
       await page.locator("#menu-btn").click();
       await page.locator("#new-session").click();
+      const failed = page.waitForResponse("**/api/chat");
       releaseTrig();
-      await expect(page.locator("#chat .msg.error")).toHaveCount(1);
+      await failed;
       await page.locator("#nav-chat").click();
       await expect(title(page)).toHaveText("Tutor");
+      // The failure belongs to the cleared session, so the new chat shows nothing of it (#71).
+      await expect(page.locator("#chat .msg")).toHaveCount(1);
     });
 
     for (const theme of ["light", "dark"]) {
