@@ -13,6 +13,56 @@ const MAX_PROGRESS_TRIES = 5;
 const sec = (ms) => Math.floor(ms / 1000);
 const utcDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 
+/** The guarded account changed (signed in) before the first write committed. */
+export class AccountChanged extends Error {
+  constructor(message = "Account changed") {
+    super(message);
+    this.name = "AccountChanged";
+  }
+}
+
+const isConditionFailed = (err) => err instanceof ConditionFailed || err?.name === "ConditionFailed";
+
+/**
+ * A table whose writes carry `guard` (a check op) until one commits. A failure while
+ * the guard no longer holds becomes AccountChanged, so retry loops (update()) stop
+ * instead of retrying unguarded. Then the guard is gone: the sweep has committed.
+ */
+function firstWriteGuarded(table, guard) {
+  let armed = true;
+  const { pk, sk } = guard.check;
+  const withGuard = (ops) => {
+    const same = ops.find((op) => {
+      const key = op.put ?? op.delete ?? op.check;
+      return key.pk === pk && key.sk === sk;
+    });
+    // DynamoDB allows one op per item in a transaction: fold the guard into it.
+    if (!same) return [...ops, guard];
+    if (same.ifNotExists || (same.ifVersion !== undefined && same.ifVersion !== guard.ifVersion)) {
+      throw new ConditionFailed();
+    }
+    return ops.map((op) => (op === same ? { ...op, ifVersion: guard.ifVersion } : op));
+  };
+  const write = async (ops) => {
+    try {
+      await table.transact(withGuard(ops));
+      armed = false;
+    } catch (err) {
+      if (isConditionFailed(err) && (await table.get(pk, sk))?.version !== guard.ifVersion) {
+        throw new AccountChanged();
+      }
+      throw err;
+    }
+  };
+  return {
+    ...table,
+    put: (item, conditions = {}) => (armed ? write([{ put: item, ...conditions }]) : table.put(item, conditions)),
+    delete: (pk2, sk2, conditions = {}) =>
+      armed ? write([{ delete: { pk: pk2, sk: sk2 }, ...conditions }]) : table.delete(pk2, sk2, conditions),
+    transact: (ops) => (armed ? write(ops) : table.transact(ops)),
+  };
+}
+
 export function createRepo(table, { now = () => Date.now() } = {}) {
   const accountKey = (id) => `ACCOUNT#${id}`;
   const profileKey = (pid) => `PROFILE#${pid}`;
@@ -110,6 +160,24 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
         const { warningSentAt, ...rest } = item;
         return { ...rest, lastActiveAt: t };
       });
+    },
+    /**
+     * Retention sweep's recheck: the account's version if its last activity is still
+     * `lastActive`, else null. Every account is created versioned; one without a
+     * version gets null (never deleted) rather than a guess.
+     */
+    async recheckIdleAccount(id, lastActive) {
+      const item = await table.get(accountKey(id), "META");
+      if (!item || (item.lastActiveAt ?? item.createdAt) !== lastActive) return null;
+      return typeof item.version === "number" ? item.version : null;
+    },
+    /**
+     * This repo, but the first write that commits also requires the account to still
+     * be at `version`, in the same transaction. A sign-in (touchActive) bumps the
+     * version, so the write fails and AccountChanged is thrown before anything changed.
+     */
+    guardedByAccount(id, version) {
+      return createRepo(firstWriteGuarded(table, { check: { pk: accountKey(id), sk: "META" }, ifVersion: version }), { now });
     },
     async listAccounts() {
       const items = await table.scan("ACCOUNT#");

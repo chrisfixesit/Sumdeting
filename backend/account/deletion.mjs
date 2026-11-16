@@ -1,5 +1,6 @@
 import { httpError, clearCookie, COOKIE_NAME } from "./http.mjs";
 import { revertIfLastConsentGiver } from "./consent.mjs";
+import { AccountChanged } from "./repo.mjs";
 
 const DAY_MS = 86400e3;
 const RETENTION_DAYS = 730;
@@ -166,8 +167,19 @@ export async function runJanitor({ repo, mailer, now = () => Date.now() }) {
       const warnedLongEnough =
         typeof account.warningSentAt === "number" && t - account.warningSentAt >= WARN_LEAD_DAYS * DAY_MS;
       if (idleDays > RETENTION_DAYS && warnedLongEnough) {
-        await handOverToActiveGuardians(repo, account.id, t);
-        await deleteAccountCascade(repo, account.id, deps);
+        // A sign-in since the list was read, or before the first write commits, keeps
+        // the account. Once that write has committed, the deletion is finished.
+        const skip = () => console.info(`Janitor: account ${account.id} became active; skipped`);
+        const version = await repo.recheckIdleAccount(account.id, lastActive);
+        if (version === null) return skip();
+        const guarded = repo.guardedByAccount(account.id, version);
+        try {
+          await handOverToActiveGuardians(guarded, account.id, t);
+          await deleteAccountCascade(guarded, account.id, { ...deps, repo: guarded });
+        } catch (err) {
+          if (err instanceof AccountChanged) return skip();
+          throw err;
+        }
         result.deletedAccounts++;
       } else if (account.setupComplete !== true && t - account.createdAt > GRACE_DAYS * DAY_MS) {
         await deleteAccountCascade(repo, account.id, deps);
