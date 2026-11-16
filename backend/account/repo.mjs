@@ -141,6 +141,11 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
       const item = await table.get(profileKey(pid), "META");
       return item ? { id: pid, ...strip(item) } : null;
     },
+    /** The profile plus its META version, for a write that must still find it unchanged. */
+    async getProfileWithVersion(pid) {
+      const item = await table.get(profileKey(pid), "META");
+      return item ? { profile: { id: pid, ...strip(item) }, version: item.version ?? 0 } : null;
+    },
     async updateProfile(pid, patch) {
       const item = await merge(profileKey(pid), "META", patch);
       return item ? { id: pid, ...strip(item) } : null;
@@ -206,18 +211,35 @@ export function createRepo(table, { now = () => Date.now() } = {}) {
         ? { progress: item.progress, version: item.version }
         : { progress: emptyProgress(), version: 0 };
     },
-    async updateProgress(pid, fn) {
-      for (let attempt = 0; attempt < MAX_PROGRESS_TRIES; attempt++) {
+    /**
+     * Read-modify-write the profile's progress. With `guard` ({ accountId, kind,
+     * profileVersion }, from the caller's access check), the write commits only if,
+     * in the same transaction, the profile's META is still at that version (not
+     * deleted, consent not changed) and the caller's ACCESS row still has that kind.
+     * A guarded write is tried once and throws ConditionFailed, so the caller can
+     * check access again: the profile may be gone, or only renamed.
+     */
+    async updateProgress(pid, fn, guard) {
+      const tries = guard ? 1 : MAX_PROGRESS_TRIES;
+      for (let attempt = 0; attempt < tries; attempt++) {
         const { progress, version } = await repo.getProgress(pid);
         const next = fn(progress);
+        const item = { pk: profileKey(pid), sk: "PROGRESS", progress: next, version: version + 1 };
         try {
-          await table.put(
-            { pk: profileKey(pid), sk: "PROGRESS", progress: next, version: version + 1 },
-            { ifVersion: version }
-          );
+          if (guard) {
+            // Every META update bumps its version; one without a version can only be held to existing.
+            const meta = guard.profileVersion > 0 ? { ifVersion: guard.profileVersion } : { ifExists: true };
+            await table.transact([
+              { check: { pk: profileKey(pid), sk: "META" }, ...meta },
+              { check: { pk: accountKey(guard.accountId), sk: `ACCESS#${pid}` }, ifAttr: { name: "kind", equals: guard.kind } },
+              { put: item, ifVersion: version },
+            ]);
+          } else {
+            await table.put(item, { ifVersion: version });
+          }
           return next;
         } catch (err) {
-          if (!isConflict(err)) throw err;
+          if (!isConflict(err) || guard) throw err;
         }
       }
       throw new Error("Progress update conflict: too many concurrent writes");

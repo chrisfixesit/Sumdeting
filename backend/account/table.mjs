@@ -27,11 +27,15 @@ export function createMemoryTable({ now = () => Date.now() } = {}) {
     return item && !isExpired(item, now()) ? item : null;
   };
 
-  const check = (item, { ifNotExists, ifVersion } = {}) => {
+  const check = (item, { ifNotExists, ifVersion, ifExists, ifAttr } = {}) => {
     const existing = live(item.pk, item.sk);
     if (ifNotExists && existing) throw new ConditionFailed();
     if (ifVersion === 0 && existing) throw new ConditionFailed();
     if (ifVersion > 0 && (!existing || existing.version !== ifVersion)) {
+      throw new ConditionFailed();
+    }
+    if (ifExists && !existing) throw new ConditionFailed();
+    if (ifAttr && (!existing || existing[ifAttr.name] !== ifAttr.equals)) {
       throw new ConditionFailed();
     }
   };
@@ -68,15 +72,28 @@ export function createMemoryTable({ now = () => Date.now() } = {}) {
     async scan(pkPrefix) {
       return collect((i) => i.pk.startsWith(pkPrefix));
     },
+    // ops: { put, ...conditions } | { delete: { pk, sk } }
+    //    | { check: { pk, sk }, ifExists?, ifVersion?, ifAttr? } (a condition only; writes nothing)
     async transact(ops) {
-      for (const op of ops) if (op.put) check(op.put, op);
+      for (const op of ops) {
+        if (op.check) requireCondition(op);
+        if (op.put) check(op.put, op);
+        else if (op.check) check(op.check, op);
+      }
       for (const op of ops) {
         if (op.put) store.set(keyOf(op.put.pk, op.put.sk), structuredClone(op.put));
-        else store.delete(keyOf(op.delete.pk, op.delete.sk));
+        else if (op.delete) store.delete(keyOf(op.delete.pk, op.delete.sk));
       }
     },
   };
 }
+
+/** A check op must state at least one condition (DynamoDB's ConditionCheck requires one). */
+const requireCondition = ({ ifExists, ifVersion, ifAttr }) => {
+  if (!ifExists && !(ifVersion > 0) && !ifAttr) {
+    throw new TypeError("a check op needs ifExists, ifVersion > 0 or ifAttr");
+  }
+};
 
 /**
  * DynamoDB Table. Needs the item key attributes to be named `pk` and `sk`.
@@ -105,7 +122,7 @@ export function createDynamoTable({
 
   // Expired-but-unswept items (DynamoDB TTL lag) count as absent, matching
   // the memory table.
-  const conditionOf = ({ ifNotExists, ifVersion } = {}) => {
+  const conditionOf = ({ ifNotExists, ifVersion, ifExists, ifAttr } = {}) => {
     if (ifNotExists || ifVersion === 0) {
       return {
         ConditionExpression: "attribute_not_exists(pk) OR #t <= :now",
@@ -113,15 +130,27 @@ export function createDynamoTable({
         ExpressionAttributeValues: { ":now": now() / 1000 },
       };
     }
+    // Each condition below also requires the item to be live (present, not expired).
+    const clauses = [];
+    const names = {};
+    const values = {};
     if (ifVersion > 0) {
-      return {
-        ConditionExpression:
-          "#v = :v AND (attribute_not_exists(#t) OR #t > :now)",
-        ExpressionAttributeNames: { "#v": "version", "#t": "ttl" },
-        ExpressionAttributeValues: { ":v": ifVersion, ":now": now() / 1000 },
-      };
+      clauses.push("#v = :v");
+      names["#v"] = "version";
+      values[":v"] = ifVersion;
     }
-    return {};
+    if (ifExists) clauses.push("attribute_exists(pk)");
+    if (ifAttr) {
+      clauses.push("#a = :a");
+      names["#a"] = ifAttr.name;
+      values[":a"] = ifAttr.equals;
+    }
+    if (!clauses.length) return {};
+    return {
+      ConditionExpression: `${clauses.join(" AND ")} AND (attribute_not_exists(#t) OR #t > :now)`,
+      ExpressionAttributeNames: { ...names, "#t": "ttl" },
+      ExpressionAttributeValues: { ...values, ":now": now() / 1000 },
+    };
   };
 
   const isConditionError = (err) =>
@@ -246,12 +275,16 @@ export function createDynamoTable({
       return fresh(items);
     },
     async transact(ops) {
+      for (const op of ops) if (op.check) requireCondition(op);
       const { lib, doc } = await sdk();
-      const TransactItems = ops.map((op) =>
-        op.put
-          ? { Put: { TableName: tableName, Item: op.put, ...conditionOf(op) } }
-          : { Delete: { TableName: tableName, Key: op.delete } }
-      );
+      const TransactItems = ops.map((op) => {
+        if (op.put) return { Put: { TableName: tableName, Item: op.put, ...conditionOf(op) } };
+        if (op.check) {
+          const Key = { pk: op.check.pk, sk: op.check.sk };
+          return { ConditionCheck: { TableName: tableName, Key, ...conditionOf(op) } };
+        }
+        return { Delete: { TableName: tableName, Key: op.delete } };
+      });
       try {
         await doc.send(new lib.TransactWriteCommand({ TransactItems }));
       } catch (err) {
