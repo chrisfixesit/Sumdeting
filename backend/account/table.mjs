@@ -77,6 +77,12 @@ export function createMemoryTable({ now = () => Date.now() } = {}) {
       return collect((i) => i.pk.startsWith(pkPrefix));
     },
     async transact(ops) {
+      for (const op of ops) {
+        const { ifNotExists, ifVersion, ifExists, ifAttr } = op;
+        if (op.check && !(ifNotExists || ifVersion !== undefined || ifExists || ifAttr)) {
+          throw new TypeError("a check op needs a condition");
+        }
+      }
       for (const op of ops) check(op.put ?? op.delete ?? op.check, op);
       for (const op of ops) {
         if (op.put) store.set(keyOf(op.put.pk, op.put.sk), structuredClone(op.put));

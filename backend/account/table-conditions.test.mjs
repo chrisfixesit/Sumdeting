@@ -135,3 +135,12 @@ test("dynamo: conditional delete sends the condition and maps its failure to Con
   assert.deepEqual(sent[0].input.Key, { pk: "A", sk: "META" });
   assert.equal(sent[0].input.ConditionExpression, "#v = :v AND (attribute_not_exists(#t) OR #t > :now)");
 });
+
+test("memory: a check op with no condition is refused, like DynamoDB, and nothing is applied", async () => {
+  const { table } = await seeded();
+  await assert.rejects(
+    table.transact([{ delete: { pk: "B", sk: "X" } }, { check: { pk: "A", sk: "META" } }]),
+    TypeError
+  );
+  assert.ok(await table.get("B", "X"), "nothing applied");
+});
