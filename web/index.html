@@ -1451,6 +1451,9 @@
 
       setBusy(true);
       const bubble = addMessage("tutor", "Thinking…", { extraClass: "thinking" });
+      // A New session while this runs makes it stale: its reply or error belongs to
+      // the cleared session and must not touch the new chat, history or snapshot.
+      const session = chatSession;
 
       try {
         const body = JSON.stringify({ messages: buildPayload() });
@@ -1469,6 +1472,7 @@
         if (contentType.includes("application/json")) {
           // Error payload, or a buffered (non-streaming) backend
           const data = await res.json();
+          if (session !== chatSession) return false;
           if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
           bubble.classList.remove("thinking");
           renderRich(bubble, data.reply);
@@ -1500,6 +1504,7 @@
               scrollToBottom(false);
             }
           }
+          if (session !== chatSession) return false;
           renderRich(bubble, full);
           addCopy(bubble, full);
           scrollToBottom(false);
@@ -1511,6 +1516,7 @@
         }
         return true;
       } catch (err) {
+        if (session !== chatSession) return false;
         bubble.remove();
         addMessage("tutor", `Something went wrong: ${err.message}. Please try again.`, { extraClass: "error" });
         history.pop();
@@ -1526,7 +1532,7 @@
         }
         return false;
       } finally {
-        setBusy(false);
+        if (session === chatSession) setBusy(false); // New session already reset it
       }
     }
 
@@ -2457,15 +2463,17 @@
       // If the request fails, the heading goes back to what is still on screen.
       const prevTitle = chatTitle.textContent;
       const session = chatSession;
-      chatTitle.textContent = `${TOPIC_SHORT[topic] || topic} · ${level}`;
-      topicSel.value = topic;
-      topicSel.dispatchEvent(new Event("change")); // persists prefs
       // Asking for a fresh problem abandons the current one — log it as
-      // unsolved so the tricky-topics logic can resurface the topic later.
+      // unsolved so the tricky-topics logic can resurface the topic later —
+      // and save that now, so the app opened mid-request can't reopen it.
       if (activeProblem) {
         recordOutcome(activeProblem.topic, false, activeProblem.hints, activeProblem.userTurns);
         activeProblem = null;
+        saveSession();
       }
+      chatTitle.textContent = `${TOPIC_SHORT[topic] || topic} · ${level}`;
+      topicSel.value = topic;
+      topicSel.dispatchEvent(new Event("change")); // persists prefs
       const ok = await converse(
         `Practice mode: please give me ONE ${level} practice problem on ${topic}. Wait for my attempt before guiding me, and remember not to give me the answer.${difficultyGuidance(topic)}`,
         { displayText: `Practice please: ${level}, ${topic}` }

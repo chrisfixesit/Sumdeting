@@ -127,11 +127,12 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
       expect((await algebra(page)).solved).toBe(0);
     });
 
-    test("a practice reply that lands after New session doesn't save its problem", async ({ page }) => {
+    test("a reply that lands after New session leaves the new session untouched", async ({ page }) => {
       let release;
       const held = new Promise((r) => { release = r; });
+      let first = true;
       await page.route("**/api/chat", async (route) => {
-        await held;
+        if (first) { first = false; await held; }
         route.fulfill({ json: { reply: PROBLEM } });
       });
       page.on("dialog", (d) => d.accept());
@@ -139,13 +140,46 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
       await page.locator('#topic-list .trow-home[data-topic="Algebra"]').click();
       await page.locator("#menu-btn").click();
       await page.locator("#new-session").click();
+      const landed = page.waitForResponse("**/api/chat");
       release();
-      // New session removed the waiting bubble, so watch the snapshot for the late reply instead.
-      await expect.poll(async () => (await snapshot(page))?.messages?.at(-1)?.content).toBe(PROBLEM);
-      expect((await snapshot(page))?.practice?.problem ?? null).toBeNull();
-      await page.reload();
+      await landed;
+
+      // Nothing from the cleared session comes back: no snapshot, no message, no heading.
       await page.locator("#nav-chat").click();
       await expect(title(page)).toHaveText("Tutor");
+      await expect(page.locator("#chat .msg")).toHaveCount(1); // just the greeting
+      expect(await snapshot(page)).toBeNull();
+
+      // The new session still works, and its snapshot holds only its own exchange.
+      await page.locator("#nav-home").click();
+      await page.locator('#topic-list .trow-home[data-topic="Geometry & Mensuration"]').click();
+      await expect(lastTutor(page)).toHaveText(PROBLEM);
+      const snap = await snapshot(page);
+      expect(snap.messages).toHaveLength(2);
+      expect(snap.practice.problem.topic).toBe("Geometry & Mensuration");
+    });
+
+    test("opening the app while the next problem loads doesn't reopen the abandoned one", async ({ page, context }) => {
+      await context.route("**/api/chat", async (route) => {
+        const asked = JSON.stringify(route.request().postDataJSON().messages.at(-1));
+        if (asked.includes("Trigonometry")) return; // still loading when the app is opened again
+        route.fulfill({ json: { reply: asked.includes("practice problem on") ? PROBLEM : CORRECT } });
+      });
+      await startAlgebra(page);
+      await page.locator("#nav-home").click();
+      await page.locator('#topic-list .trow-home[data-topic="Trigonometry"]').click();
+      // Starting Trigonometry abandons Algebra: one unsolved outcome.
+      await expect.poll(async () => (await algebra(page))?.hist?.length).toBe(1);
+
+      // A second tab reads the snapshot as it stands mid-request, the way a crash or a
+      // killed tab would leave it. (A plain reload cancels the request, and that failure
+      // path saves the snapshot on the way out, so it can't show this.)
+      const again = await context.newPage();
+      await again.goto("/");
+      await answer(again, "x = 4");
+      await expect(lastTutor(again)).toHaveText(CORRECT);
+      // Still just the abandoned outcome: Algebra wasn't restored as an open problem.
+      expect((await algebra(again)).hist.map((h) => h.ok)).toEqual([0]);
     });
   });
 }
